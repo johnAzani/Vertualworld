@@ -7,6 +7,8 @@ const loadingScreen = document.querySelector('#loading-screen');
 const introCard = document.querySelector('#intro-card');
 const toast = document.querySelector('#toast');
 const toastMessage = document.querySelector('#toast-message');
+const homeInteraction = document.querySelector('#home-interaction');
+const homeInteractionButton = document.querySelector('#home-open-phone');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
 const phoneMapCanvas = document.querySelector('#phone-map-canvas');
@@ -125,10 +127,21 @@ function distanceToPath(x, z) {
   return minimum;
 }
 
+const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
+const estateHouses = [];
+
+function isInsideEstate(x, z, margin = 0) {
+  return x >= ESTATE_BOUNDS.minX - margin
+    && x <= ESTATE_BOUNDS.maxX + margin
+    && z >= ESTATE_BOUNDS.minZ - margin
+    && z <= ESTATE_BOUNDS.maxZ + margin;
+}
+
 function isReservedSpot(x, z, extra = 0) {
   if (distanceToPath(x, z) < 4.2 + extra) return true;
   if (Math.hypot(x, z + 27) < 11 + extra) return true;
   if (Math.hypot(x, z - 12) < 7 + extra) return true;
+  if (isInsideEstate(x, z, extra)) return true;
   return SEED_POSITIONS.some((point) => Math.hypot(x - point.x, z - point.y) < 5.5 + extra);
 }
 
@@ -309,6 +322,370 @@ function random() {
   randomState = (randomState * 1664525 + 1013904223) >>> 0;
   return randomState / 4294967296;
 }
+
+// Meadow Court: four small homes share a landscaped lane just east of the trail.
+const estateRoadMaterial = new THREE.MeshStandardMaterial({ color: 0xaaa68c, roughness: 0.94, metalness: 0.01 });
+const estateRoadEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xd0c6a2, roughness: 0.92 });
+const estateFoundationMaterial = new THREE.MeshStandardMaterial({ color: 0xb3ad98, roughness: 0.95 });
+const estateTrimMaterial = new THREE.MeshStandardMaterial({ color: 0xf2e9d4, roughness: 0.84 });
+const estateWindowMaterial = new THREE.MeshStandardMaterial({ color: 0x6caaa5, roughness: 0.24, metalness: 0.12, emissive: 0x1c4140, emissiveIntensity: 0.2 });
+const estateDoorMaterials = [
+  new THREE.MeshStandardMaterial({ color: 0x527e70, roughness: 0.72 }),
+  new THREE.MeshStandardMaterial({ color: 0x8f6247, roughness: 0.78 }),
+  new THREE.MeshStandardMaterial({ color: 0x527a87, roughness: 0.72 }),
+  new THREE.MeshStandardMaterial({ color: 0x6b7354, roughness: 0.76 }),
+];
+const estateRoofColors = [0x536f68, 0x92634e, 0x4e7074, 0x81755e];
+const estateWallColors = [0xe5d9bf, 0xcbd8bf, 0xd9c5ae, 0xd6dfe0];
+const estateShrubMaterial = new THREE.MeshStandardMaterial({ color: 0x477b54, roughness: 1, flatShading: true });
+const estateFlowerMaterials = [
+  new THREE.MeshStandardMaterial({ color: 0xe5c87b, roughness: 0.9 }),
+  new THREE.MeshStandardMaterial({ color: 0xf2e5c4, roughness: 0.9 }),
+];
+const houseWidth = 8.2;
+const houseDepth = 8.2;
+const houseWallHeight = 3.2;
+const houseBaseY = 0.24;
+const houseEaveY = houseBaseY + houseWallHeight;
+const houseRoofRise = 2.12;
+const houseRoofAngle = Math.atan2(houseRoofRise, houseWidth / 2);
+const houseRoofSlope = Math.hypot(houseWidth / 2, houseRoofRise);
+
+function addEstateRoad(length, width, x, z, vertical = false) {
+  const road = new THREE.Mesh(
+    new THREE.BoxGeometry(vertical ? width : length, 0.16, vertical ? length : width),
+    estateRoadMaterial,
+  );
+  road.position.set(x, terrainHeight(x, z) + 0.08, z);
+  road.receiveShadow = true;
+  scene.add(road);
+
+  const edgeY = terrainHeight(x, z) + 0.17;
+  for (const side of [-1, 1]) {
+    const edge = new THREE.Mesh(
+      new THREE.BoxGeometry(vertical ? 0.12 : length, 0.035, vertical ? length : 0.12),
+      estateRoadEdgeMaterial,
+    );
+    edge.position.set(vertical ? x + side * width * 0.5 : x, edgeY, vertical ? z : z + side * (width * 0.5 - 0.06));
+    edge.receiveShadow = true;
+    scene.add(edge);
+  }
+}
+
+function makeEstateSignTexture() {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 128;
+  const context = signCanvas.getContext('2d');
+  context.fillStyle = '#2d5148';
+  context.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  context.strokeStyle = '#d9bd7b';
+  context.lineWidth = 7;
+  context.strokeRect(8, 8, signCanvas.width - 16, signCanvas.height - 16);
+  context.fillStyle = '#fff0ca';
+  context.font = '600 42px Georgia, serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('MEADOW COURT', signCanvas.width / 2, 51);
+  context.fillStyle = '#dfc993';
+  context.font = '18px Arial, sans-serif';
+  context.letterSpacing = '4px';
+  context.fillText('A QUIET LITTLE NEIGHBOURHOOD', signCanvas.width / 2, 91);
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return texture;
+}
+
+function makeHouseNumberTexture(number, isHome) {
+  const numberCanvas = document.createElement('canvas');
+  numberCanvas.width = 160;
+  numberCanvas.height = 112;
+  const context = numberCanvas.getContext('2d');
+  context.fillStyle = isHome ? '#315c4e' : '#6f6149';
+  context.fillRect(0, 0, numberCanvas.width, numberCanvas.height);
+  context.fillStyle = '#f8efd8';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.font = 'bold 54px Arial, sans-serif';
+  context.fillText(number, numberCanvas.width / 2, 52);
+  if (isHome) {
+    context.fillStyle = '#e9cb83';
+    context.font = 'bold 15px Arial, sans-serif';
+    context.fillText('YOUR HOME', numberCanvas.width / 2, 94);
+  }
+  const texture = new THREE.CanvasTexture(numberCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return texture;
+}
+
+function createEstateWindow(group, x, y, z, side = 'front') {
+  const frame = new THREE.Mesh(
+    side === 'front' ? new THREE.BoxGeometry(1.22, 1.04, 0.16) : new THREE.BoxGeometry(0.16, 1.04, 1.22),
+    estateTrimMaterial,
+  );
+  frame.position.set(x, y, z);
+  frame.castShadow = false;
+  group.add(frame);
+
+  const glass = new THREE.Mesh(
+    side === 'front' ? new THREE.BoxGeometry(0.96, 0.78, 0.055) : new THREE.BoxGeometry(0.055, 0.78, 0.96),
+    estateWindowMaterial,
+  );
+  glass.position.set(x + (side === 'front' ? 0 : Math.sign(x) * 0.1), y, z + (side === 'front' ? -0.11 : 0));
+  group.add(glass);
+
+  const crossbar = new THREE.Mesh(
+    side === 'front' ? new THREE.BoxGeometry(0.07, 0.78, 0.05) : new THREE.BoxGeometry(0.05, 0.78, 0.07),
+    estateTrimMaterial,
+  );
+  crossbar.position.set(x + (side === 'front' ? 0 : Math.sign(x) * 0.14), y, z + (side === 'front' ? -0.145 : 0));
+  group.add(crossbar);
+  const sill = new THREE.Mesh(
+    side === 'front' ? new THREE.BoxGeometry(1.42, 0.12, 0.24) : new THREE.BoxGeometry(0.24, 0.12, 1.42),
+    estateTrimMaterial,
+  );
+  sill.position.set(x, y - 0.57, z + (side === 'front' ? -0.11 : 0));
+  group.add(sill);
+}
+
+function createEstateHouse({ number, x, z, facing, isHome = false }) {
+  const group = new THREE.Group();
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: estateWallColors[number - 1], roughness: 0.9 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: estateRoofColors[number - 1], roughness: 0.88, flatShading: true });
+  const foundation = new THREE.Mesh(new THREE.BoxGeometry(houseWidth + 0.42, 0.3, houseDepth + 0.42), estateFoundationMaterial);
+  foundation.position.y = 0.15;
+  foundation.receiveShadow = true;
+  foundation.castShadow = true;
+  group.add(foundation);
+
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(houseWidth, houseWallHeight, houseDepth), wallMaterial);
+  walls.position.y = houseBaseY + houseWallHeight / 2;
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  group.add(walls);
+
+  const gableShape = new THREE.Shape();
+  gableShape.moveTo(-houseWidth / 2, houseEaveY);
+  gableShape.lineTo(houseWidth / 2, houseEaveY);
+  gableShape.lineTo(0, houseEaveY + houseRoofRise);
+  gableShape.closePath();
+  const gableGeometry = new THREE.ShapeGeometry(gableShape);
+  for (const side of [-1, 1]) {
+    const gable = new THREE.Mesh(gableGeometry, wallMaterial);
+    gable.position.z = side * (houseDepth / 2 + 0.015);
+    gable.material.side = THREE.DoubleSide;
+    gable.castShadow = true;
+    group.add(gable);
+  }
+
+  const roofFront = new THREE.Mesh(new THREE.BoxGeometry(houseRoofSlope + 0.42, 0.28, houseDepth + 0.56), roofMaterial);
+  roofFront.position.set(-houseWidth / 4, houseEaveY + houseRoofRise / 2, 0);
+  roofFront.rotation.z = houseRoofAngle;
+  roofFront.castShadow = true;
+  roofFront.receiveShadow = true;
+  group.add(roofFront);
+  const roofBack = new THREE.Mesh(new THREE.BoxGeometry(houseRoofSlope + 0.42, 0.28, houseDepth + 0.56), roofMaterial);
+  roofBack.position.set(houseWidth / 4, houseEaveY + houseRoofRise / 2, 0);
+  roofBack.rotation.z = -houseRoofAngle;
+  roofBack.castShadow = true;
+  roofBack.receiveShadow = true;
+  group.add(roofBack);
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, houseDepth + 0.68), estateTrimMaterial);
+  ridge.position.set(0, houseEaveY + houseRoofRise + 0.04, 0);
+  ridge.castShadow = true;
+  group.add(ridge);
+
+  const frontZ = -houseDepth / 2;
+  const porch = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.2, 1.55), estateFoundationMaterial);
+  porch.position.set(0, 0.34, frontZ - 0.78);
+  porch.receiveShadow = true;
+  porch.castShadow = true;
+  group.add(porch);
+  const porchStep = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.16, 0.58), estateRoadEdgeMaterial);
+  porchStep.position.set(0, 0.18, frontZ - 1.73);
+  porchStep.receiveShadow = true;
+  group.add(porchStep);
+  const porchCanopy = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.16, 1.45), roofMaterial);
+  porchCanopy.position.set(0, 3.05, frontZ - 0.72);
+  porchCanopy.castShadow = true;
+  group.add(porchCanopy);
+  for (const postX of [-1.62, 1.62]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.58, 0.14), estateTrimMaterial);
+    post.position.set(postX, 1.75, frontZ - 1.23);
+    post.castShadow = true;
+    group.add(post);
+  }
+
+  const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.52, 2.47, 0.15), estateTrimMaterial);
+  doorFrame.position.set(0, 1.48, frontZ - 0.085);
+  group.add(doorFrame);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.25, 2.2, 0.1), estateDoorMaterials[number - 1]);
+  door.position.set(0, 1.42, frontZ - 0.17);
+  door.castShadow = true;
+  group.add(door);
+  const doorPanelMaterial = new THREE.MeshStandardMaterial({ color: isHome ? 0x77a28a : 0xb18b64, roughness: 0.74 });
+  for (const panelY of [0.88, 1.75]) {
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.48, 0.035), doorPanelMaterial);
+    panel.position.set(0, panelY, frontZ - 0.235);
+    group.add(panel);
+  }
+  const knob = new THREE.Mesh(
+    new THREE.SphereGeometry(0.075, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd9b768, metalness: 0.62, roughness: 0.33 }),
+  );
+  knob.position.set(0.43, 1.38, frontZ - 0.25);
+  group.add(knob);
+
+  createEstateWindow(group, -2.42, 2.16, frontZ - 0.08);
+  createEstateWindow(group, 2.42, 2.16, frontZ - 0.08);
+  createEstateWindow(group, -houseWidth / 2 - 0.04, 2.15, -1.5, 'side');
+  createEstateWindow(group, houseWidth / 2 + 0.04, 2.15, 1.5, 'side');
+
+  const numberPlate = new THREE.Mesh(
+    new THREE.BoxGeometry(0.64, 0.46, 0.1),
+    new THREE.MeshStandardMaterial({ color: isHome ? 0x315c4e : 0x6f6149, roughness: 0.7 }),
+  );
+  numberPlate.position.set(1.44, 1.28, frontZ - 0.13);
+  group.add(numberPlate);
+  const numberFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.56, 0.39),
+    new THREE.MeshBasicMaterial({ map: makeHouseNumberTexture(String(number).padStart(2, '0'), isHome) }),
+  );
+  numberFace.position.set(1.44, 1.28, frontZ - 0.19);
+  numberFace.rotation.y = Math.PI;
+  group.add(numberFace);
+
+  const mailboxPost = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.75, 0.13), estateTrimMaterial);
+  mailboxPost.position.set(3.62, 0.49, frontZ - 1.95);
+  mailboxPost.castShadow = true;
+  group.add(mailboxPost);
+  const mailbox = new THREE.Mesh(
+    new THREE.BoxGeometry(0.56, 0.4, 0.66),
+    new THREE.MeshStandardMaterial({ color: isHome ? 0x547d68 : estateDoorMaterials[number - 1].color, roughness: 0.72, metalness: 0.05 }),
+  );
+  mailbox.position.set(3.62, 0.95, frontZ - 1.95);
+  mailbox.castShadow = true;
+  group.add(mailbox);
+  const mailSlot = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.035, 0.035), estateTrimMaterial);
+  mailSlot.position.set(3.62, 1.02, frontZ - 2.29);
+  group.add(mailSlot);
+
+  const shrubGeometry = new THREE.IcosahedronGeometry(0.62, 1);
+  for (const side of [-1, 1]) {
+    const shrub = new THREE.Mesh(shrubGeometry, estateShrubMaterial);
+    shrub.position.set(side * 3.12, 0.54, frontZ - 1.78);
+    shrub.scale.set(1.2, 0.8, 0.82);
+    shrub.castShadow = true;
+    group.add(shrub);
+    const flower = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), estateFlowerMaterials[(number + (side > 0 ? 1 : 0)) % estateFlowerMaterials.length]);
+    flower.position.set(side * 2.9, 0.48, frontZ - 2.35);
+    group.add(flower);
+  }
+  const porchLight = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffe0a1, emissive: 0xf7b955, emissiveIntensity: 0.65, roughness: 0.35 }),
+  );
+  porchLight.position.set(-0.98, 2.52, frontZ - 0.2);
+  group.add(porchLight);
+
+  group.position.set(x, terrainHeight(x, z), z);
+  group.rotation.y = facing;
+  scene.add(group);
+  const doorOffset = new THREE.Vector3(0, 0, -houseDepth / 2 - 0.72).applyAxisAngle(new THREE.Vector3(0, 1, 0), facing);
+  estateHouses.push({
+    number,
+    name: isHome ? 'Your home' : `House ${String(number).padStart(2, '0')}`,
+    x,
+    z,
+    doorX: x + doorOffset.x,
+    doorZ: z + doorOffset.z,
+    isHome,
+    group,
+  });
+}
+
+function createEstateLamp(x, z) {
+  const group = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: 0x3f5c50, roughness: 0.65, metalness: 0.25 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.11, 3.35, 8), metal);
+  pole.position.y = 1.68;
+  pole.castShadow = true;
+  group.add(pole);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.09, 0.09), metal);
+  arm.position.set(0.34, 3.22, 0);
+  group.add(arm);
+  const lantern = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xe9a84e, emissiveIntensity: 0.8, roughness: 0.3 }),
+  );
+  lantern.position.set(0.74, 3.16, 0);
+  group.add(lantern);
+  const lampLight = new THREE.PointLight(0xffcf85, 0.45, 8, 2);
+  lampLight.position.copy(lantern.position);
+  group.add(lampLight);
+  group.position.set(x, terrainHeight(x, z), z);
+  scene.add(group);
+}
+
+// A paved entry lane meets a quiet shared street, with a short drive to each front porch.
+addEstateRoad(28, 3.7, 14.1, 8, false);
+addEstateRoad(33, 3.7, 27, 8, true);
+for (const [x, z] of [[23.8, 1], [23.8, 17], [30.2, 1], [30.2, 17]]) {
+  addEstateRoad(3.1, 2.45, x, z, false);
+}
+
+const gateMaterial = new THREE.MeshStandardMaterial({ color: 0x9a8769, roughness: 0.9, flatShading: true });
+for (const z of [6.15, 9.85]) {
+  const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.48, 2.9, 0.48), gateMaterial);
+  pillar.position.set(9.05, terrainHeight(9.05, z) + 1.45, z);
+  pillar.castShadow = true;
+  pillar.receiveShadow = true;
+  scene.add(pillar);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.2, 0.68), estateTrimMaterial);
+  cap.position.set(9.05, terrainHeight(9.05, z) + 2.98, z);
+  cap.castShadow = true;
+  scene.add(cap);
+}
+const gateSign = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.84, 3.45), gateMaterial);
+gateSign.position.set(9.05, terrainHeight(9.05, 8) + 2.55, 8);
+gateSign.castShadow = true;
+scene.add(gateSign);
+const gateSignFace = new THREE.Mesh(
+  new THREE.PlaneGeometry(3.2, 0.64),
+  new THREE.MeshBasicMaterial({ map: makeEstateSignTexture() }),
+);
+gateSignFace.position.set(8.89, terrainHeight(9.05, 8) + 2.55, 8);
+gateSignFace.rotation.y = -Math.PI / 2;
+scene.add(gateSignFace);
+
+// A small round planted island gives the four driveways a shared centre.
+const roundabout = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.28, 1.48, 0.28, 24),
+  new THREE.MeshStandardMaterial({ color: 0xb2a786, roughness: 0.95 }),
+);
+roundabout.position.set(27, terrainHeight(27, 8) + 0.14, 8);
+roundabout.receiveShadow = true;
+scene.add(roundabout);
+const roundaboutShrub = new THREE.Mesh(new THREE.IcosahedronGeometry(0.92, 1), estateShrubMaterial);
+roundaboutShrub.position.set(27, terrainHeight(27, 8) + 1.0, 8);
+roundaboutShrub.scale.set(1.2, 0.92, 1.1);
+roundaboutShrub.castShadow = true;
+scene.add(roundaboutShrub);
+const roundaboutFlowers = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), estateFlowerMaterials[0]);
+roundaboutFlowers.position.set(27.38, terrainHeight(27, 8) + 1.22, 7.72);
+scene.add(roundaboutFlowers);
+
+for (const [number, x, z, facing] of [
+  [1, 18, 1, -Math.PI / 2],
+  [2, 18, 17, -Math.PI / 2],
+  [3, 36, 1, Math.PI / 2],
+  [4, 36, 17, Math.PI / 2],
+]) {
+  createEstateHouse({ number, x, z, facing, isHome: number === 1 });
+}
+for (const [x, z] of [[11.8, 8], [27, -5], [27, 21], [42.5, 8]]) createEstateLamp(x, z);
 
 const treeLocations = [];
 const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
@@ -769,6 +1146,14 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (isPhoneOpen()) return;
+  if (key === 'e' && !event.repeat) {
+    const home = estateHouses.find((house) => house.isHome);
+    if (home && Math.hypot(player.position.x - home.doorX, player.position.z - home.doorZ) < 4.2) {
+      event.preventDefault();
+      openHomeDetails();
+      return;
+    }
+  }
   if (keyToMove.has(key)) event.preventDefault();
   pressedKeys.add(key);
   if (key === ' ' && !event.repeat) jumpRequested = true;
@@ -856,6 +1241,7 @@ const phonePageCopy = {
   messages: { eyebrow: 'YOUR NEIGHBORHOOD', title: 'Messages', subtitle: 'A small check-in from someone nearby.' },
   journal: { eyebrow: 'FIELD NOTES · PRIVATE', title: 'Journal', subtitle: 'A note to keep, just for you.' },
   quests: { eyebrow: 'YOUR PROGRESS', title: 'Small things to do', subtitle: 'A gentle reason to keep wandering.' },
+  property: { eyebrow: 'YOUR HOME · HOUSE 01', title: 'Meadow Court', subtitle: 'Your front door, your little corner of the island.' },
 };
 
 function updatePhoneBadge() {
@@ -904,6 +1290,12 @@ function openPhone() {
   if (activePhonePage === 'map') drawMap();
 }
 
+function openHomeDetails() {
+  setPhonePage('property');
+  if (!isPhoneOpen()) openPhone();
+  homeInteraction.hidden = true;
+}
+
 function closePhone() {
   if (!isPhoneOpen()) return;
   phonePanel.classList.remove('is-open');
@@ -918,7 +1310,10 @@ function closePhone() {
     phoneScrim.hidden = true;
     phoneCloseTimer = 0;
   }, 250);
-  const focusTarget = previousPhoneFocus?.isConnected && !phonePanel.contains(previousPhoneFocus) ? previousPhoneFocus : phoneButton;
+  const canRestoreFocus = previousPhoneFocus?.isConnected
+    && !phonePanel.contains(previousPhoneFocus)
+    && !previousPhoneFocus.closest('[hidden]');
+  const focusTarget = canRestoreFocus ? previousPhoneFocus : phoneButton;
   focusTarget.focus?.({ preventScroll: true });
 }
 
@@ -990,6 +1385,7 @@ function updatePhoneQuestProgress() {
 }
 
 phoneButton.addEventListener('click', togglePhone);
+homeInteractionButton.addEventListener('click', openHomeDetails);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
 phoneScrim.addEventListener('click', closePhone);
@@ -1009,6 +1405,9 @@ phoneContent.addEventListener('click', (event) => {
   if (actionButton.dataset.phoneAction === 'camera-reset') {
     cameraYaw = 0;
     document.querySelector('#phone-map-feedback').textContent = 'Camera view reset. Your location marker stays live.';
+  } else if (actionButton.dataset.phoneAction === 'show-home-on-map') {
+    setPhonePage('map');
+    document.querySelector('#phone-map-feedback').textContent = 'Your home is the green house marker at Meadow Court.';
   } else if (actionButton.dataset.phoneAction === 'continue') {
     closePhone();
     showToast('Back to exploring. The path is yours.', 2400);
@@ -1112,6 +1511,7 @@ function updateLocationAndMap() {
   const z = player.position.z;
   let location = 'Wildflower Path';
   if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
+  else if (isInsideEstate(x, z)) location = 'Meadow Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Meadow Rise';
   else if (x < -24) location = 'Fern Hollow';
   else if (x > 24) location = 'Sunward Coast';
@@ -1128,6 +1528,8 @@ function updateLocationAndMap() {
   document.querySelector('#phone-home-coordinates').textContent = formattedCoordinates;
   document.querySelector('#phone-map-location').textContent = location;
   document.querySelector('#phone-map-coordinates').textContent = formattedCoordinates;
+  const home = estateHouses.find((house) => house.isHome);
+  homeInteraction.hidden = !home || Math.hypot(x - home.doorX, z - home.doorZ) > 4.2 || isPhoneOpen();
   drawMap();
 }
 
@@ -1168,6 +1570,50 @@ function drawMapCanvas(targetCanvas, ctx) {
 
   const mapX = (x) => centerX + (x / WORLD_RADIUS) * radius;
   const mapY = (z) => centerY + (z / WORLD_RADIUS) * radius;
+
+  const estateLeft = mapX(ESTATE_BOUNDS.minX);
+  const estateTop = mapY(ESTATE_BOUNDS.minZ);
+  const estateWidth = mapX(ESTATE_BOUNDS.maxX) - estateLeft;
+  const estateHeight = mapY(ESTATE_BOUNDS.maxZ) - estateTop;
+  ctx.fillStyle = 'rgba(248, 239, 205, .19)';
+  ctx.fillRect(estateLeft, estateTop, estateWidth, estateHeight);
+  ctx.save();
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(70, 111, 77, .48)';
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(estateLeft, estateTop, estateWidth, estateHeight);
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(mapX(1), mapY(8));
+  ctx.lineTo(mapX(27), mapY(8));
+  ctx.moveTo(mapX(27), mapY(-8));
+  ctx.lineTo(mapX(27), mapY(24));
+  ctx.strokeStyle = 'rgba(231, 218, 177, .94)';
+  ctx.lineWidth = Math.max(2, radius * 0.034);
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  const houseIconSize = Math.max(3.1, radius * 0.034);
+  for (const house of estateHouses) {
+    const houseX = mapX(house.x);
+    const houseY = mapY(house.z);
+    ctx.save();
+    ctx.translate(houseX, houseY);
+    ctx.beginPath();
+    ctx.moveTo(-houseIconSize * 0.7, -houseIconSize * 0.05);
+    ctx.lineTo(0, -houseIconSize * 0.8);
+    ctx.lineTo(houseIconSize * 0.7, -houseIconSize * 0.05);
+    ctx.closePath();
+    ctx.fillStyle = house.isHome ? '#397b63' : '#8a8064';
+    ctx.fill();
+    ctx.fillRect(-houseIconSize * 0.48, -houseIconSize * 0.08, houseIconSize * 0.96, houseIconSize * 0.7);
+    ctx.strokeStyle = 'rgba(255, 250, 226, .98)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-houseIconSize * 0.48, -houseIconSize * 0.08, houseIconSize * 0.96, houseIconSize * 0.7);
+    ctx.restore();
+  }
+
   ctx.beginPath();
   PATH_POINTS_XZ.forEach(([x, z], index) => {
     if (index === 0) ctx.moveTo(mapX(x), mapY(z));

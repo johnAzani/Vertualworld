@@ -224,6 +224,21 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .toast.is-visible { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
 .toast-icon { color: #efc273; font-size: 15px; }
 
+.home-interaction[hidden] { display: none !important; }
+.home-interaction {
+  position: absolute; z-index: 14; left: 50%; bottom: max(101px, calc(env(safe-area-inset-bottom) + 89px));
+  width: min(380px, calc(100vw - 28px)); min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 10px 9px 15px; border: 1px solid rgba(255,255,255,.8); border-radius: 16px;
+  color: #29493c; background: rgba(247, 248, 235, .94); box-shadow: 0 12px 32px rgba(20,55,43,.2);
+  transform: translateX(-50%); backdrop-filter: blur(13px); -webkit-backdrop-filter: blur(13px);
+}
+.home-interaction-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 4px; }
+.home-interaction-copy > span { color: #73917c; font-size: 7px; font-weight: 700; letter-spacing: .14em; }
+.home-interaction-copy strong { overflow: hidden; color: #2d5344; font: 400 15px/1.2 'DM Serif Display', Georgia, serif; text-overflow: ellipsis; white-space: nowrap; }
+.home-interaction button { min-height: 38px; display: flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 0 11px; border: 0; border-radius: 11px; color: #f7f5e7; background: #397b63; cursor: pointer; font-size: 7px; font-weight: 700; letter-spacing: .08em; transition: background .18s, transform .18s; }
+.home-interaction button:hover { transform: translateY(-1px); background: #2f6c58; }
+.home-interaction button kbd { min-width: 19px; height: 21px; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.12); }
+
 .touch-controls { display: none; }
 .loading-screen {
   position: absolute; z-index: 30; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -272,6 +287,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
   .map-card { display: none; }
   .quest-card { display: none; }
   .controls-hint { display: none; }
+  .home-interaction { bottom: max(164px, calc(env(safe-area-inset-bottom) + 150px)); width: min(370px, calc(100vw - 24px)); }
   .touch-controls { position: absolute; z-index: 8; inset: auto 0 max(20px, env(safe-area-inset-bottom)); height: 130px; display: block; pointer-events: none; }
   .joystick { position: absolute; left: 23px; bottom: 0; width: 112px; height: 112px; border: 1px solid rgba(240,249,230,.64); border-radius: 50%; background: rgba(30,74,61,.2); box-shadow: inset 0 0 0 8px rgba(255,255,255,.08), 0 8px 25px rgba(22,50,43,.12); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); touch-action: none; pointer-events: auto; }
   .joystick-ring { position: absolute; left: 50%; top: 50%; width: 57px; height: 57px; border: 1px solid rgba(242,248,228,.37); border-radius: 50%; transform: translate(-50%,-50%); }
@@ -375,7 +391,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-compass i { position: relative; z-index: 1; width: 0; height: 0; border-right: 5px solid transparent; border-bottom: 13px solid #df8d67; border-left: 5px solid transparent; filter: drop-shadow(0 2px 2px rgba(112,73,47,.12)); }
 .phone-section-heading { display: flex; align-items: center; justify-content: space-between; margin: 16px 3px 9px; color: #8a9a8e; font-size: 7px; font-weight: 700; letter-spacing: .16em; }
 .phone-app-count { color: #c1ad83; }
-.phone-app-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 7px; }
+.phone-app-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 7px; }
 .phone-app-button { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 3px 1px 4px; border: 0; border-radius: 12px; color: #536b5e; background: transparent; cursor: pointer; font-size: 8px; font-weight: 600; transition: transform .18s, background .18s; }
 .phone-app-button:hover { transform: translateY(-2px); background: rgba(255,255,255,.55); }
 .phone-app-icon { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.74); border-radius: 15px; box-shadow: 0 4px 11px rgba(35,76,59,.09), inset 0 1px 0 rgba(255,255,255,.65); }
@@ -384,6 +400,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .app-icon-messages { color: #b76d51; background: linear-gradient(145deg,#ffe0cb,#f4b899); }
 .app-icon-journal { color: #897548; background: linear-gradient(145deg,#f6edc8,#e5d59d); }
 .app-icon-quests { color: #a87831; background: linear-gradient(145deg,#f7e4a7,#edc56f); }
+.app-icon-home { color: #3f785d; background: linear-gradient(145deg,#d9efd5,#a8cfaf); }
 .phone-app-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border: 1.5px solid #f7f7ed; border-radius: 50%; background: #e97861; }
 .phone-message-preview { width: 100%; min-height: 63px; display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(66,100,76,.1); border-radius: 15px; color: #4f6859; background: rgba(255,255,255,.62); text-align: left; cursor: pointer; transition: background .18s, transform .18s; }
 .phone-message-preview:hover { background: #fff; transform: translateY(-1px); }
@@ -406,7 +423,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-map-legend { display: flex; align-items: center; justify-content: space-between; margin: 10px 2px 12px; color: #7c8e80; font-size: 7px; }
 .phone-map-legend span { display: flex; align-items: center; gap: 4px; }
 .phone-map-legend i { width: 7px; height: 7px; display: inline-block; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; }
-.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }
+.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }.legend-home { border-radius: 2px !important; background: #397b63; }
 .phone-primary-button { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 13px; border: 0; border-radius: 12px; color: #f5f5e8; background: #3c8068; box-shadow: 0 5px 12px rgba(54,115,83,.14); cursor: pointer; font-size: 9px; font-weight: 600; transition: background .18s, transform .18s; }
 .phone-primary-button:hover { transform: translateY(-1px); background: #326f5b; }
 .phone-primary-button span { font-size: 13px; }
@@ -484,6 +501,31 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 }
 .phone-home-time-row { display: flex; align-items: center; justify-content: space-between; margin: 0 3px 8px; color: #94a194; font-size: 6px; font-weight: 700; letter-spacing: .12em; }
 .phone-home-time-row span:last-child { color: #718c78; font-size: 7px; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.property-overview { min-height: 91px; display: flex; align-items: center; gap: 13px; padding: 13px; border: 1px solid rgba(255,255,255,.84); border-radius: 17px; background: radial-gradient(circle at 100% 0%, rgba(206,231,202,.68), transparent 49%), linear-gradient(135deg, #e8efdc, #dcebe0); }
+.property-stamp { width: 52px; height: 57px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid rgba(249,241,217,.65); border-radius: 13px; color: #f8efd9; background: linear-gradient(150deg, #54876b, #315d50); box-shadow: 0 4px 10px rgba(35,76,59,.12); }
+.property-stamp strong { font: 400 25px/1 'DM Serif Display', Georgia, serif; }
+.property-stamp span { margin-top: 4px; color: #e9cf8b; font-size: 6px; font-weight: 700; letter-spacing: .12em; }
+.property-overview-copy { min-width: 0; }
+.property-overview-copy h3 { margin: 4px 0 3px; overflow: hidden; color: #315542; font: 400 20px/1.1 'DM Serif Display', Georgia, serif; text-overflow: ellipsis; white-space: nowrap; }
+.property-overview-copy p { margin: 0; color: #809283; font-size: 8px; }
+.property-status { display: flex; align-items: center; gap: 6px; margin: 10px 2px 12px; color: #678774; font-size: 7px; font-weight: 700; letter-spacing: .1em; }
+.property-status i { width: 6px; height: 6px; border-radius: 50%; background: #70ad77; box-shadow: 0 0 0 3px rgba(112,173,119,.13); }
+.estate-roster { overflow: hidden; border: 1px solid rgba(60,100,72,.11); border-radius: 14px; background: rgba(255,255,255,.52); }
+.estate-roster-heading { min-height: 31px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid rgba(60,100,72,.09); color: #839589; font-size: 6px; font-weight: 700; letter-spacing: .12em; }
+.estate-roster-heading strong { color: #b59a61; font-size: 6px; }
+.estate-home-row { min-height: 43px; display: flex; align-items: center; gap: 8px; padding: 5px 9px; border-bottom: 1px solid rgba(60,100,72,.065); }
+.estate-home-row:last-child { border-bottom: 0; }
+.estate-home-row--owned { background: rgba(224,239,219,.56); }
+.estate-home-number { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(82,121,91,.16); border-radius: 8px; color: #557b61; background: #edf1dc; font: 400 11px/1 'DM Serif Display', Georgia, serif; }
+.estate-home-row--owned .estate-home-number { color: #f7f0dc; background: #3c765f; }
+.estate-home-row > span:nth-child(2) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.estate-home-row strong { color: #4b6553; font-size: 8px; }
+.estate-home-row small { color: #91a093; font-size: 7px; }
+.estate-home-row em { color: #729274; font-size: 6px; font-style: normal; font-weight: 700; letter-spacing: .1em; }
+.property-detail { display: flex; flex-direction: column; gap: 4px; margin: 11px 2px 0; }
+.property-detail span { color: #93a094; font-size: 6px; font-weight: 700; letter-spacing: .13em; }
+.property-detail strong { color: #657c6d; font-size: 8px; line-height: 1.35; }
+.property-help { margin: 10px 2px; color: #89998b; font-size: 7px; line-height: 1.5; }
 .phone-feedback { margin: 8px 2px 0; color: #89998a; font-size: 7px; line-height: 1.4; text-align: center; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 .phone-message-composer { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 4px 5px 4px 11px; border: 1px solid rgba(65,110,81,.17); border-radius: 14px; background: rgba(255,255,255,.74); box-shadow: inset 0 1px 2px rgba(41,69,48,.03); }

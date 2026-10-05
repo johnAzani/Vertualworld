@@ -149,7 +149,7 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">04</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">05</span></div>
                 <div class="phone-app-grid">
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
@@ -167,6 +167,10 @@
                     <span class="phone-app-icon app-icon-quests"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/></svg></span>
                     <span>Quests</span>
                   </button>
+                  <button class="phone-app-button" type="button" data-phone-app="property" aria-label="Open your Meadow Court home app">
+                    <span class="phone-app-icon app-icon-home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 10.2 8.5-7 8.5 7v9.2a1.1 1.1 0 0 1-1.1 1.1H4.6a1.1 1.1 0 0 1-1.1-1.1v-9.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 20.2v-6.1h5.6v6.1M7.2 10.6h.01M16.8 10.6h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                    <span>My home</span>
+                  </button>
                 </div>
 
                 <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
@@ -177,14 +181,32 @@
                 <p class="phone-local-note"><span aria-hidden="true">✦</span> Your notes stay on this device.</p>
               </section>
 
+              <section class="phone-page" data-phone-page="property" aria-label="Your home at Meadow Court" hidden>
+                <div class="property-overview">
+                  <div class="property-stamp"><strong>01</strong><span>HOUSE</span></div>
+                  <div class="property-overview-copy"><span class="phone-card-label">YOUR HOME</span><h3>Meadow Court</h3><p>House 01 · west lane</p></div>
+                </div>
+                <div class="property-status"><i></i><span>EXTERIOR BUILT · READY TO VISIT</span></div>
+                <div class="estate-roster">
+                  <div class="estate-roster-heading"><span>THE FOUR-HOME ESTATE</span><strong>4 HOMES</strong></div>
+                  <div class="estate-home-row estate-home-row--owned"><span class="estate-home-number">01</span><span><strong>Your home</strong><small>Front porch · green mailbox</small></span><em>YOURS</em></div>
+                  <div class="estate-home-row"><span class="estate-home-number">02</span><span><strong>House 02</strong><small>Neighbour’s cottage</small></span></div>
+                  <div class="estate-home-row"><span class="estate-home-number">03</span><span><strong>House 03</strong><small>Neighbour’s cottage</small></span></div>
+                  <div class="estate-home-row"><span class="estate-home-number">04</span><span><strong>House 04</strong><small>Neighbour’s cottage</small></span></div>
+                </div>
+                <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
+                <p class="property-help">Walk up to your green mailbox and press E—or tap the home prompt—to open these details.</p>
+                <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Meadow Court on the map <span aria-hidden="true">↗</span></button>
+              </section>
+
               <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>
                 <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
-                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" aria-label="Map showing your position, glow seeds, and the beacon"></canvas></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" aria-label="Map showing your position, Meadow Court houses, glow seeds, and the beacon"></canvas></div>
                 <div class="phone-map-details">
                   <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Meadow Rise</strong></div>
                   <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
                 </div>
-                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span></div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span></div>
                 <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
                 <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">Your marker follows you as you wander.</p>
               </section>
@@ -239,6 +261,11 @@
       <div class="toast" id="toast" role="status" aria-live="polite">
         <span class="toast-icon" aria-hidden="true">✦</span>
         <span class="toast-message" id="toast-message">A little light found its way home.</span>
+      </div>
+
+      <div class="home-interaction" id="home-interaction" role="status" aria-live="polite" hidden>
+        <div class="home-interaction-copy"><span>HOUSE 01 · YOUR HOME</span><strong>You’re home at Meadow Court</strong></div>
+        <button id="home-open-phone" type="button" aria-label="View your Meadow Court home details"><kbd>E</kbd><span>HOME DETAILS</span></button>
       </div>
 
       <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
