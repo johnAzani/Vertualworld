@@ -139,8 +139,15 @@ function distanceToPath(x, z) {
 }
 
 const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
+const PLAYER_COLLISION_RADIUS = 0.42;
+const PLAYER_BODY_HEIGHT = 1.82;
+const PLAYER_GRAVITY = 17;
+const JUMP_SPEED = 6.5;
+const JUMP_BUFFER_SECONDS = 0.16;
+const COYOTE_TIME_SECONDS = 0.12;
 const estateHouses = [];
 const exteriorNightLights = [];
+const worldObstacleColliders = [];
 const homeFurnitureColliders = [];
 const homeLightFixtures = [];
 const HOME_FLOOR_TOP = 0.38;
@@ -1270,6 +1277,7 @@ function createTree(x, z, scale, type) {
   group.scale.setScalar(scale);
   group.rotation.y = random() * Math.PI * 2;
   scene.add(group);
+  worldObstacleColliders.push({ x, z, radius: 0.3 * scale, height: 2.25 * scale });
   treeLocations.push({ x, z });
 }
 
@@ -1298,12 +1306,21 @@ for (let i = 0; i < 30; i += 1) {
   const z = Math.sin(angle) * radius;
   if (radius > 65 || isReservedSpot(x, z, 1.3)) continue;
   const rock = new THREE.Mesh(rockGeometry, rockMaterials[Math.floor(random() * rockMaterials.length)]);
+  const scaleX = 0.7 + random() * 0.9;
+  const scaleY = 0.42 + random() * 0.5;
+  const scaleZ = 0.55 + random() * 0.8;
   rock.position.set(x, terrainHeight(x, z) + 0.22, z);
-  rock.scale.set(0.7 + random() * 0.9, 0.42 + random() * 0.5, 0.55 + random() * 0.8);
+  rock.scale.set(scaleX, scaleY, scaleZ);
   rock.rotation.set(random() * 0.2, random() * Math.PI, random() * 0.2);
   rock.castShadow = true;
   rock.receiveShadow = true;
   scene.add(rock);
+  worldObstacleColliders.push({
+    x,
+    z,
+    radius: 0.75 * Math.max(scaleX, scaleZ),
+    height: 0.22 + 0.75 * scaleY,
+  });
 }
 
 // Tiny wildflowers use instancing so the open meadows stay light to render.
@@ -1647,7 +1664,10 @@ let previousPointerX = 0;
 let previousPointerY = 0;
 let jumpHeight = 0;
 let jumpVelocity = 0;
+let isGrounded = true;
 let jumpRequested = false;
+let jumpBufferTimer = 0;
+let coyoteTimer = 0;
 let seedCount = 0;
 let toastTimer = 0;
 let worldMinutes = 9 * 60 + 42;
@@ -1718,7 +1738,6 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLowerCase()));
 window.addEventListener('blur', () => pressedKeys.clear());
 
-const PLAYER_COLLISION_RADIUS = 0.42;
 function homeWorldToLocal(x, z) {
   const offsetX = x - homeHouse.x;
   const offsetZ = z - homeHouse.z;
@@ -1842,6 +1861,46 @@ function resolveHouseCollisions() {
   }
 }
 
+function resolveWorldObstacleCollisions() {
+  if (isInsideHome) return;
+  for (let pass = 0; pass < 3; pass += 1) {
+    let resolvedAny = false;
+    const playerBottom = jumpHeight;
+    const playerTop = playerBottom + PLAYER_BODY_HEIGHT;
+    for (const obstacle of worldObstacleColliders) {
+      const overlapsVertically = playerBottom < obstacle.height && playerTop > 0;
+      if (!overlapsVertically) continue;
+      const dx = player.position.x - obstacle.x;
+      const dz = player.position.z - obstacle.z;
+      const minimumDistance = obstacle.radius + PLAYER_COLLISION_RADIUS;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared >= minimumDistance * minimumDistance) continue;
+
+      const distance = Math.sqrt(distanceSquared);
+      let normalX;
+      let normalZ;
+      if (distance > 1e-5) {
+        normalX = dx / distance;
+        normalZ = dz / distance;
+      } else {
+        const speed = Math.hypot(velocity.x, velocity.z);
+        normalX = speed > 1e-5 ? -velocity.x / speed : 1;
+        normalZ = speed > 1e-5 ? -velocity.z / speed : 0;
+      }
+
+      player.position.x = obstacle.x + normalX * minimumDistance;
+      player.position.z = obstacle.z + normalZ * minimumDistance;
+      const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
+      if (inwardVelocity < 0) {
+        velocity.x -= inwardVelocity * normalX;
+        velocity.z -= inwardVelocity * normalZ;
+      }
+      resolvedAny = true;
+    }
+    if (!resolvedAny) break;
+  }
+}
+
 canvas.addEventListener('pointerdown', (event) => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   pointerDragging = true;
@@ -1931,6 +1990,10 @@ function completeHomeEntry() {
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
   updateLocationAndMap();
   showToast('Welcome home. The living room, kitchen, and bedroom are yours to explore.', 3600);
 }
@@ -1946,6 +2009,10 @@ function completeHomeExit() {
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
   updateLocationAndMap();
   showToast('You’re back outside at Meadow Court.', 2500);
 }
@@ -2517,7 +2584,8 @@ function animate() {
   const isRunning = pressedKeys.has('shift');
   const speed = isRunning ? 9.0 : 5.1;
   const desiredVelocity = desiredDirection.multiplyScalar(speed);
-  const response = 1 - Math.exp(-(isMoving ? 12 : 17) * delta);
+  const acceleration = isGrounded ? (isMoving ? 12 : 17) : (isMoving ? 4.8 : 1.5);
+  const response = 1 - Math.exp(-acceleration * delta);
   velocity.x += (desiredVelocity.x - velocity.x) * response;
   velocity.z += (desiredVelocity.z - velocity.z) * response;
 
@@ -2537,22 +2605,31 @@ function animate() {
     }
   }
   resolveHouseCollisions();
+  resolveWorldObstacleCollisions();
 
   const ground = isInsideHome && homeHouse
     ? homeHouse.group.position.y + HOME_FLOOR_TOP
     : terrainHeight(player.position.x, player.position.z);
-  if (jumpRequested && jumpHeight <= 0.001) {
-    jumpVelocity = 6.3;
+  if (jumpRequested) {
+    jumpBufferTimer = JUMP_BUFFER_SECONDS;
     jumpRequested = false;
-  } else if (jumpHeight > 0) {
-    jumpRequested = false;
+  } else {
+    jumpBufferTimer = Math.max(0, jumpBufferTimer - delta);
   }
-  if (jumpHeight > 0 || jumpVelocity > 0) {
+  coyoteTimer = isGrounded ? COYOTE_TIME_SECONDS : Math.max(0, coyoteTimer - delta);
+  if (jumpBufferTimer > 0 && (isGrounded || coyoteTimer > 0)) {
+    jumpVelocity = JUMP_SPEED;
+    isGrounded = false;
+    coyoteTimer = 0;
+    jumpBufferTimer = 0;
+  }
+  if (!isGrounded) {
     jumpHeight += jumpVelocity * delta;
-    jumpVelocity -= 16.5 * delta;
+    jumpVelocity -= PLAYER_GRAVITY * delta;
     if (jumpHeight <= 0) {
       jumpHeight = 0;
       jumpVelocity = 0;
+      isGrounded = true;
     }
   }
   player.position.y = ground + jumpHeight;
