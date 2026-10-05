@@ -109,6 +109,8 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 .icon-button svg { width: 17px; height: 17px; }
 .icon-button:hover { background: white; color: #27563f; transform: translateY(-1px); }
+.view-toggle.is-active { border-color: rgba(42,93,73,.35); color: #f4f4e6; background: #397b63; box-shadow: 0 4px 11px rgba(41,94,68,.2); }
+.view-toggle.is-active:hover { color: #fff; background: #306f59; }
 .icon-button:focus-visible, .primary-button:focus-visible, .jump-button:focus-visible { outline: 3px solid rgba(79,156,123,.42); outline-offset: 3px; }
 
 .hud { position: absolute; z-index: 4; inset: 0; pointer-events: none; }

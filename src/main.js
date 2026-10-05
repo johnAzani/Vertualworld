@@ -16,6 +16,7 @@ const phoneMapContext = phoneMapCanvas.getContext('2d');
 const phonePanel = document.querySelector('#phone-panel');
 const phoneScrim = document.querySelector('#phone-scrim');
 const phoneButton = document.querySelector('#phone-button');
+const viewToggleButton = document.querySelector('#view-toggle');
 const phoneCloseButton = document.querySelector('#phone-close');
 const phoneBackButton = document.querySelector('#phone-back');
 const phoneContent = document.querySelector('#phone-content');
@@ -1111,8 +1112,11 @@ player.position.copy(startPosition);
 player.rotation.y = Math.PI - 0.28;
 
 let cameraYaw = 0;
+let cameraPitch = 0;
+let isFirstPerson = false;
 let pointerDragging = false;
 let previousPointerX = 0;
+let previousPointerY = 0;
 let jumpHeight = 0;
 let jumpVelocity = 0;
 let jumpRequested = false;
@@ -1130,6 +1134,21 @@ let phoneCloseTimer = 0;
 let previousPhoneFocus = null;
 let phoneNoteSaveTimer = 0;
 
+function toggleCameraMode() {
+  isFirstPerson = !isFirstPerson;
+  avatarModel.visible = !isFirstPerson;
+  playerShadow.visible = !isFirstPerson;
+  camera.fov = isFirstPerson ? 68 : 49;
+  camera.updateProjectionMatrix();
+  viewToggleButton.classList.toggle('is-active', isFirstPerson);
+  viewToggleButton.setAttribute('aria-pressed', String(isFirstPerson));
+  const nextMode = isFirstPerson ? 'third-person' : 'first-person';
+  viewToggleButton.setAttribute('aria-label', `Switch to ${nextMode} view`);
+  viewToggleButton.title = `Switch to ${nextMode} view (V)`;
+  if (isFirstPerson) showToast('First-person view · drag to look up, down, and around.', 2400);
+  else showToast('Third-person view · drag to orbit around you.', 2200);
+}
+
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
@@ -1146,6 +1165,11 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (isPhoneOpen()) return;
+  if (key === 'v' && !event.repeat) {
+    event.preventDefault();
+    toggleCameraMode();
+    return;
+  }
   if (key === 'e' && !event.repeat) {
     const home = estateHouses.find((house) => house.isHome);
     if (home && Math.hypot(player.position.x - home.doorX, player.position.z - home.doorZ) < 4.2) {
@@ -1161,17 +1185,61 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLowerCase()));
 window.addEventListener('blur', () => pressedKeys.clear());
 
+const PLAYER_COLLISION_RADIUS = 0.42;
+function resolveHouseCollisions() {
+  const wallHalfWidth = houseWidth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
+  const wallHalfDepth = houseDepth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
+  for (const house of estateHouses) {
+    const yaw = house.group.rotation.y;
+    const cosYaw = Math.cos(yaw);
+    const sinYaw = Math.sin(yaw);
+    const offsetX = player.position.x - house.x;
+    const offsetZ = player.position.z - house.z;
+    let localX = offsetX * cosYaw - offsetZ * sinYaw;
+    let localZ = offsetX * sinYaw + offsetZ * cosYaw;
+    if (Math.abs(localX) >= wallHalfWidth || Math.abs(localZ) >= wallHalfDepth) continue;
+
+    const overlapX = wallHalfWidth - Math.abs(localX);
+    const overlapZ = wallHalfDepth - Math.abs(localZ);
+    let normalX;
+    let normalZ;
+    if (overlapX < overlapZ) {
+      const side = Math.sign(localX) || 1;
+      localX = side * wallHalfWidth;
+      normalX = side * cosYaw;
+      normalZ = -side * sinYaw;
+    } else {
+      const side = Math.sign(localZ) || 1;
+      localZ = side * wallHalfDepth;
+      normalX = side * sinYaw;
+      normalZ = side * cosYaw;
+    }
+
+    player.position.x = house.x + localX * cosYaw + localZ * sinYaw;
+    player.position.z = house.z - localX * sinYaw + localZ * cosYaw;
+    const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
+    if (inwardVelocity < 0) {
+      velocity.x -= inwardVelocity * normalX;
+      velocity.z -= inwardVelocity * normalZ;
+    }
+  }
+}
+
 canvas.addEventListener('pointerdown', (event) => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   pointerDragging = true;
   previousPointerX = event.clientX;
+  previousPointerY = event.clientY;
   canvas.setPointerCapture?.(event.pointerId);
 });
 canvas.addEventListener('pointermove', (event) => {
   if (!pointerDragging) return;
-  const delta = event.clientX - previousPointerX;
+  const deltaX = event.clientX - previousPointerX;
+  const deltaY = event.clientY - previousPointerY;
   previousPointerX = event.clientX;
-  cameraYaw -= delta * 0.0065;
+  previousPointerY = event.clientY;
+  cameraYaw -= deltaX * 0.0065;
+  if (isFirstPerson) cameraPitch = clamp(cameraPitch - deltaY * 0.004, -0.7, 0.58);
 });
 function releasePointer() {
   pointerDragging = false;
@@ -1385,6 +1453,7 @@ function updatePhoneQuestProgress() {
 }
 
 phoneButton.addEventListener('click', togglePhone);
+viewToggleButton.addEventListener('click', toggleCameraMode);
 homeInteractionButton.addEventListener('click', openHomeDetails);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
@@ -1404,6 +1473,7 @@ phoneContent.addEventListener('click', (event) => {
   if (!actionButton) return;
   if (actionButton.dataset.phoneAction === 'camera-reset') {
     cameraYaw = 0;
+    cameraPitch = 0;
     document.querySelector('#phone-map-feedback').textContent = 'Camera view reset. Your location marker stays live.';
   } else if (actionButton.dataset.phoneAction === 'show-home-on-map') {
     setPhonePage('map');
@@ -1479,6 +1549,7 @@ document.querySelector('#explore-button').addEventListener('click', () => {
 });
 document.querySelector('#camera-reset').addEventListener('click', () => {
   cameraYaw = 0;
+  cameraPitch = 0;
   showToast('Back to the island’s first view.', 1800);
 });
 document.querySelector('#fullscreen-button').addEventListener('click', async () => {
@@ -1732,6 +1803,7 @@ function animate() {
       velocity.z -= outwardZ * outwardVelocity;
     }
   }
+  resolveHouseCollisions();
 
   const ground = terrainHeight(player.position.x, player.position.z);
   if (jumpRequested && jumpHeight <= 0.001) {
@@ -1806,15 +1878,31 @@ function animate() {
   portalGlow.material.opacity = 0.17 + Math.sin(elapsedWorldTime * 1.25) * 0.045;
   beaconLight.intensity = 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
 
-  // Smooth third-person follow camera.
-  const cameraDistance = 10.8;
-  const desiredCameraPosition = new THREE.Vector3(
-    player.position.x + Math.sin(cameraYaw) * cameraDistance,
-    player.position.y + 6.2 + jumpHeight * 0.16,
-    player.position.z + Math.cos(cameraYaw) * cameraDistance,
-  );
-  camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-5.2 * delta));
-  camera.lookAt(player.position.x, player.position.y + 1.24 + jumpHeight * 0.12, player.position.z);
+  if (isFirstPerson) {
+    const eyePosition = new THREE.Vector3(
+      player.position.x,
+      player.position.y + avatarModel.position.y + 1.73,
+      player.position.z,
+    );
+    const pitchCos = Math.cos(cameraPitch);
+    const viewDirection = new THREE.Vector3(
+      Math.sin(cameraYaw) * pitchCos,
+      Math.sin(cameraPitch),
+      -Math.cos(cameraYaw) * pitchCos,
+    );
+    camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
+    camera.lookAt(eyePosition.clone().addScaledVector(viewDirection, 18));
+  } else {
+    // Smooth third-person follow camera.
+    const cameraDistance = 10.8;
+    const desiredCameraPosition = new THREE.Vector3(
+      player.position.x + Math.sin(cameraYaw) * cameraDistance,
+      player.position.y + 6.2 + jumpHeight * 0.16,
+      player.position.z + Math.cos(cameraYaw) * cameraDistance,
+    );
+    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-5.2 * delta));
+    camera.lookAt(player.position.x, player.position.y + 1.24 + jumpHeight * 0.12, player.position.z);
+  }
 
   uiAccumulator += delta;
   if (uiAccumulator > 0.14) {
