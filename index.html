@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#d7eee6" />
+    <meta name="description" content="Take a breath, find your path, and wander a little world of your own." />
+    <title>Vertualworld — somewhere to begin</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world-canvas" aria-label="A small 3D island world. Move with WASD or the arrow keys."></canvas>
+      <div class="world-wash" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Vertualworld home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36" fill="none">
+              <path d="M5.5 10.5 15.9 27h4.2l10.4-16.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="m12.5 10.5 5.5 8.7 5.5-8.7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".58" />
+              <circle cx="18" cy="29" r="2" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">VERTUALWORLD</span>
+            <span class="brand-caption">A little place to be</span>
+          </span>
+        </a>
+
+        <div class="topbar-center" aria-label="Current world">
+          <span class="live-dot"></span>
+          <span>ISLAND 01</span>
+          <span class="topbar-divider"></span>
+          <span class="world-time" id="world-time">09:42</span>
+          <span class="time-label">AM</span>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="seed-counter" aria-label="Glow seeds collected">
+            <span class="seed-counter-icon" aria-hidden="true">✦</span>
+            <span id="seed-count-top">0</span><span class="seed-total">/ 3</span>
+          </div>
+          <button class="icon-button" id="camera-reset" type="button" aria-label="Reset camera view" title="Reset camera view">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5A8 8 0 1 1 3 13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 3.5v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="hud" aria-label="World interface">
+        <section class="intro-card" id="intro-card">
+          <div class="eyebrow"><span class="eyebrow-mark">✳</span> YOUR FIRST LITTLE WORLD</div>
+          <h1>Somewhere<br />to <em>begin.</em></h1>
+          <p>A quiet island, a winding path, and a little person finding their way. Take a breath and see where it leads.</p>
+          <button class="primary-button" id="explore-button" type="button">
+            <span>Start wandering</span>
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="intro-footnote"><span class="sparkle">✦</span> No rush. This world is yours.</div>
+        </section>
+
+        <div class="location-chip" id="location-chip" aria-live="polite">
+          <span class="location-pin" aria-hidden="true"></span>
+          <span id="location-name">Meadow Rise</span>
+          <span class="location-separator">·</span>
+          <span id="location-coordinates">0, 12</span>
+        </div>
+
+        <aside class="map-card" aria-label="Island map">
+          <div class="map-art-wrap">
+            <canvas id="map-canvas" width="176" height="176" aria-label="Map showing your position on the island"></canvas>
+            <span class="map-north">N</span>
+          </div>
+          <div class="map-copy">
+            <div class="panel-eyebrow">FIELD NOTES <span>01</span></div>
+            <h2>Little<br />Island</h2>
+            <p><span class="map-player-dot"></span> <span id="map-location">Meadow Rise</span></p>
+            <div class="map-coords"><span>POSITION</span><strong id="map-coordinates">X 00 · Z 12</strong></div>
+          </div>
+        </aside>
+
+        <aside class="quest-card" aria-label="Optional island quest">
+          <div class="quest-heading">
+            <span class="quest-icon" aria-hidden="true">✦</span>
+            <span class="panel-eyebrow">A LITTLE SIDE QUEST</span>
+            <span class="quest-tag">OPTIONAL</span>
+          </div>
+          <h2>Find the <em>glow seeds</em></h2>
+          <p>Three tiny lights are tucked around the island. Collect them if you feel like it.</p>
+          <div class="quest-progress-row"><span>ISLAND LIGHT</span><strong><span id="seed-count">0</span><span class="progress-total"> / 3</span></strong></div>
+          <div class="progress-track"><span id="progress-fill"></span></div>
+        </aside>
+
+        <div class="controls-hint" aria-label="Keyboard controls">
+          <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
+          <span class="control-separator"></span>
+          <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
+          <span class="control-separator"></span>
+          <span class="control-pair"><kbd>SPACE</kbd><span>JUMP</span></span>
+          <span class="control-separator"></span>
+          <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>DRAG TO LOOK</span></span>
+        </div>
+      </main>
+
+      <div class="toast" id="toast" role="status" aria-live="polite">
+        <span class="toast-icon" aria-hidden="true">✦</span>
+        <span class="toast-message" id="toast-message">A little light found its way home.</span>
+      </div>
+
+      <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
+        <div class="joystick" id="joystick" aria-label="Movement joystick">
+          <span class="joystick-ring"></span>
+          <span class="joystick-stick" id="joystick-stick"></span>
+        </div>
+        <button class="jump-button" id="jump-button" type="button" aria-label="Jump"><span>↑</span><small>JUMP</small></button>
+        <div class="touch-label">MOVE</div>
+      </div>
+
+      <div class="loading-screen" id="loading-screen">
+        <div class="loading-mark"><span>V</span><i></i></div>
+        <div class="loading-title">OPENING THE ISLAND</div>
+        <div class="loading-subtitle">One small world, coming right up.</div>
+        <div class="loading-line"><span></span></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
