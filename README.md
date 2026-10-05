@@ -22,7 +22,7 @@ Open the local URL Vite prints. Build a production bundle with `npm run build`.
 - On touch screens, use the joystick and jump button; tap the eye button in the top bar to change view
 - Find the three glowing seeds hidden around the island
 
-The island, trees, path, beacon, avatar, Meadow Court estate, and map are generated in Three.js—no external art assets required.
+The island, trees, path, beacon, avatar, Meadow Court estate, and map are generated in Three.js—no external art assets required. The sky, moon, stars, and estate lighting follow the in-world clock.
 
 ## Preview on your phone
 

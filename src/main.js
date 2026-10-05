@@ -101,6 +101,10 @@ const fillLight = new THREE.DirectionalLight(0xc2f0e8, 0.55);
 fillLight.position.set(35, 18, -35);
 scene.add(fillLight);
 
+const moonLight = new THREE.DirectionalLight(0xb5c9e2, 0);
+moonLight.position.set(20, 55, 30);
+scene.add(moonLight);
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -136,6 +140,7 @@ function distanceToPath(x, z) {
 
 const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
 const estateHouses = [];
+const exteriorNightLights = [];
 const homeFurnitureColliders = [];
 const homeLightFixtures = [];
 const HOME_FLOOR_TOP = 0.38;
@@ -218,10 +223,95 @@ ocean.position.y = -8.4;
 ocean.receiveShadow = true;
 scene.add(ocean);
 
-// Low, warm sun and slow cloud banks give the horizon a little depth.
-const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(6.8, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffdda0 }));
+// A slow sun arc, moon, and faint stars let the island move gently from day into night.
+const sunDiscMaterial = new THREE.MeshBasicMaterial({ color: 0xffdda0 });
+const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(6.8, 24, 16), sunDiscMaterial);
 sunDisc.position.set(-80, 75, -138);
 scene.add(sunDisc);
+const moonDisc = new THREE.Mesh(
+  new THREE.SphereGeometry(4.2, 20, 14),
+  new THREE.MeshBasicMaterial({ color: 0xdce8f4 }),
+);
+moonDisc.visible = false;
+scene.add(moonDisc);
+
+const starPositions = new Float32Array(210 * 3);
+let starSeed = 0x4f39a1;
+for (let i = 0; i < starPositions.length / 3; i += 1) {
+  starSeed = (starSeed * 1664525 + 1013904223) >>> 0;
+  const azimuth = (starSeed / 4294967296) * Math.PI * 2;
+  starSeed = (starSeed * 1664525 + 1013904223) >>> 0;
+  const height = 0.18 + (starSeed / 4294967296) * 0.8;
+  const horizontal = Math.sqrt(1 - height * height);
+  starPositions[i * 3] = Math.cos(azimuth) * horizontal * 270;
+  starPositions[i * 3 + 1] = height * 270;
+  starPositions[i * 3 + 2] = Math.sin(azimuth) * horizontal * 270;
+}
+const starGeometry = new THREE.BufferGeometry();
+starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+starGeometry.computeBoundingSphere();
+const starMaterial = new THREE.PointsMaterial({ color: 0xe8f0ff, size: 1.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
+const stars = new THREE.Points(starGeometry, starMaterial);
+stars.visible = false;
+scene.add(stars);
+
+const nightSkyColor = new THREE.Color(0x172b43);
+const daySkyColor = new THREE.Color(0xb5dce0);
+const twilightSkyColor = new THREE.Color(0xe9a889);
+const nightHemiColor = new THREE.Color(0x7f9ec1);
+const dayHemiColor = new THREE.Color(0xe2fff1);
+const nightGroundColor = new THREE.Color(0x283b51);
+const dayGroundColor = new THREE.Color(0x597662);
+const nightFillColor = new THREE.Color(0x9bbce0);
+const dayFillColor = new THREE.Color(0xc2f0e8);
+const daySunColor = new THREE.Color(0xffedcf);
+const twilightSunColor = new THREE.Color(0xffbd86);
+const nightSunColor = new THREE.Color(0x9bb6d8);
+const blendedSkyColor = new THREE.Color();
+const solarDirection = new THREE.Vector3();
+const moonDirection = new THREE.Vector3();
+
+function updateDaylight() {
+  const minuteOfDay = (worldMinutes + elapsedWorldTime / 18) % (24 * 60);
+  const hour = minuteOfDay / 60;
+  const solarPhase = ((hour - 6) / 12) * Math.PI;
+  const elevation = Math.sin(solarPhase);
+  const daylight = smoothstep01((elevation + 0.13) / 0.6);
+  const night = 1 - daylight;
+  const sunrise = Math.exp(-0.5 * ((hour - 6.2) / 1.7) ** 2);
+  const sunset = Math.exp(-0.5 * ((hour - 17.8) / 1.7) ** 2);
+  const twilight = clamp(Math.max(sunrise, sunset), 0, 1);
+  const azimuth = (hour / 24) * Math.PI * 2;
+
+  solarDirection.set(Math.cos(azimuth), elevation, Math.sin(azimuth)).normalize();
+  sunLight.position.copy(solarDirection).multiplyScalar(120);
+  sunLight.intensity = THREE.MathUtils.lerp(0.035, 3.1, daylight);
+  sunLight.color.copy(nightSunColor).lerp(daySunColor, daylight).lerp(twilightSunColor, twilight * 0.58);
+  fillLight.intensity = THREE.MathUtils.lerp(0.1, 0.55, daylight);
+  fillLight.color.copy(nightFillColor).lerp(dayFillColor, daylight);
+  moonDirection.copy(solarDirection).negate();
+  moonLight.position.copy(moonDirection).multiplyScalar(110);
+  moonLight.intensity = night * 0.26;
+  hemi.intensity = THREE.MathUtils.lerp(0.42, 2, daylight);
+  hemi.color.copy(nightHemiColor).lerp(dayHemiColor, daylight);
+  hemi.groundColor.copy(nightGroundColor).lerp(dayGroundColor, daylight);
+
+  blendedSkyColor.copy(nightSkyColor).lerp(daySkyColor, daylight).lerp(twilightSkyColor, twilight * 0.52);
+  scene.background.copy(blendedSkyColor);
+  scene.fog.color.copy(blendedSkyColor);
+  sunDisc.position.copy(solarDirection).multiplyScalar(148);
+  sunDisc.visible = elevation > -0.035;
+  sunDiscMaterial.color.copy(daySunColor).lerp(twilightSunColor, twilight * 0.62);
+  moonDisc.position.copy(moonDirection).multiplyScalar(145);
+  moonDisc.visible = night > 0.72 && moonDirection.y > 0.12;
+  starMaterial.opacity = clamp((night - 0.12) / 0.88, 0, 1) * 0.84;
+  stars.visible = starMaterial.opacity > 0.015;
+
+  for (const fixture of exteriorNightLights) {
+    fixture.light.intensity = THREE.MathUtils.lerp(fixture.dayIntensity, fixture.nightIntensity, night);
+    fixture.material.emissiveIntensity = THREE.MathUtils.lerp(fixture.dayEmissive, fixture.nightEmissive, night);
+  }
+}
 
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
 const clouds = [];
@@ -1007,6 +1097,17 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   );
   porchLight.position.set(-0.98, 2.52, frontZ - 0.2);
   group.add(porchLight);
+  const porchLightPoint = new THREE.PointLight(0xffcf85, 0, 7, 2);
+  porchLightPoint.position.copy(porchLight.position);
+  group.add(porchLightPoint);
+  exteriorNightLights.push({
+    light: porchLightPoint,
+    material: porchLight.material,
+    dayIntensity: 0,
+    nightIntensity: 0.68,
+    dayEmissive: 0.05,
+    nightEmissive: 1.1,
+  });
   if (isHome) createHomeInterior(group);
 
   group.position.set(x, terrainHeight(x, z), z);
@@ -1038,15 +1139,21 @@ function createEstateLamp(x, z) {
   const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.09, 0.09), metal);
   arm.position.set(0.34, 3.22, 0);
   group.add(arm);
-  const lantern = new THREE.Mesh(
-    new THREE.SphereGeometry(0.24, 10, 8),
-    new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xe9a84e, emissiveIntensity: 0.8, roughness: 0.3 }),
-  );
+  const lanternMaterial = new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xe9a84e, emissiveIntensity: 0.8, roughness: 0.3 });
+  const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), lanternMaterial);
   lantern.position.set(0.74, 3.16, 0);
   group.add(lantern);
-  const lampLight = new THREE.PointLight(0xffcf85, 0.45, 8, 2);
+  const lampLight = new THREE.PointLight(0xffcf85, 0, 10, 2);
   lampLight.position.copy(lantern.position);
   group.add(lampLight);
+  exteriorNightLights.push({
+    light: lampLight,
+    material: lanternMaterial,
+    dayIntensity: 0.015,
+    nightIntensity: 0.82,
+    dayEmissive: 0.05,
+    nightEmissive: 1.05,
+  });
   group.position.set(x, terrainHeight(x, z), z);
   scene.add(group);
 }
@@ -2377,6 +2484,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
   updateClock();
+  updateDaylight();
   if (homeDoorPivot) {
     const doorResponse = 1 - Math.exp(-7.5 * delta);
     homeDoorPivot.rotation.y += (homeDoorTargetAngle - homeDoorPivot.rotation.y) * doorResponse;
@@ -2566,5 +2674,6 @@ window.addEventListener('resize', resize);
 
 updateLocationAndMap();
 updateClock();
+updateDaylight();
 requestAnimationFrame(() => loadingScreen.classList.add('is-ready'));
 animate();
