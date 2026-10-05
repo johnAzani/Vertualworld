@@ -23,6 +23,8 @@ The island, trees, path, beacon, avatar, and map are generated in Three.js—no 
 
 ## Preview on your phone
 
-The GitHub Actions workflow builds and publishes the site to GitHub Pages when this branch or `main` is updated. Once Pages is enabled with **Settings → Pages → Source: GitHub Actions** and the first deployment completes, open:
+The GitHub Actions workflow builds and publishes the site when this branch or `main` is updated. After the current deployment finishes, open the public site at:
 
-`https://johnazani.github.io/Vertualworld/`
+[https://johnazani.github.io/Vertualworld/](https://johnazani.github.io/Vertualworld/)
+
+On phones, use the on-screen joystick and jump button.
