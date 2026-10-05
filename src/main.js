@@ -9,6 +9,29 @@ const toast = document.querySelector('#toast');
 const toastMessage = document.querySelector('#toast-message');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
+const phoneMapCanvas = document.querySelector('#phone-map-canvas');
+const phoneMapContext = phoneMapCanvas.getContext('2d');
+const phonePanel = document.querySelector('#phone-panel');
+const phoneScrim = document.querySelector('#phone-scrim');
+const phoneButton = document.querySelector('#phone-button');
+const phoneCloseButton = document.querySelector('#phone-close');
+const phoneBackButton = document.querySelector('#phone-back');
+const phoneContent = document.querySelector('#phone-content');
+const phonePageTitle = document.querySelector('#phone-page-title');
+const phonePageEyebrow = document.querySelector('#phone-page-eyebrow');
+const phonePageSubtitle = document.querySelector('#phone-page-subtitle');
+const phoneChatThread = document.querySelector('#phone-chat-thread');
+const phoneMessagePreview = document.querySelector('#phone-message-preview');
+const phoneMessageForm = document.querySelector('#phone-message-form');
+const phoneMessageInput = document.querySelector('#phone-message-input');
+const phoneNotificationDot = document.querySelector('#phone-notification-dot');
+const phoneMessageBadge = document.querySelector('#phone-message-badge');
+const phoneNote = document.querySelector('#phone-note');
+const phoneNoteStatus = document.querySelector('#phone-note-status');
+const phoneNoteCount = document.querySelector('#phone-note-count');
+const phoneTimeElement = document.querySelector('#phone-time');
+const phoneHomeTime = document.querySelector('#phone-home-time');
+const worldPeriodElement = document.querySelector('#world-period');
 
 const WORLD_RADIUS = 82;
 const SEED_POSITIONS = [
@@ -442,7 +465,7 @@ for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   light.position.y = 1.2;
   seedGroup.add(light);
   scene.add(seedGroup);
-  seeds.push({ group: seedGroup, orb, hoop, halo, x: position.x, z: position.y, phase: random() * Math.PI * 2, collected: false });
+  seeds.push({ index: i + 1, group: seedGroup, orb, hoop, halo, x: position.x, z: position.y, phase: random() * Math.PI * 2, collected: false });
 }
 
 // A few slow sparks circle the beacon like fireflies.
@@ -724,10 +747,28 @@ const velocity = new THREE.Vector3();
 const pressedKeys = new Set();
 const joystickInput = { x: 0, y: 0 };
 let elapsedWorldTime = 0;
+let activePhonePage = 'home';
+let phoneUnread = true;
+let phoneCloseTimer = 0;
+let previousPhoneFocus = null;
+let phoneNoteSaveTimer = 0;
 
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
+  if (key === 'escape' && isPhoneOpen()) {
+    event.preventDefault();
+    closePhone();
+    return;
+  }
+  const isTyping = event.target instanceof HTMLElement && event.target.matches('input, textarea, select, [contenteditable="true"]');
+  if (isTyping) return;
+  if (key === 'p' && !event.repeat) {
+    event.preventDefault();
+    togglePhone();
+    return;
+  }
+  if (isPhoneOpen()) return;
   if (keyToMove.has(key)) event.preventDefault();
   pressedKeys.add(key);
   if (key === ' ' && !event.repeat) jumpRequested = true;
@@ -805,6 +846,234 @@ function showToast(message, duration = 2600) {
   toastTimer = window.setTimeout(() => toast.classList.remove('is-visible'), duration);
 }
 
+function isPhoneOpen() {
+  return !phonePanel.hidden && phonePanel.classList.contains('is-open');
+}
+
+const phonePageCopy = {
+  home: { eyebrow: 'YOUR POCKET GUIDE', title: 'Your little world', subtitle: 'Useful things for wherever the path takes you.' },
+  map: { eyebrow: 'ISLAND 01 · LIVE', title: 'Field map', subtitle: 'Find your place and see what’s close.' },
+  messages: { eyebrow: 'YOUR NEIGHBORHOOD', title: 'Messages', subtitle: 'A small check-in from someone nearby.' },
+  journal: { eyebrow: 'FIELD NOTES · PRIVATE', title: 'Journal', subtitle: 'A note to keep, just for you.' },
+  quests: { eyebrow: 'YOUR PROGRESS', title: 'Small things to do', subtitle: 'A gentle reason to keep wandering.' },
+};
+
+function updatePhoneBadge() {
+  phoneNotificationDot.hidden = !phoneUnread;
+  phoneMessageBadge.hidden = !phoneUnread;
+}
+
+function setPhonePage(pageName) {
+  const page = phonePageCopy[pageName] ? pageName : 'home';
+  activePhonePage = page;
+  for (const phonePage of phoneContent.querySelectorAll('[data-phone-page]')) {
+    phonePage.hidden = phonePage.dataset.phonePage !== page;
+  }
+  phonePageEyebrow.textContent = phonePageCopy[page].eyebrow;
+  phonePageTitle.textContent = phonePageCopy[page].title;
+  phonePageSubtitle.textContent = phonePageCopy[page].subtitle;
+  phoneBackButton.hidden = page === 'home';
+  phoneContent.scrollTop = 0;
+  if (page === 'messages') {
+    phoneUnread = false;
+    updatePhoneBadge();
+  }
+  if (page === 'map') drawMap();
+  if (isPhoneOpen()) {
+    const focusTarget = page === 'home' ? phoneContent.querySelector('[data-phone-app="map"]') : phoneBackButton;
+    focusTarget?.focus({ preventScroll: true });
+  }
+}
+
+function openPhone() {
+  if (isPhoneOpen()) return;
+  window.clearTimeout(phoneCloseTimer);
+  previousPhoneFocus = document.activeElement instanceof HTMLElement ? document.activeElement : phoneButton;
+  phonePanel.hidden = false;
+  phoneScrim.hidden = false;
+  phonePanel.inert = false;
+  phonePanel.setAttribute('aria-hidden', 'false');
+  phoneScrim.setAttribute('aria-hidden', 'false');
+  phoneButton.setAttribute('aria-expanded', 'true');
+  pressedKeys.clear();
+  resetJoystick();
+  phonePanel.offsetWidth;
+  phonePanel.classList.add('is-open');
+  phoneScrim.classList.add('is-open');
+  phoneCloseButton.focus({ preventScroll: true });
+  if (activePhonePage === 'map') drawMap();
+}
+
+function closePhone() {
+  if (!isPhoneOpen()) return;
+  phonePanel.classList.remove('is-open');
+  phoneScrim.classList.remove('is-open');
+  phonePanel.setAttribute('aria-hidden', 'true');
+  phoneScrim.setAttribute('aria-hidden', 'true');
+  phonePanel.inert = true;
+  phoneButton.setAttribute('aria-expanded', 'false');
+  window.clearTimeout(phoneCloseTimer);
+  phoneCloseTimer = window.setTimeout(() => {
+    phonePanel.hidden = true;
+    phoneScrim.hidden = true;
+    phoneCloseTimer = 0;
+  }, 250);
+  const focusTarget = previousPhoneFocus?.isConnected && !phonePanel.contains(previousPhoneFocus) ? previousPhoneFocus : phoneButton;
+  focusTarget.focus?.({ preventScroll: true });
+}
+
+function togglePhone() {
+  if (isPhoneOpen()) closePhone();
+  else openPhone();
+}
+
+function appendPhoneMessage(direction, messageText) {
+  const message = document.createElement('div');
+  message.className = `phone-chat-message phone-chat-message--${direction}`;
+  if (direction === 'incoming') {
+    const sender = document.createElement('span');
+    sender.className = 'phone-chat-sender';
+    sender.textContent = 'Nia';
+    message.append(sender);
+  }
+  const body = document.createElement('p');
+  body.textContent = messageText;
+  const time = document.createElement('time');
+  time.textContent = phoneTimeElement.textContent;
+  message.append(body, time);
+  phoneChatThread.append(message);
+  phoneChatThread.scrollTop = phoneChatThread.scrollHeight;
+}
+
+function sendPhoneReply(replyKey) {
+  const replies = {
+    beacon: {
+      sent: 'I’m heading to Beacon Circle.',
+      received: 'Sounds good. Follow the pale path south and you’ll see the plaza ahead.',
+    },
+    exploring: {
+      sent: 'I’m still exploring for a while.',
+      received: 'Enjoy the quiet. The best corners are the ones you find by accident.',
+    },
+    found: {
+      sent: 'I found a glow seed!',
+      received: seedCount > 0
+        ? 'Lovely — one little light is home. Keep an eye out for the others.'
+        : 'That’s exciting! Keep looking around; I’ll be cheering you on.',
+    },
+  };
+  const reply = replies[replyKey];
+  if (!reply) return;
+  phoneUnread = false;
+  updatePhoneBadge();
+  appendPhoneMessage('outgoing', reply.sent);
+  appendPhoneMessage('incoming', reply.received);
+  phoneMessagePreview.textContent = reply.received;
+}
+
+function updatePhoneQuestProgress() {
+  const total = seeds.length;
+  const percent = total ? (seedCount / total) * 100 : 0;
+  document.querySelector('#seed-count').textContent = seedCount;
+  document.querySelector('#seed-count-top').textContent = seedCount;
+  document.querySelector('#progress-fill').style.width = `${percent}%`;
+  document.querySelector('#phone-seed-count').textContent = `${seedCount} / ${total}`;
+  document.querySelector('#phone-quest-progress-fill').style.width = `${percent}%`;
+  for (const seed of seeds) {
+    const row = document.querySelector(`#phone-seed-status-${seed.index}`).closest('.phone-seed-row');
+    const status = document.querySelector(`#phone-seed-status-${seed.index}`);
+    const check = document.querySelector(`#phone-seed-check-${seed.index}`);
+    row.classList.toggle('is-found', seed.collected);
+    status.textContent = seed.collected ? 'FOUND' : 'TO FIND';
+    check.textContent = seed.collected ? '✓' : String(seed.index);
+  }
+}
+
+phoneButton.addEventListener('click', togglePhone);
+phoneCloseButton.addEventListener('click', closePhone);
+phoneBackButton.addEventListener('click', () => setPhonePage('home'));
+phoneScrim.addEventListener('click', closePhone);
+phoneContent.addEventListener('click', (event) => {
+  const appButton = event.target.closest('[data-phone-app]');
+  if (appButton) {
+    setPhonePage(appButton.dataset.phoneApp);
+    return;
+  }
+  const replyButton = event.target.closest('[data-phone-reply]');
+  if (replyButton) {
+    sendPhoneReply(replyButton.dataset.phoneReply);
+    return;
+  }
+  const actionButton = event.target.closest('[data-phone-action]');
+  if (!actionButton) return;
+  if (actionButton.dataset.phoneAction === 'camera-reset') {
+    cameraYaw = 0;
+    document.querySelector('#phone-map-feedback').textContent = 'Camera view reset. Your location marker stays live.';
+  } else if (actionButton.dataset.phoneAction === 'continue') {
+    closePhone();
+    showToast('Back to exploring. The path is yours.', 2400);
+  }
+});
+
+phoneMessageForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const message = phoneMessageInput.value.trim();
+  if (!message) return;
+  phoneUnread = false;
+  updatePhoneBadge();
+  appendPhoneMessage('outgoing', message);
+  phoneMessageInput.value = '';
+  const normalized = message.toLowerCase();
+  let response = 'Got it. Take your time out there — send another note whenever you like.';
+  if (normalized.includes('beacon')) response = 'The plaza is easy to spot. Follow the pale trail and you’ll get there.';
+  else if (normalized.includes('seed') || normalized.includes('light')) {
+    response = seedCount > 0
+      ? 'I can see the island getting brighter. Thanks for bringing a little light home.'
+      : 'Keep looking around — I think there’s a little more light waiting to be found.';
+  }
+  appendPhoneMessage('incoming', response);
+  phoneMessagePreview.textContent = response;
+});
+
+phonePanel.addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return;
+  const focusable = [...phonePanel.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled])')]
+    .filter((element) => !element.closest('[hidden]'));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+try {
+  phoneNote.value = localStorage.getItem('vertualworld-field-note') || '';
+} catch (error) {
+  phoneNoteStatus.textContent = 'Local storage is unavailable';
+}
+phoneNoteCount.textContent = String(phoneNote.value.length);
+phoneNote.addEventListener('input', () => {
+  phoneNoteCount.textContent = String(phoneNote.value.length);
+  phoneNoteStatus.textContent = 'Saving…';
+  window.clearTimeout(phoneNoteSaveTimer);
+  phoneNoteSaveTimer = window.setTimeout(() => {
+    try {
+      localStorage.setItem('vertualworld-field-note', phoneNote.value);
+      phoneNoteStatus.textContent = 'Saved on this device';
+    } catch (error) {
+      phoneNoteStatus.textContent = 'Could not save on this device';
+    }
+  }, 180);
+});
+updatePhoneBadge();
+setPhonePage('home');
+updatePhoneQuestProgress();
+
 document.querySelector('#explore-button').addEventListener('click', () => {
   introCard.classList.add('is-dismissed');
   showToast('You’re here. Take the path, or make your own.', 3200);
@@ -827,9 +1096,15 @@ function updateClock() {
   const minute = Math.floor(worldMinutes + elapsedWorldTime / 18);
   if (minute === lastClockMinute) return;
   lastClockMinute = minute;
-  const hours = Math.floor(minute / 60) % 12 || 12;
+  const hour24 = Math.floor(minute / 60) % 24;
+  const hours = hour24 % 12 || 12;
   const minutes = minute % 60;
-  clockElement.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const period = hour24 < 12 ? 'AM' : 'PM';
+  clockElement.textContent = time;
+  phoneTimeElement.textContent = time;
+  phoneHomeTime.textContent = `${time} ${period}`;
+  worldPeriodElement.textContent = period;
 }
 
 function updateLocationAndMap() {
@@ -844,20 +1119,29 @@ function updateLocationAndMap() {
 
   const roundedX = Math.round(x);
   const roundedZ = Math.round(z);
+  const formattedCoordinates = `X ${String(roundedX).padStart(2, '0')} · Z ${String(roundedZ).padStart(2, '0')}`;
   document.querySelector('#location-name').textContent = location;
   document.querySelector('#location-coordinates').textContent = `${roundedX}, ${roundedZ}`;
   document.querySelector('#map-location').textContent = location;
-  document.querySelector('#map-coordinates').textContent = `X ${String(roundedX).padStart(2, '0')} · Z ${String(roundedZ).padStart(2, '0')}`;
+  document.querySelector('#map-coordinates').textContent = formattedCoordinates;
+  document.querySelector('#phone-home-location').textContent = location;
+  document.querySelector('#phone-home-coordinates').textContent = formattedCoordinates;
+  document.querySelector('#phone-map-location').textContent = location;
+  document.querySelector('#phone-map-coordinates').textContent = formattedCoordinates;
   drawMap();
 }
 
 function drawMap() {
-  const ctx = mapContext;
-  const width = mapCanvas.width;
-  const height = mapCanvas.height;
+  drawMapCanvas(mapCanvas, mapContext);
+  if (isPhoneOpen() && activePhonePage === 'map') drawMapCanvas(phoneMapCanvas, phoneMapContext);
+}
+
+function drawMapCanvas(targetCanvas, ctx) {
+  const width = targetCanvas.width;
+  const height = targetCanvas.height;
   const centerX = width / 2;
   const centerY = height / 2;
-  const radius = width * 0.42;
+  const radius = Math.min(width, height) * 0.42;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#c4e0dc';
   ctx.fillRect(0, 0, width, height);
@@ -873,7 +1157,7 @@ function drawMap() {
   ctx.fillStyle = '#a9ce9e';
   ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
 
-  // A few soft contour lines suggest the island's raised center.
+  // Soft contours and the sandy route make the map legible at both HUD sizes.
   ctx.strokeStyle = 'rgba(80, 132, 94, .19)';
   ctx.lineWidth = 1;
   for (let ring = 0; ring < 4; ring += 1) {
@@ -891,20 +1175,20 @@ function drawMap() {
   });
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(255, 245, 211, .85)';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(255, 245, 211, .88)';
+  ctx.lineWidth = Math.max(2.6, radius * 0.024);
   ctx.stroke();
 
   for (const tree of treeLocations) {
     ctx.beginPath();
-    ctx.arc(mapX(tree.x), mapY(tree.z), 1.55, 0, Math.PI * 2);
+    ctx.arc(mapX(tree.x), mapY(tree.z), Math.max(1.1, radius * 0.009), 0, Math.PI * 2);
     ctx.fillStyle = '#39775c';
     ctx.fill();
   }
   for (const seed of seeds) {
     if (seed.collected) continue;
     ctx.beginPath();
-    ctx.arc(mapX(seed.x), mapY(seed.z), 3.1, 0, Math.PI * 2);
+    ctx.arc(mapX(seed.x), mapY(seed.z), Math.max(2.4, radius * 0.019), 0, Math.PI * 2);
     ctx.fillStyle = '#f0b856';
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,.9)';
@@ -914,7 +1198,7 @@ function drawMap() {
 
   // Beacon symbol.
   ctx.beginPath();
-  ctx.arc(mapX(0), mapY(-27), 4.2, 0, Math.PI * 2);
+  ctx.arc(mapX(0), mapY(-27), Math.max(3.4, radius * 0.026), 0, Math.PI * 2);
   ctx.fillStyle = '#77b8a0';
   ctx.fill();
   ctx.strokeStyle = '#eff4d9';
@@ -926,11 +1210,12 @@ function drawMap() {
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(-player.rotation.y);
+  const arrowSize = Math.max(5, radius * 0.038);
   ctx.beginPath();
-  ctx.moveTo(0, -6.3);
-  ctx.lineTo(4.8, 4.3);
-  ctx.lineTo(0, 2.5);
-  ctx.lineTo(-4.8, 4.3);
+  ctx.moveTo(0, -arrowSize);
+  ctx.lineTo(arrowSize * 0.76, arrowSize * 0.68);
+  ctx.lineTo(0, arrowSize * 0.38);
+  ctx.lineTo(-arrowSize * 0.76, arrowSize * 0.68);
   ctx.closePath();
   ctx.fillStyle = '#e98665';
   ctx.fill();
@@ -1059,9 +1344,7 @@ function animate() {
       seed.collected = true;
       seed.group.visible = false;
       seedCount += 1;
-      document.querySelector('#seed-count').textContent = seedCount;
-      document.querySelector('#seed-count-top').textContent = seedCount;
-      document.querySelector('#progress-fill').style.width = `${(seedCount / seeds.length) * 100}%`;
+      updatePhoneQuestProgress();
       updateLocationAndMap();
       showToast(seedCount === seeds.length ? 'All three lights are home. Lovely work.' : 'You found a glow seed. The island is a little brighter.');
     }

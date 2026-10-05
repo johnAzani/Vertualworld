@@ -32,7 +32,7 @@
           <span>ISLAND 01</span>
           <span class="topbar-divider"></span>
           <span class="world-time" id="world-time">09:42</span>
-          <span class="time-label">AM</span>
+          <span class="time-label" id="world-period">AM</span>
         </div>
 
         <div class="topbar-actions">
@@ -40,6 +40,10 @@
             <span class="seed-counter-icon" aria-hidden="true">✦</span>
             <span id="seed-count-top">0</span><span class="seed-total">/ 3</span>
           </div>
+          <button class="icon-button phone-launcher" id="phone-button" type="button" aria-label="Open your phone" title="Open your phone (P)" aria-controls="phone-panel" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M10 5.6h4M10.3 18.2h3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span class="phone-notification-dot" id="phone-notification-dot" aria-label="Unread message" hidden></span>
+          </button>
           <button class="icon-button" id="camera-reset" type="button" aria-label="Reset camera view" title="Reset camera view">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5A8 8 0 1 1 3 13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 3.5v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -103,6 +107,134 @@
           <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>DRAG TO LOOK</span></span>
         </div>
       </main>
+
+      <div class="phone-scrim" id="phone-scrim" hidden></div>
+      <section class="phone-panel" id="phone-panel" role="dialog" aria-modal="true" aria-labelledby="phone-page-title" aria-hidden="true" hidden>
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="phone-statusbar" aria-label="Phone status">
+              <span id="phone-time">09:42</span>
+              <span class="phone-status-icons" aria-hidden="true">
+                <span class="phone-signal"><i></i><i></i><i></i><i></i></span>
+                <svg viewBox="0 0 18 14" fill="none"><path d="M1.5 4.5a11 11 0 0 1 15 0M4 7a7.5 7.5 0 0 1 10 0M6.7 9.7a3.6 3.6 0 0 1 4.6 0M9 12h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <span class="phone-battery"><i></i></span>
+              </span>
+            </div>
+
+            <div class="phone-toolbar">
+              <button class="phone-nav-button phone-back" id="phone-back" type="button" aria-label="Back to phone home" hidden>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14.5 5-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="phone-wordmark"><span class="phone-mark">V</span><span>FIELD PHONE</span></div>
+              <button class="phone-nav-button phone-close" id="phone-close" type="button" aria-label="Close phone">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <div class="phone-heading-block">
+              <p class="phone-eyebrow" id="phone-page-eyebrow">YOUR POCKET GUIDE</p>
+              <h2 id="phone-page-title">Your little world</h2>
+              <p id="phone-page-subtitle">Useful things for wherever the path takes you.</p>
+            </div>
+
+            <div class="phone-page-container" id="phone-content">
+              <section class="phone-page phone-home-page" data-phone-page="home" aria-label="Phone home">
+                <div class="phone-home-time-row"><span>ISLAND 01</span><span id="phone-home-time">09:42 AM</span></div>
+                <div class="phone-location-widget">
+                  <div class="phone-location-copy">
+                    <span class="phone-card-label">YOU ARE HERE</span>
+                    <h3 id="phone-home-location">Meadow Rise</h3>
+                    <span class="phone-coordinates" id="phone-home-coordinates">X 00 · Z 12</span>
+                  </div>
+                  <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
+                </div>
+
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">04</span></div>
+                <div class="phone-app-grid">
+                  <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
+                    <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
+                    <span>Map</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="messages" aria-label="Open messages app">
+                    <span class="phone-app-icon app-icon-messages"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.8A2.8 2.8 0 0 1 6.8 3h10.4A2.8 2.8 0 0 1 20 5.8v7.4a2.8 2.8 0 0 1-2.8 2.8h-6l-4.5 3.2v-3.2h-.1A2.8 2.8 0 0 1 4 13.2V5.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 8.2h8M8 11.6h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="phone-app-badge" id="phone-message-badge" hidden></span></span>
+                    <span>Messages</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="journal" aria-label="Open field notes app">
+                    <span class="phone-app-icon app-icon-journal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4.5h12a1.5 1.5 0 0 1 1.5 1.5v13.5H7.2A2.7 2.7 0 0 1 4.5 16.8V6A1.5 1.5 0 0 1 6 4.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4.5 16.5A2.5 2.5 0 0 1 7 14h12.5M8.5 8h7M8.5 10.8h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                    <span>Journal</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="quests" aria-label="Open quests app">
+                    <span class="phone-app-icon app-icon-quests"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/></svg></span>
+                    <span>Quests</span>
+                  </button>
+                </div>
+
+                <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
+                  <span class="phone-contact-avatar" aria-hidden="true">N</span>
+                  <span class="phone-preview-copy"><span class="phone-preview-title">Nia <small>· just now</small></span><span class="phone-preview-text" id="phone-message-preview">The glow seeds have started appearing around the island.</span></span>
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7.5 4 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <p class="phone-local-note"><span aria-hidden="true">✦</span> Your notes stay on this device.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>
+                <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" aria-label="Map showing your position, glow seeds, and the beacon"></canvas></div>
+                <div class="phone-map-details">
+                  <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Meadow Rise</strong></div>
+                  <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
+                </div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span></div>
+                <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
+                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">Your marker follows you as you wander.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="messages" aria-label="Messages with Nia" hidden>
+                <div class="phone-contact-card"><span class="phone-contact-avatar">N</span><span><strong>Nia</strong><small>Island neighbour · nearby</small></span><span class="phone-contact-online"><i></i> HERE</span></div>
+                <div class="phone-chat-thread" id="phone-chat-thread" aria-live="polite">
+                  <div class="phone-chat-day">THIS MORNING</div>
+                  <div class="phone-chat-message phone-chat-message--incoming"><span class="phone-chat-sender">Nia</span><p>The glow seeds have started appearing around the island. Send me a quick update when you find one.</p><time>09:42</time></div>
+                </div>
+                <div class="phone-reply-heading">QUICK REPLY</div>
+                <div class="phone-reply-options" id="phone-reply-options">
+                  <button type="button" data-phone-reply="beacon">I’m heading to Beacon Circle</button>
+                  <button type="button" data-phone-reply="exploring">I’m still exploring</button>
+                  <button type="button" data-phone-reply="found">I found a glow seed!</button>
+                </div>
+                <form class="phone-message-composer" id="phone-message-form">
+                  <label class="visually-hidden" for="phone-message-input">Write a message to Nia</label>
+                  <input id="phone-message-input" type="text" maxlength="160" autocomplete="off" placeholder="Message Nia…" />
+                  <button type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 5 16 7-16 7 2.5-7L4 5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6.5 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+                </form>
+              </section>
+
+              <section class="phone-page" data-phone-page="journal" aria-label="Field journal" hidden>
+                <div class="phone-journal-intro"><span class="phone-journal-icon" aria-hidden="true">✎</span><span><strong>A note to yourself</strong><small>Keep a small memory from the day.</small></span></div>
+                <label class="phone-note-label" for="phone-note">TODAY’S NOTE</label>
+                <textarea id="phone-note" class="phone-note" maxlength="500" placeholder="A quiet corner, a thought, a place to return to…"></textarea>
+                <div class="phone-note-footer"><span id="phone-note-status">Saved on this device</span><span><span id="phone-note-count">0</span>/500</span></div>
+                <div class="phone-journal-prompt"><span>✦</span><p>What would you like to remember about this little world?</p></div>
+              </section>
+
+              <section class="phone-page" data-phone-page="quests" aria-label="Quests and progress" hidden>
+                <div class="phone-quest-card">
+                  <div class="phone-quest-kicker"><span>✦</span> OPTIONAL ISLAND QUEST</div>
+                  <h3>Bring the island<br />back to light.</h3>
+                  <p>Find the three glow seeds tucked around the island. No timer, no rush.</p>
+                  <div class="phone-quest-progress"><div><span>LIGHTS FOUND</span><strong id="phone-seed-count">0 / 3</strong></div><span class="phone-quest-track"><i id="phone-quest-progress-fill"></i></span></div>
+                </div>
+                <div class="phone-seed-list">
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-1">1</span><span>Glow seed one</span><strong id="phone-seed-status-1">TO FIND</strong></div>
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-2">2</span><span>Glow seed two</span><strong id="phone-seed-status-2">TO FIND</strong></div>
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-3">3</span><span>Glow seed three</span><strong id="phone-seed-status-3">TO FIND</strong></div>
+                </div>
+                <button class="phone-primary-button" type="button" data-phone-action="continue">Back to exploring <span aria-hidden="true">↗</span></button>
+              </section>
+            </div>
+            <div class="phone-home-indicator" aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+      </section>
 
       <div class="toast" id="toast" role="status" aria-live="polite">
         <span class="toast-icon" aria-hidden="true">✦</span>
