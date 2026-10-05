@@ -226,7 +226,14 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .toast.is-visible { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
 .toast-icon { color: #efc273; font-size: 15px; }
 
+.home-transition {
+  position: absolute; z-index: 29; inset: 0; background: rgba(12, 28, 25, .88);
+  opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  transition: opacity .22s ease, visibility .22s ease;
+}
+.home-transition.is-fading { opacity: 1; visibility: visible; pointer-events: auto; }
 .home-interaction[hidden] { display: none !important; }
+.home-interaction button[hidden] { display: none !important; }
 .home-interaction {
   position: absolute; z-index: 14; left: 50%; bottom: max(101px, calc(env(safe-area-inset-bottom) + 89px));
   width: min(380px, calc(100vw - 28px)); min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -239,6 +246,9 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .home-interaction-copy strong { overflow: hidden; color: #2d5344; font: 400 15px/1.2 'DM Serif Display', Georgia, serif; text-overflow: ellipsis; white-space: nowrap; }
 .home-interaction button { min-height: 38px; display: flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 0 11px; border: 0; border-radius: 11px; color: #f7f5e7; background: #397b63; cursor: pointer; font-size: 7px; font-weight: 700; letter-spacing: .08em; transition: background .18s, transform .18s; }
 .home-interaction button:hover { transform: translateY(-1px); background: #2f6c58; }
+.home-interaction .home-lights-button { color: #355f4d; background: #e3edda; }
+.home-interaction .home-lights-button:hover { background: #d4e5cf; }
+.home-interaction .home-lights-button kbd { border-color: rgba(58,104,79,.19); color: #355f4d; background: rgba(56,112,83,.1); }
 .home-interaction button:focus-visible { outline: 2px solid #234f40; outline-offset: 3px; }
 .home-interaction button kbd { min-width: 19px; height: 21px; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.12); }
 

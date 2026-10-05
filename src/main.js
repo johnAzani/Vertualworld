@@ -12,6 +12,9 @@ const homeInteractionEyebrow = document.querySelector('#home-interaction-eyebrow
 const homeInteractionMessage = document.querySelector('#home-interaction-message');
 const homeInteractionAction = document.querySelector('#home-interaction-action');
 const homeInteractionButton = document.querySelector('#home-interaction-button');
+const homeLightsButton = document.querySelector('#home-lights-button');
+const homeLightsAction = document.querySelector('#home-lights-action');
+const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
 const phoneMapCanvas = document.querySelector('#phone-map-canvas');
@@ -134,12 +137,17 @@ function distanceToPath(x, z) {
 const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
 const estateHouses = [];
 const homeFurnitureColliders = [];
+const homeLightFixtures = [];
 const HOME_FLOOR_TOP = 0.38;
 const HOME_DOOR_OPENING_HALF_WIDTH = 0.8;
 const HOME_INTERIOR_BOUNDS = 3.92;
 let homeHouse = null;
 let homeDoorPivot = null;
 let homeDoorTargetAngle = 0;
+let homeLightSwitchIndicator = null;
+let homeTransitionPending = null;
+let homeTransitionTimer = 0;
+let homeLightingEnabled = true;
 let isInsideHome = false;
 
 function isInsideEstate(x, z, margin = 0) {
@@ -522,6 +530,12 @@ function addHomeCollider(x, z, halfX, halfZ) {
   homeFurnitureColliders.push({ x, z, halfX, halfZ });
 }
 
+function registerHomeLightFixture(light, bulb = null) {
+  homeLightFixtures.push({ light, bulb, intensity: light.intensity });
+  light.intensity = homeLightingEnabled ? light.intensity : 0;
+  if (bulb) bulb.visible = homeLightingEnabled;
+}
+
 function createHomeInterior(houseGroup) {
   const interior = new THREE.Group();
   interior.name = 'House 01 furnished interior';
@@ -558,6 +572,27 @@ function createHomeInterior(houseGroup) {
   addHomeBox(interior, [0.12, 0.12, 7.65], [-3.94, 0.46, 0], trimMaterial, false, true);
   addHomeBox(interior, [0.12, 0.12, 7.65], [3.94, 0.46, 0], trimMaterial, false, true);
   addHomeBox(interior, [1.35, 0.055, 0.25], [0, 0.412, -4.02], trimMaterial, false, true);
+
+  // Soft curtains add a little colour and privacy without hiding the daylight.
+  const curtainMaterial = new THREE.MeshStandardMaterial({ color: 0xd7d1ba, roughness: 0.98, side: THREE.DoubleSide });
+  for (const centerX of [-2.42, 2.42]) {
+    addHomeBox(interior, [1.3, 0.035, 0.045], [centerX, 2.7, -3.79], trimMaterial, false, false);
+    for (const side of [-1, 1]) {
+      const curtain = addHomeBox(interior, [0.2, 0.92, 0.045], [centerX + side * 0.46, 2.12, -3.78], curtainMaterial, false, true);
+      curtain.scale.x = side > 0 ? 0.84 : 1;
+    }
+  }
+  for (const [side, centerZ] of [[-1, -1.5], [1, 1.5]]) {
+    const curtainX = side * 3.78;
+    addHomeBox(interior, [0.045, 0.035, 1.3], [curtainX, 2.7, centerZ], trimMaterial, false, false);
+    for (const edge of [-1, 1]) addHomeBox(interior, [0.045, 0.92, 0.2], [curtainX, 2.12, centerZ + edge * 0.46], curtainMaterial, false, true);
+  }
+
+  // The entry-side switch is both a visual detail and the cue for the L-key light control.
+  const switchPlateMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e1d0, roughness: 0.65 });
+  const switchIndicatorMaterial = new THREE.MeshStandardMaterial({ color: 0x709276, emissive: 0x304b33, emissiveIntensity: 0.35, roughness: 0.45 });
+  addHomeBox(interior, [0.14, 0.23, 0.065], [0.99, 1.38, -3.82], switchPlateMaterial, false, false);
+  homeLightSwitchIndicator = addHomeBox(interior, [0.055, 0.09, 0.025], [0.99, 1.38, -3.775], switchIndicatorMaterial, false, false);
 
   addHomeBox(interior, [3.35, 0.035, 2.8], [1.95, 0.415, -1.95], rugMaterial, false, true);
   addHomeBox(interior, [3.2, 0.018, 0.055], [1.95, 0.437, -3.31], rugTrimMaterial, false, false);
@@ -655,6 +690,7 @@ function createHomeInterior(houseGroup) {
   const kitchenLight = new THREE.PointLight(0xffdca8, 0.55, 5.5, 2);
   kitchenLight.position.set(-1.3, 2.65, -0.6);
   interior.add(kitchenLight);
+  registerHomeLightFixture(kitchenLight, pendant);
 
   // Bedroom: framed bed, layered linens, bedside drawers, lamps, wardrobe and rug.
   addHomeBox(interior, [3.54, 0.035, 3.18], [1.42, 0.415, 2.25], new THREE.MeshStandardMaterial({ color: 0xb0a68e, roughness: 1 }), false, true);
@@ -673,6 +709,7 @@ function createHomeInterior(houseGroup) {
     const light = new THREE.PointLight(0xffd6a0, 0.25, 3.2, 2);
     light.position.set(x, 1.42, 3.1);
     interior.add(light);
+    registerHomeLightFixture(light, lamp);
   }
   addHomeBox(interior, [1.18, 2.02, 0.78], [-2.72, 1.42, 2.45], cabinetMaterial);
   addHomeBox(interior, [1.08, 1.84, 0.055], [-2.72, 1.42, 2.03], cabinetLightMaterial, false, false);
@@ -703,10 +740,12 @@ function createHomeInterior(houseGroup) {
     const light = new THREE.PointLight(0xffe1b7, 0.8, 8.5, 2);
     light.position.set(x, 2.82, z);
     interior.add(light);
+    registerHomeLightFixture(light, bulb);
   }
   const livingLight = new THREE.PointLight(0xffe3bf, 0.62, 7, 2);
   livingLight.position.set(1.5, 2.5, -2.0);
   interior.add(livingLight);
+  registerHomeLightFixture(livingLight);
 
   // Keep movement grounded around the larger furnishings while leaving the central passage clear.
   addHomeCollider(-3.28, -2.05, 0.48, 1.65);
@@ -1541,6 +1580,10 @@ window.addEventListener('keydown', (event) => {
   }
   const isTyping = event.target instanceof HTMLElement && event.target.matches('input, textarea, select, [contenteditable="true"]');
   if (isTyping) return;
+  if (homeTransitionPending) {
+    if (keyToMove.has(key)) event.preventDefault();
+    return;
+  }
   if (key === 'p' && !event.repeat) {
     event.preventDefault();
     togglePhone();
@@ -1554,6 +1597,11 @@ window.addEventListener('keydown', (event) => {
   }
   if (key === 'e' && !event.repeat && handleHomeInteraction()) {
     event.preventDefault();
+    return;
+  }
+  if (key === 'l' && !event.repeat && isInsideHome) {
+    event.preventDefault();
+    toggleHomeLighting();
     return;
   }
   if (keyToMove.has(key)) event.preventDefault();
@@ -1765,7 +1813,7 @@ function isPhoneOpen() {
   return !phonePanel.hidden && phonePanel.classList.contains('is-open');
 }
 
-function enterHome() {
+function completeHomeEntry() {
   if (!homeHouse || isInsideHome) return;
   isInsideHome = true;
   homeDoorTargetAngle = -Math.PI / 2;
@@ -1776,14 +1824,11 @@ function enterHome() {
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
-  velocity.set(0, 0, 0);
-  pressedKeys.clear();
-  resetJoystick();
   updateLocationAndMap();
   showToast('Welcome home. The living room, kitchen, and bedroom are yours to explore.', 3600);
 }
 
-function exitHome() {
+function completeHomeExit() {
   if (!homeHouse || !isInsideHome) return;
   isInsideHome = false;
   homeDoorTargetAngle = 0;
@@ -1794,24 +1839,57 @@ function exitHome() {
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
-  velocity.set(0, 0, 0);
-  pressedKeys.clear();
-  resetJoystick();
   updateLocationAndMap();
   showToast('You’re back outside at Meadow Court.', 2500);
 }
 
+function beginHomeTransition(destination) {
+  if (!homeHouse || homeTransitionPending) return;
+  homeTransitionPending = destination;
+  homeDoorTargetAngle = -Math.PI / 2;
+  velocity.set(0, 0, 0);
+  pressedKeys.clear();
+  resetJoystick();
+  homeTransitionElement.classList.add('is-fading');
+  homeTransitionTimer = window.setTimeout(() => {
+    if (homeTransitionPending === 'enter') completeHomeEntry();
+    else if (homeTransitionPending === 'exit') completeHomeExit();
+    homeTransitionElement.classList.remove('is-fading');
+    homeTransitionTimer = window.setTimeout(() => {
+      homeTransitionPending = null;
+      homeTransitionTimer = 0;
+    }, 220);
+  }, 220);
+}
+
 function handleHomeInteraction() {
-  if (!homeHouse || isPhoneOpen()) return false;
+  if (!homeHouse || isPhoneOpen() || homeTransitionPending) return false;
   if (isInsideHome) {
     const local = homeWorldToLocal(player.position.x, player.position.z);
     if (Math.hypot(local.x, local.z + 3.35) > 2.1) return false;
-    exitHome();
+    beginHomeTransition('exit');
     return true;
   }
   if (Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ) > 4.2) return false;
-  enterHome();
+  beginHomeTransition('enter');
   return true;
+}
+
+function toggleHomeLighting() {
+  if (!isInsideHome) return;
+  homeLightingEnabled = !homeLightingEnabled;
+  for (const fixture of homeLightFixtures) {
+    fixture.light.intensity = homeLightingEnabled ? fixture.intensity : 0;
+    if (fixture.bulb) fixture.bulb.visible = homeLightingEnabled;
+  }
+  if (homeLightSwitchIndicator) {
+    homeLightSwitchIndicator.material.color.setHex(homeLightingEnabled ? 0x709276 : 0x918e7e);
+    homeLightSwitchIndicator.material.emissive.setHex(homeLightingEnabled ? 0x304b33 : 0x000000);
+    homeLightSwitchIndicator.material.emissiveIntensity = homeLightingEnabled ? 0.35 : 0;
+  }
+  homeLightsAction.textContent = homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON';
+  homeLightsButton.setAttribute('aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
+  showToast(homeLightingEnabled ? 'The home lights are on.' : 'The home lights are off.');
 }
 
 const phonePageCopy = {
@@ -1966,6 +2044,7 @@ function updatePhoneQuestProgress() {
 phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
 homeInteractionButton.addEventListener('click', handleHomeInteraction);
+homeLightsButton.addEventListener('click', toggleHomeLighting);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
 phoneScrim.addEventListener('click', closePhone);
@@ -2092,7 +2171,16 @@ function updateLocationAndMap() {
   const x = player.position.x;
   const z = player.position.z;
   let location = 'Wildflower Path';
-  if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
+  let currentHomeRoom = '';
+  if (isInsideHome && homeHouse) {
+    const local = homeWorldToLocal(x, z);
+    currentHomeRoom = local.z > 0.9
+      ? 'Bedroom'
+      : local.x < -2.1 && local.z < 0.7
+        ? 'Kitchen'
+        : 'Living Room';
+    location = `${currentHomeRoom} · House 01`;
+  } else if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
   else if (isInsideEstate(x, z)) location = 'Meadow Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Meadow Rise';
   else if (x < -24) location = 'Fern Hollow';
@@ -2120,10 +2208,17 @@ function updateLocationAndMap() {
       canReachHomeDoor = Math.hypot(x - home.doorX, z - home.doorZ) <= 4.2;
     }
   }
-  homeInteraction.hidden = !canReachHomeDoor || isPhoneOpen();
+  homeInteraction.hidden = (!isInsideHome && !canReachHomeDoor) || isPhoneOpen();
+  homeInteractionButton.hidden = isInsideHome && !canReachHomeDoor;
+  homeLightsButton.hidden = !isInsideHome;
+  homeLightsAction.textContent = homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON';
+  homeLightsButton.setAttribute('aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
   if (home) {
-    homeInteractionEyebrow.textContent = isInsideHome ? 'MEADOW COURT · HOUSE 01' : 'HOUSE 01 · YOUR HOME';
-    homeInteractionMessage.textContent = isInsideHome ? 'Head back outside?' : 'Step inside your home';
+    homeInteractionEyebrow.textContent = isInsideHome ? `HOUSE 01 · ${currentHomeRoom.toUpperCase()}` : 'HOUSE 01 · YOUR HOME';
+    const interactionMessage = isInsideHome
+      ? (canReachHomeDoor ? 'The front door is right here' : `You’re in the ${currentHomeRoom.toLowerCase()}`)
+      : 'Step inside your home';
+    homeInteractionMessage.textContent = interactionMessage;
     homeInteractionAction.textContent = isInsideHome ? 'LEAVE HOME' : 'ENTER HOME';
     homeInteractionButton.setAttribute('aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
   }

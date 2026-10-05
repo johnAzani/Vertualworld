@@ -11,6 +11,7 @@
     <div id="app">
       <canvas id="world-canvas" aria-label="A small 3D island world. Move with WASD or the arrow keys."></canvas>
       <div class="world-wash" aria-hidden="true"></div>
+      <div class="home-transition" id="home-transition" aria-hidden="true"></div>
 
       <header class="topbar">
         <a class="brand" href="#" aria-label="Vertualworld home">
@@ -201,7 +202,7 @@
                   <div class="estate-home-row"><span class="estate-home-number">04</span><span><strong>House 04</strong><small>Neighbour’s cottage</small></span></div>
                 </div>
                 <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
-                <p class="property-help">Press E at your front door—or tap its prompt—to step inside. Use E by the doorway to head back outside.</p>
+                <p class="property-help">Press E at your front door—or tap its prompt—to step inside. Use E by the doorway to head back out, and press L (or tap the light control) to switch the lamps.</p>
                 <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Meadow Court on the map <span aria-hidden="true">↗</span></button>
               </section>
 
@@ -272,6 +273,7 @@
       <div class="home-interaction" id="home-interaction" role="status" aria-live="polite" hidden>
         <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message">Enter your home at Meadow Court</strong></div>
         <button id="home-interaction-button" type="button" aria-label="Enter your Meadow Court home"><kbd>E</kbd><span id="home-interaction-action">ENTER HOME</span></button>
+        <button class="home-lights-button" id="home-lights-button" type="button" aria-label="Turn home lights off" hidden><kbd>L</kbd><span id="home-lights-action">LIGHTS OFF</span></button>
       </div>
 
       <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
