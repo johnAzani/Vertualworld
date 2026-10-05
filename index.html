@@ -1,15 +1,15 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#d7eee6" />
-    <meta name="description" content="Take a breath, find your path, and wander a little world of your own." />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#d7eee6">
+    <meta name="description" content="Take a breath, find your path, and wander a little world of your own.">
     <title>Vertualworld — somewhere to begin</title>
   </head>
   <body>
     <div id="app">
-      <canvas id="world-canvas" aria-label="A small 3D island world. Move with WASD or the arrow keys."></canvas>
+      <canvas id="world-canvas" tabindex="0" role="img" aria-label="An interactive 3D island world. Use WASD or the arrow keys to move; drag to look around.">Your browser does not support the 3D canvas.</canvas>
       <div class="world-wash" aria-hidden="true"></div>
       <div class="home-transition" id="home-transition" aria-hidden="true"></div>
 
@@ -28,7 +28,7 @@
           </span>
         </a>
 
-        <div class="topbar-center" aria-label="Current world">
+        <div class="topbar-center" role="group" aria-label="Current world">
           <span class="live-dot"></span>
           <span>ISLAND 01</span>
           <span class="topbar-divider"></span>
@@ -37,13 +37,13 @@
         </div>
 
         <div class="topbar-actions">
-          <div class="seed-counter" aria-label="Glow seeds collected">
+          <div class="seed-counter" role="group" aria-label="Glow seeds collected">
             <span class="seed-counter-icon" aria-hidden="true">✦</span>
-            <span id="seed-count-top">0</span><span class="seed-total">/ 3</span>
+            <span id="seed-count-top" aria-live="polite" aria-atomic="true">0</span><span class="seed-total">/ 3</span>
           </div>
           <button class="icon-button phone-launcher" id="phone-button" type="button" aria-label="Open your phone" title="Open your phone (P)" aria-controls="phone-panel" aria-expanded="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M10 5.6h4M10.3 18.2h3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <span class="phone-notification-dot" id="phone-notification-dot" aria-label="Unread message" hidden></span>
+            <span class="phone-notification-dot" id="phone-notification-dot" aria-hidden="true" hidden></span>
           </button>
           <button class="icon-button view-toggle" id="view-toggle" type="button" aria-label="Switch to first-person view" title="Switch to first-person view (V)" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.6 12s3.35-6.2 9.4-6.2 9.4 6.2 9.4 6.2-3.35 6.2-9.4 6.2S2.6 12 2.6 12Z" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="12" r=".85" fill="currentColor"/></svg>
@@ -51,7 +51,7 @@
           <button class="icon-button" id="camera-reset" type="button" aria-label="Reset camera view" title="Reset camera view">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5A8 8 0 1 1 3 13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 3.5v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button class="icon-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">
+          <button class="icon-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
@@ -60,7 +60,7 @@
       <main class="hud" aria-label="World interface">
         <section class="intro-card" id="intro-card">
           <div class="eyebrow"><span class="eyebrow-mark">✳</span> YOUR FIRST LITTLE WORLD</div>
-          <h1>Somewhere<br />to <em>begin.</em></h1>
+          <h1>Somewhere<br>to <em>begin.</em></h1>
           <p>A quiet island, a winding path, and a little person finding their way. Take a breath and see where it leads.</p>
           <button class="primary-button" id="explore-button" type="button">
             <span>Start wandering</span>
@@ -69,21 +69,21 @@
           <div class="intro-footnote"><span class="sparkle">✦</span> No rush. This world is yours.</div>
         </section>
 
-        <div class="location-chip" id="location-chip" aria-live="polite">
+        <div class="location-chip" id="location-chip">
           <span class="location-pin" aria-hidden="true"></span>
-          <span id="location-name">Meadow Rise</span>
+          <span id="location-name" aria-live="polite" aria-atomic="true">Meadow Rise</span>
           <span class="location-separator">·</span>
           <span id="location-coordinates">0, 12</span>
         </div>
 
         <aside class="map-card" aria-label="Island map">
           <div class="map-art-wrap">
-            <canvas id="map-canvas" width="176" height="176" aria-label="Map showing your position on the island"></canvas>
+            <canvas id="map-canvas" width="176" height="176" role="img" aria-label="Map showing your position on the island">Map showing your position on the island.</canvas>
             <span class="map-north">N</span>
           </div>
           <div class="map-copy">
             <div class="panel-eyebrow">FIELD NOTES <span>01</span></div>
-            <h2>Little<br />Island</h2>
+            <h2>Little<br>Island</h2>
             <p><span class="map-player-dot"></span> <span id="map-location">Meadow Rise</span></p>
             <div class="map-coords"><span>POSITION</span><strong id="map-coordinates">X 00 · Z 12</strong></div>
           </div>
@@ -98,10 +98,10 @@
           <h2>Find the <em>glow seeds</em></h2>
           <p>Three tiny lights are tucked around the island. Collect them if you feel like it.</p>
           <div class="quest-progress-row"><span>ISLAND LIGHT</span><strong><span id="seed-count">0</span><span class="progress-total"> / 3</span></strong></div>
-          <div class="progress-track"><span id="progress-fill"></span></div>
+          <progress id="progress-fill" class="progress-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress>
         </aside>
 
-        <div class="controls-hint" aria-label="Keyboard controls">
+        <div class="controls-hint" role="group" aria-label="Keyboard controls">
           <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
           <span class="control-separator"></span>
           <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
@@ -118,7 +118,7 @@
       <section class="phone-panel" id="phone-panel" role="dialog" aria-modal="true" aria-labelledby="phone-page-title" aria-hidden="true" hidden>
         <div class="phone-frame">
           <div class="phone-screen">
-            <div class="phone-statusbar" aria-label="Phone status">
+            <div class="phone-statusbar" role="group" aria-label="Phone status">
               <span id="phone-time">09:42</span>
               <span class="phone-status-icons" aria-hidden="true">
                 <span class="phone-signal"><i></i><i></i><i></i><i></i></span>
@@ -208,7 +208,7 @@
 
               <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>
                 <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
-                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" aria-label="Map showing your position, Meadow Court houses, glow seeds, and the beacon"></canvas></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map showing your position, Meadow Court houses, glow seeds, and the beacon">Map showing your position, Meadow Court houses, glow seeds, and the beacon.</canvas></div>
                 <div class="phone-map-details">
                   <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Meadow Rise</strong></div>
                   <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
@@ -219,7 +219,7 @@
               </section>
 
               <section class="phone-page" data-phone-page="messages" aria-label="Messages with Nia" hidden>
-                <div class="phone-contact-card"><span class="phone-contact-avatar">N</span><span><strong>Nia</strong><small>Island neighbour · nearby</small></span><span class="phone-contact-online"><i></i> HERE</span></div>
+                <div class="phone-contact-card"><span class="phone-contact-avatar" aria-hidden="true">N</span><span><strong>Nia</strong><small>Island neighbour · nearby</small></span><span class="phone-contact-online"><i></i> HERE</span></div>
                 <div class="phone-chat-thread" id="phone-chat-thread" aria-live="polite">
                   <div class="phone-chat-day">THIS MORNING</div>
                   <div class="phone-chat-message phone-chat-message--incoming"><span class="phone-chat-sender">Nia</span><p>The glow seeds have started appearing around the island. Send me a quick update when you find one.</p><time>09:42</time></div>
@@ -232,7 +232,7 @@
                 </div>
                 <form class="phone-message-composer" id="phone-message-form">
                   <label class="visually-hidden" for="phone-message-input">Write a message to Nia</label>
-                  <input id="phone-message-input" type="text" maxlength="160" autocomplete="off" placeholder="Message Nia…" />
+                  <input id="phone-message-input" type="text" maxlength="160" autocomplete="off" placeholder="Message Nia…" >
                   <button type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 5 16 7-16 7 2.5-7L4 5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6.5 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
                 </form>
               </section>
@@ -241,16 +241,16 @@
                 <div class="phone-journal-intro"><span class="phone-journal-icon" aria-hidden="true">✎</span><span><strong>A note to yourself</strong><small>Keep a small memory from the day.</small></span></div>
                 <label class="phone-note-label" for="phone-note">TODAY’S NOTE</label>
                 <textarea id="phone-note" class="phone-note" maxlength="500" placeholder="A quiet corner, a thought, a place to return to…"></textarea>
-                <div class="phone-note-footer"><span id="phone-note-status">Saved on this device</span><span><span id="phone-note-count">0</span>/500</span></div>
+                <div class="phone-note-footer"><span id="phone-note-status" aria-live="polite" aria-atomic="true">Saved on this device</span><span><span id="phone-note-count">0</span>/500</span></div>
                 <div class="phone-journal-prompt"><span>✦</span><p>What would you like to remember about this little world?</p></div>
               </section>
 
               <section class="phone-page" data-phone-page="quests" aria-label="Quests and progress" hidden>
                 <div class="phone-quest-card">
                   <div class="phone-quest-kicker"><span>✦</span> OPTIONAL ISLAND QUEST</div>
-                  <h3>Bring the island<br />back to light.</h3>
+                  <h3>Bring the island<br>back to light.</h3>
                   <p>Find the three glow seeds tucked around the island. No timer, no rush.</p>
-                  <div class="phone-quest-progress"><div><span>LIGHTS FOUND</span><strong id="phone-seed-count">0 / 3</strong></div><span class="phone-quest-track"><i id="phone-quest-progress-fill"></i></span></div>
+                  <div class="phone-quest-progress"><div><span>LIGHTS FOUND</span><strong id="phone-seed-count" aria-live="polite" aria-atomic="true">0 / 3</strong></div><progress id="phone-quest-progress-fill" class="phone-quest-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress></div>
                 </div>
                 <div class="phone-seed-list">
                   <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-1">1</span><span>Glow seed one</span><strong id="phone-seed-status-1">TO FIND</strong></div>
@@ -270,14 +270,14 @@
         <span class="toast-message" id="toast-message">A little light found its way home.</span>
       </div>
 
-      <div class="home-interaction" id="home-interaction" role="status" aria-live="polite" hidden>
-        <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message">Enter your home at Meadow Court</strong></div>
+      <div class="home-interaction" id="home-interaction" role="group" aria-label="Home controls" hidden>
+        <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message" aria-live="polite" aria-atomic="true">Enter your home at Meadow Court</strong></div>
         <button id="home-interaction-button" type="button" aria-label="Enter your Meadow Court home"><kbd>E</kbd><span id="home-interaction-action">ENTER HOME</span></button>
         <button class="home-lights-button" id="home-lights-button" type="button" aria-label="Turn home lights off" hidden><kbd>L</kbd><span id="home-lights-action">LIGHTS OFF</span></button>
       </div>
 
-      <div class="touch-controls" id="touch-controls" aria-label="Touch controls">
-        <div class="joystick" id="joystick" aria-label="Movement joystick">
+      <div class="touch-controls" id="touch-controls" role="group" aria-label="Touch controls">
+        <div class="joystick" id="joystick" role="group" aria-label="Movement joystick. Drag to move; keyboard movement is also available.">
           <span class="joystick-ring"></span>
           <span class="joystick-stick" id="joystick-stick"></span>
         </div>
@@ -285,7 +285,7 @@
         <div class="touch-label">MOVE</div>
       </div>
 
-      <div class="loading-screen" id="loading-screen">
+      <div class="loading-screen" id="loading-screen" role="status" aria-live="polite" aria-atomic="true">
         <div class="loading-mark"><span>V</span><i></i></div>
         <div class="loading-title">OPENING THE ISLAND</div>
         <div class="loading-subtitle">One small world, coming right up.</div>

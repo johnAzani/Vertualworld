@@ -23,6 +23,7 @@ const phonePanel = document.querySelector('#phone-panel');
 const phoneScrim = document.querySelector('#phone-scrim');
 const phoneButton = document.querySelector('#phone-button');
 const viewToggleButton = document.querySelector('#view-toggle');
+const fullscreenButton = document.querySelector('#fullscreen-button');
 const phoneCloseButton = document.querySelector('#phone-close');
 const phoneBackButton = document.querySelector('#phone-back');
 const phoneContent = document.querySelector('#phone-content');
@@ -41,6 +42,11 @@ const phoneNoteCount = document.querySelector('#phone-note-count');
 const phoneTimeElement = document.querySelector('#phone-time');
 const phoneHomeTime = document.querySelector('#phone-home-time');
 const worldPeriodElement = document.querySelector('#world-period');
+const reducedMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+let prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
+reducedMotionQuery?.addEventListener?.('change', (event) => {
+  prefersReducedMotion = event.matches;
+});
 
 const WORLD_RADIUS = 82;
 const SEED_POSITIONS = [
@@ -109,6 +115,16 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function setTextIfChanged(element, value) {
+  const text = String(value);
+  if (element.textContent !== text) element.textContent = text;
+}
+
+function setAttributeIfChanged(element, name, value) {
+  const attribute = String(value);
+  if (element.getAttribute(name) !== attribute) element.setAttribute(name, attribute);
+}
+
 function smoothstep01(value) {
   const t = clamp(value, 0, 1);
   return t * t * (3 - 2 * t);
@@ -158,7 +174,6 @@ let homeDoorPivot = null;
 let homeDoorTargetAngle = 0;
 let homeLightSwitchIndicator = null;
 let homeTransitionPending = null;
-let homeTransitionTimer = 0;
 let homeLightingEnabled = true;
 let isInsideHome = false;
 
@@ -1578,7 +1593,7 @@ const pelvis = avatarMesh(new THREE.SphereGeometry(1, 18, 12), pantsMaterial, 0,
 pelvis.scale.set(0.235, 0.145, 0.165);
 const belt = avatarMesh(new THREE.TorusGeometry(0.205, 0.018, 7, 24), pantsShadeMaterial, 0, 1.015, 0);
 belt.rotation.x = Math.PI / 2;
-const beltBuckle = avatarMesh(new THREE.BoxGeometry(0.052, 0.052, 0.018), backpackTrimMaterial, 0, 1.015, -0.203);
+avatarMesh(new THREE.BoxGeometry(0.052, 0.052, 0.018), backpackTrimMaterial, 0, 1.015, -0.203);
 
 // Articulated arms: sleeve, elbow, forearm, cuff, palm, thumb, and separate fingers.
 const armPivots = [];
@@ -1660,6 +1675,7 @@ let cameraYaw = 0;
 let cameraPitch = 0;
 let isFirstPerson = false;
 let pointerDragging = false;
+let activeCameraPointer = null;
 let previousPointerX = 0;
 let previousPointerY = 0;
 let jumpHeight = 0;
@@ -1711,6 +1727,9 @@ window.addEventListener('keydown', (event) => {
     if (keyToMove.has(key)) event.preventDefault();
     return;
   }
+  const isInteractiveControl = event.target instanceof Element
+    && event.target.closest('button, a[href], input, textarea, select, [role="button"], [role="link"]');
+  if (key === ' ' && isInteractiveControl) return;
   if (key === 'p' && !event.repeat) {
     event.preventDefault();
     togglePhone();
@@ -1736,7 +1755,13 @@ window.addEventListener('keydown', (event) => {
   if (key === ' ' && !event.repeat) jumpRequested = true;
 });
 window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLowerCase()));
-window.addEventListener('blur', () => pressedKeys.clear());
+window.addEventListener('blur', () => {
+  pressedKeys.clear();
+  resetJoystick();
+  releasePointer();
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+});
 
 function homeWorldToLocal(x, z) {
   const offsetX = x - homeHouse.x;
@@ -1902,14 +1927,16 @@ function resolveWorldObstacleCollisions() {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
-  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  if (pointerDragging || (event.pointerType === 'mouse' && event.button !== 0)) return;
   pointerDragging = true;
+  activeCameraPointer = event.pointerId;
+  canvas.classList.add('is-dragging');
   previousPointerX = event.clientX;
   previousPointerY = event.clientY;
   canvas.setPointerCapture?.(event.pointerId);
 });
 canvas.addEventListener('pointermove', (event) => {
-  if (!pointerDragging) return;
+  if (!pointerDragging || event.pointerId !== activeCameraPointer) return;
   const deltaX = event.clientX - previousPointerX;
   const deltaY = event.clientY - previousPointerY;
   previousPointerX = event.clientX;
@@ -1917,8 +1944,11 @@ canvas.addEventListener('pointermove', (event) => {
   cameraYaw -= deltaX * 0.0065;
   if (isFirstPerson) cameraPitch = clamp(cameraPitch - deltaY * 0.004, -0.7, 0.58);
 });
-function releasePointer() {
+function releasePointer(event) {
+  if (event && event.pointerId !== activeCameraPointer) return;
   pointerDragging = false;
+  activeCameraPointer = null;
+  canvas.classList.remove('is-dragging');
 }
 canvas.addEventListener('pointerup', releasePointer);
 canvas.addEventListener('pointercancel', releasePointer);
@@ -1950,6 +1980,7 @@ function resetJoystick() {
   joystickStick.style.transform = 'translate(-50%, -50%)';
 }
 joystick.addEventListener('pointerdown', (event) => {
+  if (joystickPointer !== null) return;
   event.preventDefault();
   joystickPointer = event.pointerId;
   joystick.classList.add('is-active');
@@ -1962,10 +1993,23 @@ joystick.addEventListener('pointermove', (event) => {
 joystick.addEventListener('pointerup', (event) => {
   if (event.pointerId === joystickPointer) resetJoystick();
 });
-joystick.addEventListener('pointercancel', resetJoystick);
-document.querySelector('#jump-button').addEventListener('pointerdown', (event) => {
-  event.preventDefault();
+joystick.addEventListener('pointercancel', (event) => {
+  if (event.pointerId === joystickPointer) resetJoystick();
+});
+function requestJump() {
+  if (homeTransitionPending || isPhoneOpen()) return;
   jumpRequested = true;
+}
+
+const jumpButton = document.querySelector('#jump-button');
+jumpButton.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  event.preventDefault();
+  requestJump();
+});
+// detail === 0 covers keyboard and assistive-technology activation; pointer presses jump immediately above.
+jumpButton.addEventListener('click', (event) => {
+  if (event.detail === 0) requestJump();
 });
 
 function showToast(message, duration = 2600) {
@@ -2025,15 +2069,15 @@ function beginHomeTransition(destination) {
   pressedKeys.clear();
   resetJoystick();
   homeTransitionElement.classList.add('is-fading');
-  homeTransitionTimer = window.setTimeout(() => {
+  const transitionDuration = prefersReducedMotion ? 0 : 220;
+  window.setTimeout(() => {
     if (homeTransitionPending === 'enter') completeHomeEntry();
     else if (homeTransitionPending === 'exit') completeHomeExit();
     homeTransitionElement.classList.remove('is-fading');
-    homeTransitionTimer = window.setTimeout(() => {
+    window.setTimeout(() => {
       homeTransitionPending = null;
-      homeTransitionTimer = 0;
-    }, 220);
-  }, 220);
+    }, transitionDuration);
+  }, transitionDuration);
 }
 
 function handleHomeInteraction() {
@@ -2078,6 +2122,9 @@ const phonePageCopy = {
 function updatePhoneBadge() {
   phoneNotificationDot.hidden = !phoneUnread;
   phoneMessageBadge.hidden = !phoneUnread;
+  const phoneLabel = phoneUnread ? 'Open your phone · unread message' : 'Open your phone';
+  phoneButton.setAttribute('aria-label', phoneLabel);
+  phoneButton.title = `${phoneLabel} (P)`;
 }
 
 function setPhonePage(pageName) {
@@ -2105,7 +2152,9 @@ function setPhonePage(pageName) {
 function openPhone() {
   if (isPhoneOpen()) return;
   window.clearTimeout(phoneCloseTimer);
-  previousPhoneFocus = document.activeElement instanceof HTMLElement ? document.activeElement : phoneButton;
+  previousPhoneFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+    ? document.activeElement
+    : phoneButton;
   phonePanel.hidden = false;
   phoneScrim.hidden = false;
   phonePanel.inert = false;
@@ -2114,17 +2163,15 @@ function openPhone() {
   phoneButton.setAttribute('aria-expanded', 'true');
   pressedKeys.clear();
   resetJoystick();
+  velocity.x = 0;
+  velocity.z = 0;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
   phonePanel.offsetWidth;
   phonePanel.classList.add('is-open');
   phoneScrim.classList.add('is-open');
   phoneCloseButton.focus({ preventScroll: true });
   if (activePhonePage === 'map') drawMap();
-}
-
-function openHomeDetails() {
-  setPhonePage('property');
-  if (!isPhoneOpen()) openPhone();
-  homeInteraction.hidden = true;
 }
 
 function closePhone() {
@@ -2199,12 +2246,15 @@ function sendPhoneReply(replyKey) {
 
 function updatePhoneQuestProgress() {
   const total = seeds.length;
-  const percent = total ? (seedCount / total) * 100 : 0;
-  document.querySelector('#seed-count').textContent = seedCount;
-  document.querySelector('#seed-count-top').textContent = seedCount;
-  document.querySelector('#progress-fill').style.width = `${percent}%`;
-  document.querySelector('#phone-seed-count').textContent = `${seedCount} / ${total}`;
-  document.querySelector('#phone-quest-progress-fill').style.width = `${percent}%`;
+  const desktopProgress = document.querySelector('#progress-fill');
+  const phoneProgress = document.querySelector('#phone-quest-progress-fill');
+  setTextIfChanged(document.querySelector('#seed-count'), seedCount);
+  setTextIfChanged(document.querySelector('#seed-count-top'), seedCount);
+  desktopProgress.max = total;
+  desktopProgress.value = seedCount;
+  setTextIfChanged(document.querySelector('#phone-seed-count'), `${seedCount} / ${total}`);
+  phoneProgress.max = total;
+  phoneProgress.value = seedCount;
   for (const seed of seeds) {
     const row = document.querySelector(`#phone-seed-status-${seed.index}`).closest('.phone-seed-row');
     const status = document.querySelector(`#phone-seed-status-${seed.index}`);
@@ -2284,31 +2334,46 @@ phonePanel.addEventListener('keydown', (event) => {
   }
 });
 
+const PHONE_NOTE_STORAGE_KEY = 'vertualworld-field-note';
+const PHONE_NOTE_MAX_LENGTH = 500;
 try {
-  phoneNote.value = localStorage.getItem('vertualworld-field-note') || '';
-} catch (error) {
-  phoneNoteStatus.textContent = 'Local storage is unavailable';
+  phoneNote.value = (localStorage.getItem(PHONE_NOTE_STORAGE_KEY) || '').slice(0, PHONE_NOTE_MAX_LENGTH);
+} catch {
+  setTextIfChanged(phoneNoteStatus, 'Local storage is unavailable');
 }
-phoneNoteCount.textContent = String(phoneNote.value.length);
-phoneNote.addEventListener('input', () => {
-  phoneNoteCount.textContent = String(phoneNote.value.length);
-  phoneNoteStatus.textContent = 'Saving…';
+setTextIfChanged(phoneNoteCount, phoneNote.value.length);
+
+function savePhoneNote() {
+  phoneNoteSaveTimer = 0;
+  try {
+    localStorage.setItem(PHONE_NOTE_STORAGE_KEY, phoneNote.value);
+    setTextIfChanged(phoneNoteStatus, 'Saved on this device');
+  } catch {
+    setTextIfChanged(phoneNoteStatus, 'Could not save on this device');
+  }
+}
+
+function flushPhoneNote() {
+  if (!phoneNoteSaveTimer) return;
   window.clearTimeout(phoneNoteSaveTimer);
-  phoneNoteSaveTimer = window.setTimeout(() => {
-    try {
-      localStorage.setItem('vertualworld-field-note', phoneNote.value);
-      phoneNoteStatus.textContent = 'Saved on this device';
-    } catch (error) {
-      phoneNoteStatus.textContent = 'Could not save on this device';
-    }
-  }, 180);
+  savePhoneNote();
+}
+
+phoneNote.addEventListener('input', () => {
+  setTextIfChanged(phoneNoteCount, phoneNote.value.length);
+  setTextIfChanged(phoneNoteStatus, 'Saving…');
+  window.clearTimeout(phoneNoteSaveTimer);
+  phoneNoteSaveTimer = window.setTimeout(savePhoneNote, 180);
 });
+phoneNote.addEventListener('change', flushPhoneNote);
+window.addEventListener('pagehide', flushPhoneNote);
 updatePhoneBadge();
 setPhonePage('home');
 updatePhoneQuestProgress();
 
 document.querySelector('#explore-button').addEventListener('click', () => {
   introCard.classList.add('is-dismissed');
+  canvas.focus({ preventScroll: true });
   showToast('You’re here. Take the path, or make your own.', 3200);
 });
 document.querySelector('#camera-reset').addEventListener('click', () => {
@@ -2316,12 +2381,34 @@ document.querySelector('#camera-reset').addEventListener('click', () => {
   cameraPitch = 0;
   showToast('Back to the island’s first view.', 1800);
 });
-document.querySelector('#fullscreen-button').addEventListener('click', async () => {
+function updateFullscreenButton() {
+  const isFullscreen = document.fullscreenElement === app;
+  const action = isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+  fullscreenButton.setAttribute('aria-label', action);
+  fullscreenButton.title = action;
+  fullscreenButton.setAttribute('aria-pressed', String(isFullscreen));
+}
+
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+updateFullscreenButton();
+fullscreenButton.addEventListener('click', async () => {
   try {
-    if (!document.fullscreenElement) await app.requestFullscreen?.();
-    else await document.exitFullscreen?.();
+    if (document.fullscreenElement === app) {
+      if (typeof document.exitFullscreen !== 'function') {
+        showToast('Fullscreen cannot be exited in this browser.');
+        return;
+      }
+      await document.exitFullscreen();
+      return;
+    }
+    if (typeof app.requestFullscreen !== 'function' || document.fullscreenEnabled === false) {
+      showToast('Fullscreen is not available in this browser.');
+      return;
+    }
+    await app.requestFullscreen();
   } catch (error) {
-    console.warn('Fullscreen is not available in this browser context.', error);
+    console.warn('Fullscreen could not be changed.', error);
+    showToast('Fullscreen could not be changed. Please try again.');
   }
 });
 
@@ -2364,14 +2451,14 @@ function updateLocationAndMap() {
   const roundedX = Math.round(x);
   const roundedZ = Math.round(z);
   const formattedCoordinates = `X ${String(roundedX).padStart(2, '0')} · Z ${String(roundedZ).padStart(2, '0')}`;
-  document.querySelector('#location-name').textContent = location;
-  document.querySelector('#location-coordinates').textContent = `${roundedX}, ${roundedZ}`;
-  document.querySelector('#map-location').textContent = location;
-  document.querySelector('#map-coordinates').textContent = formattedCoordinates;
-  document.querySelector('#phone-home-location').textContent = location;
-  document.querySelector('#phone-home-coordinates').textContent = formattedCoordinates;
-  document.querySelector('#phone-map-location').textContent = location;
-  document.querySelector('#phone-map-coordinates').textContent = formattedCoordinates;
+  setTextIfChanged(document.querySelector('#location-name'), location);
+  setTextIfChanged(document.querySelector('#location-coordinates'), `${roundedX}, ${roundedZ}`);
+  setTextIfChanged(document.querySelector('#map-location'), location);
+  setTextIfChanged(document.querySelector('#map-coordinates'), formattedCoordinates);
+  setTextIfChanged(document.querySelector('#phone-home-location'), location);
+  setTextIfChanged(document.querySelector('#phone-home-coordinates'), formattedCoordinates);
+  setTextIfChanged(document.querySelector('#phone-map-location'), location);
+  setTextIfChanged(document.querySelector('#phone-map-coordinates'), formattedCoordinates);
   const home = homeHouse;
   let canReachHomeDoor = false;
   if (home) {
@@ -2382,19 +2469,19 @@ function updateLocationAndMap() {
       canReachHomeDoor = Math.hypot(x - home.doorX, z - home.doorZ) <= 4.2;
     }
   }
-  homeInteraction.hidden = (!isInsideHome && !canReachHomeDoor) || isPhoneOpen();
+    homeInteraction.hidden = (!isInsideHome && !canReachHomeDoor) || isPhoneOpen();
   homeInteractionButton.hidden = isInsideHome && !canReachHomeDoor;
   homeLightsButton.hidden = !isInsideHome;
-  homeLightsAction.textContent = homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON';
-  homeLightsButton.setAttribute('aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
+  setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
+  setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
   if (home) {
-    homeInteractionEyebrow.textContent = isInsideHome ? `HOUSE 01 · ${currentHomeRoom.toUpperCase()}` : 'HOUSE 01 · YOUR HOME';
+    setTextIfChanged(homeInteractionEyebrow, isInsideHome ? `HOUSE 01 · ${currentHomeRoom.toUpperCase()}` : 'HOUSE 01 · YOUR HOME');
     const interactionMessage = isInsideHome
       ? (canReachHomeDoor ? 'The front door is right here' : `You’re in the ${currentHomeRoom.toLowerCase()}`)
       : 'Step inside your home';
-    homeInteractionMessage.textContent = interactionMessage;
-    homeInteractionAction.textContent = isInsideHome ? 'LEAVE HOME' : 'ENTER HOME';
-    homeInteractionButton.setAttribute('aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
+    setTextIfChanged(homeInteractionMessage, interactionMessage);
+    setTextIfChanged(homeInteractionAction, isInsideHome ? 'LEAVE HOME' : 'ENTER HOME');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
   }
   drawMap();
 }
@@ -2551,15 +2638,20 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
   updateClock();
-  updateDaylight();
+  if (!prefersReducedMotion) updateDaylight();
   if (homeDoorPivot) {
-    const doorResponse = 1 - Math.exp(-7.5 * delta);
-    homeDoorPivot.rotation.y += (homeDoorTargetAngle - homeDoorPivot.rotation.y) * doorResponse;
+    if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;
+    else {
+      const doorResponse = 1 - Math.exp(-7.5 * delta);
+      homeDoorPivot.rotation.y += (homeDoorTargetAngle - homeDoorPivot.rotation.y) * doorResponse;
+    }
   }
 
-  for (const cloud of clouds) {
-    cloud.position.x += cloud.userData.speed * delta;
-    if (cloud.position.x > 115) cloud.position.x = -115;
+  if (!prefersReducedMotion) {
+    for (const cloud of clouds) {
+      cloud.position.x += cloud.userData.speed * delta;
+      if (cloud.position.x > 115) cloud.position.x = -115;
+    }
   }
 
   // Inputs are camera-relative, so forward always feels like forward after orbiting.
@@ -2580,11 +2672,11 @@ function animate() {
   const forward = new THREE.Vector3(Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
   const right = new THREE.Vector3(Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
   const desiredDirection = forward.multiplyScalar(forwardInput).add(right.multiplyScalar(sideInput));
-  const isMoving = inputMagnitude > 0.08;
+  const hasMovementInput = inputMagnitude > 0.08;
   const isRunning = pressedKeys.has('shift');
   const speed = isRunning ? 9.0 : 5.1;
   const desiredVelocity = desiredDirection.multiplyScalar(speed);
-  const acceleration = isGrounded ? (isMoving ? 12 : 17) : (isMoving ? 4.8 : 1.5);
+  const acceleration = isGrounded ? (hasMovementInput ? 12 : 17) : (hasMovementInput ? 4.8 : 1.5);
   const response = 1 - Math.exp(-acceleration * delta);
   velocity.x += (desiredVelocity.x - velocity.x) * response;
   velocity.z += (desiredVelocity.z - velocity.z) * response;
@@ -2606,6 +2698,7 @@ function animate() {
   }
   resolveHouseCollisions();
   resolveWorldObstacleCollisions();
+  const isMoving = Math.hypot(velocity.x, velocity.z) > 0.15;
 
   const ground = isInsideHome && homeHouse
     ? homeHouse.group.position.y + HOME_FLOOR_TOP
@@ -2634,14 +2727,14 @@ function animate() {
   }
   player.position.y = ground + jumpHeight;
 
-  if (isMoving) {
+  if (hasMovementInput) {
     const targetYaw = Math.atan2(-desiredDirection.x, -desiredDirection.z);
     const angleDelta = Math.atan2(Math.sin(targetYaw - player.rotation.y), Math.cos(targetYaw - player.rotation.y));
     player.rotation.y += angleDelta * (1 - Math.exp(-12 * delta));
   }
 
   const gait = isMoving ? Math.sin(elapsedWorldTime * (isRunning ? 13.2 : 9.4)) : 0;
-  const idleSway = Math.sin(elapsedWorldTime * 1.35);
+  const idleSway = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.35);
   legPivots[0].rotation.x = gait * (isMoving ? 0.43 : 0);
   legPivots[1].rotation.x = -gait * (isMoving ? 0.43 : 0);
   kneePivots[0].rotation.x = isMoving ? Math.max(0, -gait) * 0.3 : 0;
@@ -2650,26 +2743,26 @@ function animate() {
   armPivots[1].rotation.x = gait * (isMoving ? 0.34 : 0) - idleSway * 0.018;
   elbowPivots[0].rotation.x = -0.12 + Math.max(0, gait) * (isMoving ? 0.16 : 0);
   elbowPivots[1].rotation.x = -0.12 + Math.max(0, -gait) * (isMoving ? 0.16 : 0);
-  headGroup.rotation.y = Math.sin(elapsedWorldTime * 0.52) * 0.035;
-  headGroup.rotation.x = Math.sin(elapsedWorldTime * 0.83) * 0.014 + (isMoving ? -0.018 : 0);
+  headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.52) * 0.035;
+  headGroup.rotation.x = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.83) * 0.014) + (isMoving ? -0.018 : 0);
   const blinkPhase = elapsedWorldTime % 4.6;
-  const blink = blinkPhase < 0.18 ? Math.sin((blinkPhase / 0.18) * Math.PI) : 0;
+  const blink = !prefersReducedMotion && blinkPhase < 0.18 ? Math.sin((blinkPhase / 0.18) * Math.PI) : 0;
   for (const eye of eyeGroups) eye.scale.y = 1 - blink * 0.86;
-  torsoMesh.scale.y = 1 + Math.sin(elapsedWorldTime * 1.7) * 0.004;
-  avatarModel.position.y = (isMoving ? Math.abs(gait) * 0.034 : Math.sin(elapsedWorldTime * 1.7) * 0.012) + jumpHeight * 0.035;
-  backpack.rotation.z = isMoving ? gait * 0.013 : Math.sin(elapsedWorldTime * 1.2) * 0.008;
+  torsoMesh.scale.y = prefersReducedMotion ? 1 : 1 + Math.sin(elapsedWorldTime * 1.7) * 0.004;
+  avatarModel.position.y = (isMoving ? Math.abs(gait) * 0.034 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.7) * 0.012)) + jumpHeight * 0.035;
+  backpack.rotation.z = isMoving ? gait * 0.013 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.2) * 0.008);
   backpack.rotation.x = isMoving ? Math.abs(gait) * 0.012 : -0.01;
   playerShadow.material.opacity = 0.24 - Math.min(jumpHeight * 0.025, 0.12);
 
   for (const seed of seeds) {
     if (seed.collected) continue;
-    const float = Math.sin(elapsedWorldTime * 1.8 + seed.phase) * 0.16;
+    const float = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.8 + seed.phase) * 0.16;
     seed.orb.position.y = 1.16 + float;
     seed.hoop.position.y = 1.13 + float;
     seed.halo.position.y = 1.12 + float;
-    seed.halo.rotation.z = elapsedWorldTime * 0.32 + seed.phase;
-    seed.orb.rotation.y += delta * 0.75;
-    seed.group.rotation.y = Math.sin(elapsedWorldTime * 0.55 + seed.phase) * 0.12;
+    seed.halo.rotation.z = prefersReducedMotion ? seed.phase : elapsedWorldTime * 0.32 + seed.phase;
+    if (!prefersReducedMotion) seed.orb.rotation.y += delta * 0.75;
+    seed.group.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.55 + seed.phase) * 0.12;
     if (Math.hypot(player.position.x - seed.x, player.position.z - seed.z) < 1.45) {
       seed.collected = true;
       seed.group.visible = false;
@@ -2682,13 +2775,14 @@ function animate() {
 
   for (const mote of motes) {
     const data = mote.userData;
-    const angle = elapsedWorldTime * data.speed + data.phase;
-    mote.position.set(Math.cos(angle) * data.radius, data.height + Math.sin(angle * 1.6) * 0.45, Math.sin(angle) * data.radius);
-    mote.material.opacity = 0.55 + Math.sin(elapsedWorldTime * 3 + data.phase) * 0.35;
+    const angle = prefersReducedMotion ? data.phase : elapsedWorldTime * data.speed + data.phase;
+    const verticalFloat = prefersReducedMotion ? 0 : Math.sin(angle * 1.6) * 0.45;
+    mote.position.set(Math.cos(angle) * data.radius, data.height + verticalFloat, Math.sin(angle) * data.radius);
+    mote.material.opacity = prefersReducedMotion ? 0.7 : 0.55 + Math.sin(elapsedWorldTime * 3 + data.phase) * 0.35;
   }
-  portalRing.rotation.z = Math.sin(elapsedWorldTime * 0.55) * 0.035;
-  portalGlow.material.opacity = 0.17 + Math.sin(elapsedWorldTime * 1.25) * 0.045;
-  beaconLight.intensity = 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
+  portalRing.rotation.z = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.55) * 0.035;
+  portalGlow.material.opacity = prefersReducedMotion ? 0.17 : 0.17 + Math.sin(elapsedWorldTime * 1.25) * 0.045;
+  beaconLight.intensity = prefersReducedMotion ? 3.8 : 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
 
   if (isFirstPerson) {
     const eyePosition = new THREE.Vector3(

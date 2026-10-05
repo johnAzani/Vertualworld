@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 body { background: #b9dcd7; color: var(--ink); -webkit-font-smoothing: antialiased; }
 button, a { font: inherit; }
@@ -26,7 +27,7 @@ button { -webkit-tap-highlight-color: transparent; }
   width: 100%;
   height: 100%;
   height: 100dvh;
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
   isolation: isolate;
   background: linear-gradient(180deg, #b7dfe5, #e8ebce 80%);
@@ -40,8 +41,11 @@ button { -webkit-tap-highlight-color: transparent; }
   height: 100%;
   z-index: 0;
   outline: none;
-  touch-action: none;
+  touch-action: pinch-zoom;
+  cursor: grab;
 }
+#world-canvas:focus-visible { outline: 2px solid rgba(255,248,225,.88); outline-offset: -5px; }
+#world-canvas.is-dragging { cursor: grabbing; }
 
 .world-wash {
   position: absolute;
@@ -191,8 +195,10 @@ button { -webkit-tap-highlight-color: transparent; }
 .quest-progress-row { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; color: #81948a; font-size: 8px; font-weight: 700; letter-spacing: .12em; }
 .quest-progress-row strong { color: #54836c; font-size: 10px; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
 .progress-total { color: #9bab9e; font-weight: 500; }
-.progress-track { height: 4px; overflow: hidden; margin-top: 7px; border-radius: 5px; background: #e0e8d9; }
-.progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8cb77b, #e8ba6c); transition: width .45s cubic-bezier(.2,.8,.2,1); }
+.progress-track { display: block; width: 100%; height: 4px; appearance: none; -webkit-appearance: none; overflow: hidden; margin-top: 7px; padding: 0; border: 0; border-radius: 5px; background: #e0e8d9; }
+.progress-track::-webkit-progress-bar { border-radius: inherit; background: #e0e8d9; }
+.progress-track::-webkit-progress-value { border-radius: inherit; background: linear-gradient(90deg, #8cb77b, #e8ba6c); transition: width .45s cubic-bezier(.2,.8,.2,1); }
+.progress-track::-moz-progress-bar { border-radius: inherit; background: linear-gradient(90deg, #8cb77b, #e8ba6c); transition: width .45s cubic-bezier(.2,.8,.2,1); }
 
 .controls-hint {
   position: absolute; left: 50%; bottom: max(31px, env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -275,7 +281,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 }
 
 @media (max-width: 680px) {
-  #app { min-height: 520px; }
+  #app { min-height: 0; }
   .topbar { top: max(11px, env(safe-area-inset-top)); left: 12px; right: 12px; height: 54px; padding: 0 8px 0 10px; border-radius: 16px; }
   .brand { min-width: unset; gap: 8px; }
   .brand-mark { width: 34px; height: 34px; border-radius: 11px; }
@@ -481,8 +487,10 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-quest-progress { margin-top: 13px; }
 .phone-quest-progress > div { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: rgba(227,237,217,.74); font-size: 6px; font-weight: 700; letter-spacing: .1em; }
 .phone-quest-progress strong { color: #fae5a9; font-size: 8px; letter-spacing: .02em; }
-.phone-quest-track { height: 4px; display: block; overflow: hidden; border-radius: 4px; background: rgba(247,249,229,.2); }
-.phone-quest-track i { width: 0; height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg,#9dca8c,#f0c675); transition: width .35s ease; }
+.phone-quest-track { display: block; width: 100%; height: 4px; appearance: none; -webkit-appearance: none; overflow: hidden; padding: 0; border: 0; border-radius: 4px; background: rgba(247,249,229,.2); }
+.phone-quest-track::-webkit-progress-bar { border-radius: inherit; background: rgba(247,249,229,.2); }
+.phone-quest-track::-webkit-progress-value { border-radius: inherit; background: linear-gradient(90deg,#9dca8c,#f0c675); transition: width .35s ease; }
+.phone-quest-track::-moz-progress-bar { border-radius: inherit; background: linear-gradient(90deg,#9dca8c,#f0c675); transition: width .35s ease; }
 .phone-seed-list { display: flex; flex-direction: column; gap: 5px; margin: 11px 0 13px; }
 .phone-seed-row { min-height: 39px; display: flex; align-items: center; gap: 9px; padding: 5px 9px; border: 1px solid rgba(62,101,75,.1); border-radius: 12px; color: #526c58; background: rgba(255,255,255,.62); font-size: 8px; }
 .phone-seed-check { width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid rgba(91,137,97,.2); border-radius: 7px; color: #92a28d; background: #edf1e4; font-size: 8px; font-weight: 700; }
@@ -547,4 +555,95 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-message-composer input::placeholder { color: #a0aea1; }
 .phone-message-composer button { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px; color: #f7f6e9; background: #4b9275; cursor: pointer; transition: background .18s, transform .18s; }
 .phone-message-composer button:hover { transform: translateY(-1px); background: #387a63; }
-.phone-message-composer button svg { width: 15px; height: 15px; }
+  .phone-message-composer button svg { width: 15px; height: 15px; }
+
+/* Keep the game usable in short landscape viewports without clipping the touch controls. */
+@media (max-height: 520px) {
+  #app { min-height: 0; }
+  .intro-card { top: 74px; max-height: calc(100dvh - 156px); overflow-y: auto; padding-top: 14px; padding-bottom: 12px; }
+  .intro-card h1 { margin-top: 10px; font-size: clamp(34px, 7.5vh, 48px); }
+  .intro-footnote { display: none; }
+  .map-card, .quest-card, .controls-hint { display: none; }
+  .home-interaction { bottom: max(96px, calc(env(safe-area-inset-bottom) + 84px)); }
+}
+
+@media (max-height: 520px) and (max-width: 680px) {
+  .topbar { height: 46px; }
+  .intro-card { top: 63px; left: 50%; width: min(330px, calc(100vw - 130px)); padding: 11px 14px; transform: translateX(-50%); }
+  .intro-card.is-dismissed { transform: translate(-50%, -12px) scale(.985); }
+  .intro-card h1 { margin: 7px 0 5px; font-size: clamp(28px, 8.8vw, 40px); }
+  .intro-card p { display: none; }
+  .primary-button { min-height: 33px; margin-top: 8px; }
+  .touch-controls { height: 88px; bottom: max(8px, env(safe-area-inset-bottom)); }
+  .joystick { left: 16px; width: 80px; height: 80px; }
+  .joystick-ring { width: 46px; height: 46px; }
+  .joystick-stick { width: 34px; height: 34px; }
+  .jump-button { right: 16px; bottom: 5px; width: 58px; height: 58px; }
+}
+
+/* Keep informative captions and phone content readable at normal browser zoom. */
+.time-label, .intro-footnote, .panel-eyebrow, .map-coords span, .quest-tag,
+.quest-progress-row, .home-interaction-copy > span { color: #52675a; }
+.time-label, .map-coords span, .quest-tag, .quest-progress-row,
+.home-interaction-copy > span { font-size: 10px; }
+.eyebrow { color: #456a55; font-size: 10px; }
+.panel-eyebrow { font-size: 9px; }
+.map-north { color: #405b49; font-size: 9px; }
+.map-copy p { color: #506a59; font-size: 10px; }
+.map-coords strong { color: #405b49; font-size: 10px; }
+.quest-progress-row strong { color: #405b49; font-size: 11px; }
+.progress-total { color: #52675a; }
+.control-pair > span:last-child { font-size: 9px; }
+kbd { font-size: 9px; }
+.home-interaction button { font-size: 10px; }
+.touch-label { font-size: 9px; }
+.jump-button small { font-size: 9px; }
+
+.phone-statusbar { font-size: 10px; }
+.phone-wordmark, .phone-eyebrow, .phone-section-heading, .phone-map-banner,
+.phone-map-legend, .phone-reply-heading, .phone-note-label, .phone-note-footer,
+.phone-contact-online, .phone-chat-day, .phone-chat-sender, .phone-chat-message time,
+.phone-quest-kicker, .phone-home-time-row, .property-status, .estate-roster-heading,
+.estate-home-row em, .property-detail span { font-size: 9px; }
+.phone-wordmark, .phone-eyebrow, .phone-section-heading, .phone-card-label,
+.phone-map-legend, .phone-contact-card small, .phone-chat-day, .phone-chat-sender,
+.phone-reply-heading, .phone-note-label, .phone-note-footer, .phone-home-time-row,
+.property-status, .estate-roster-heading, .estate-home-row small, .estate-home-row em,
+.property-detail span, .property-help, .phone-feedback, .phone-local-note,
+.phone-preview-title small, .phone-preview-text { color: #52675a; }
+.phone-home-time-row span:last-child { color: #405b49; font-size: 10px; }
+.phone-heading-block > p:last-child { color: #52675a; font-size: 11px; }
+.phone-card-label { font-size: 9px; }
+.phone-coordinates, .phone-map-details strong { color: #405b49; font-size: 10px; }
+.phone-app-button { color: #405b49; font-size: 10px; }
+.phone-preview-title small, .phone-contact-card small, .phone-note-footer,
+.phone-chat-message time, .phone-seed-row strong { font-size: 9px; }
+.phone-preview-text, .phone-map-legend, .phone-local-note { font-size: 9px; }
+.phone-map-details strong { font-size: 10px; }
+.phone-primary-button { color: #fffdf1; font-size: 10px; }
+.phone-contact-online { color: #42664c; }
+.phone-chat-message p { font-size: 11px; }
+.phone-chat-message--incoming p { color: #405b49; }
+.phone-chat-message--outgoing { background: #397b63; }
+.phone-chat-message--outgoing p, .phone-chat-message--outgoing time { color: #fffdf1; }
+.phone-reply-options button { color: #405b49; font-size: 10px; }
+.phone-journal-intro small { color: #65593e; font-size: 9px; }
+.phone-note-label, .phone-note-footer { font-size: 9px; }
+.phone-note { color: #405b49; font-size: 12px; }
+.phone-note::placeholder, .phone-message-composer input::placeholder { color: #52675a; }
+.phone-journal-prompt p { color: #52675a; font-size: 10px; }
+.phone-quest-kicker, .phone-quest-progress > div, .phone-quest-progress strong { color: #fffdf1; }
+.phone-quest-kicker, .phone-quest-progress > div { font-size: 9px; }
+.phone-quest-progress strong { font-size: 10px; }
+.phone-quest-card p { color: #fffdf1; font-size: 10px; }
+.phone-seed-row { color: #405b49; font-size: 10px; }
+.phone-seed-row strong { color: #405b49; }
+.property-overview-copy p, .property-detail strong { color: #52675a; font-size: 10px; }
+.property-help, .phone-feedback { font-size: 10px; }
+.phone-message-composer input { color: #405b49; font-size: 11px; }
+#location-coordinates { color: #52675a; }
+.phone-map-banner { color: #52675a; }
+.phone-app-count { color: #705c36; font-size: 9px; }
+.property-stamp { background: linear-gradient(150deg, #4c785f, #315d50); }
+.property-stamp span { color: #fffdf1; font-size: 9px; }
+.estate-roster-heading strong { color: #665534; font-size: 9px; }
