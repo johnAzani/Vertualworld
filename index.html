@@ -191,7 +191,8 @@
                   <div class="property-stamp"><strong>01</strong><span>HOUSE</span></div>
                   <div class="property-overview-copy"><span class="phone-card-label">YOUR HOME</span><h3>Meadow Court</h3><p>House 01 · west lane</p></div>
                 </div>
-                <div class="property-status"><i></i><span>EXTERIOR BUILT · READY TO VISIT</span></div>
+                <div class="property-status"><i></i><span>FURNISHED INTERIOR · READY TO EXPLORE</span></div>
+                <div class="property-detail"><span>INSIDE HOUSE 01</span><strong>Living room · full kitchen · bedroom</strong></div>
                 <div class="estate-roster">
                   <div class="estate-roster-heading"><span>THE FOUR-HOME ESTATE</span><strong>4 HOMES</strong></div>
                   <div class="estate-home-row estate-home-row--owned"><span class="estate-home-number">01</span><span><strong>Your home</strong><small>Front porch · green mailbox</small></span><em>YOURS</em></div>
@@ -200,7 +201,7 @@
                   <div class="estate-home-row"><span class="estate-home-number">04</span><span><strong>House 04</strong><small>Neighbour’s cottage</small></span></div>
                 </div>
                 <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
-                <p class="property-help">Walk up to your green mailbox and press E—or tap the home prompt—to open these details.</p>
+                <p class="property-help">Press E at your front door—or tap its prompt—to step inside. Use E by the doorway to head back outside.</p>
                 <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Meadow Court on the map <span aria-hidden="true">↗</span></button>
               </section>
 
@@ -269,8 +270,8 @@
       </div>
 
       <div class="home-interaction" id="home-interaction" role="status" aria-live="polite" hidden>
-        <div class="home-interaction-copy"><span>HOUSE 01 · YOUR HOME</span><strong>You’re home at Meadow Court</strong></div>
-        <button id="home-open-phone" type="button" aria-label="View your Meadow Court home details"><kbd>E</kbd><span>HOME DETAILS</span></button>
+        <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message">Enter your home at Meadow Court</strong></div>
+        <button id="home-interaction-button" type="button" aria-label="Enter your Meadow Court home"><kbd>E</kbd><span id="home-interaction-action">ENTER HOME</span></button>
       </div>
 
       <div class="touch-controls" id="touch-controls" aria-label="Touch controls">

@@ -8,7 +8,10 @@ const introCard = document.querySelector('#intro-card');
 const toast = document.querySelector('#toast');
 const toastMessage = document.querySelector('#toast-message');
 const homeInteraction = document.querySelector('#home-interaction');
-const homeInteractionButton = document.querySelector('#home-open-phone');
+const homeInteractionEyebrow = document.querySelector('#home-interaction-eyebrow');
+const homeInteractionMessage = document.querySelector('#home-interaction-message');
+const homeInteractionAction = document.querySelector('#home-interaction-action');
+const homeInteractionButton = document.querySelector('#home-interaction-button');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
 const phoneMapCanvas = document.querySelector('#phone-map-canvas');
@@ -130,6 +133,14 @@ function distanceToPath(x, z) {
 
 const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
 const estateHouses = [];
+const homeFurnitureColliders = [];
+const HOME_FLOOR_TOP = 0.38;
+const HOME_DOOR_OPENING_HALF_WIDTH = 0.8;
+const HOME_INTERIOR_BOUNDS = 3.92;
+let homeHouse = null;
+let homeDoorPivot = null;
+let homeDoorTargetAngle = 0;
+let isInsideHome = false;
 
 function isInsideEstate(x, z, margin = 0) {
   return x >= ESTATE_BOUNDS.minX - margin
@@ -329,7 +340,7 @@ const estateRoadMaterial = new THREE.MeshStandardMaterial({ color: 0xaaa68c, rou
 const estateRoadEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xd0c6a2, roughness: 0.92 });
 const estateFoundationMaterial = new THREE.MeshStandardMaterial({ color: 0xb3ad98, roughness: 0.95 });
 const estateTrimMaterial = new THREE.MeshStandardMaterial({ color: 0xf2e9d4, roughness: 0.84 });
-const estateWindowMaterial = new THREE.MeshStandardMaterial({ color: 0x6caaa5, roughness: 0.24, metalness: 0.12, emissive: 0x1c4140, emissiveIntensity: 0.2 });
+const estateWindowMaterial = new THREE.MeshStandardMaterial({ color: 0x6caaa5, roughness: 0.24, metalness: 0.12, emissive: 0x1c4140, emissiveIntensity: 0.2, transparent: true, opacity: 0.74, side: THREE.DoubleSide, depthWrite: false });
 const estateDoorMaterials = [
   new THREE.MeshStandardMaterial({ color: 0x527e70, roughness: 0.72 }),
   new THREE.MeshStandardMaterial({ color: 0x8f6247, roughness: 0.78 }),
@@ -421,6 +432,297 @@ function makeHouseNumberTexture(number, isHome) {
   return texture;
 }
 
+function makeWoodFloorTexture() {
+  const floorCanvas = document.createElement('canvas');
+  floorCanvas.width = 512;
+  floorCanvas.height = 512;
+  const context = floorCanvas.getContext('2d');
+  const plankColors = ['#b9855e', '#c28f67', '#ae7a54', '#c8956d', '#b37f58', '#c18b62', '#a97651', '#c48d64'];
+  context.fillStyle = '#73513b';
+  context.fillRect(0, 0, 512, 512);
+  for (let row = 0; row < 8; row += 1) {
+    const y = row * 64;
+    context.fillStyle = plankColors[row];
+    context.fillRect(2, y + 2, 508, 60);
+    context.strokeStyle = 'rgba(80, 49, 32, .24)';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(0, y + 1);
+    context.lineTo(512, y + 1);
+    context.moveTo(0, y + 63);
+    context.lineTo(512, y + 63);
+    context.stroke();
+    const seamX = row % 2 === 0 ? 170 : 345;
+    context.beginPath();
+    context.moveTo(seamX, y + 3);
+    context.lineTo(seamX, y + 61);
+    context.stroke();
+    for (let grain = 0; grain < 3; grain += 1) {
+      context.strokeStyle = `rgba(92, 58, 37, ${0.08 + grain * 0.025})`;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(16, y + 15 + grain * 15);
+      context.bezierCurveTo(125, y + 9 + grain * 16, 290, y + 23 + grain * 13, 490, y + 13 + grain * 14);
+      context.stroke();
+    }
+  }
+  const texture = new THREE.CanvasTexture(floorCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2.5, 2.5);
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function makeHomeArtTexture() {
+  const artCanvas = document.createElement('canvas');
+  artCanvas.width = 256;
+  artCanvas.height = 320;
+  const context = artCanvas.getContext('2d');
+  context.fillStyle = '#e8dfc9';
+  context.fillRect(0, 0, 256, 320);
+  context.fillStyle = '#b8c2a3';
+  context.fillRect(18, 18, 220, 284);
+  context.fillStyle = '#e5d9bd';
+  context.fillRect(28, 28, 200, 264);
+  context.strokeStyle = '#4d745b';
+  context.lineWidth = 8;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(124, 252);
+  context.bezierCurveTo(120, 198, 142, 139, 116, 74);
+  context.stroke();
+  for (const [x, y, rotate, color] of [[88, 198, -.7, '#66856a'], [158, 170, .72, '#81976d'], [94, 126, .6, '#9ea879'], [151, 101, -.65, '#68815f']]) {
+    context.save();
+    context.translate(x, y);
+    context.rotate(rotate);
+    context.fillStyle = color;
+    context.beginPath();
+    context.ellipse(0, 0, 19, 43, 0, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+  const texture = new THREE.CanvasTexture(artCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function addHomeBox(parent, dimensions, position, material, castShadow = true, receiveShadow = true) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
+  mesh.position.set(...position);
+  mesh.castShadow = castShadow;
+  mesh.receiveShadow = receiveShadow;
+  parent.add(mesh);
+  return mesh;
+}
+
+function addHomeCollider(x, z, halfX, halfZ) {
+  homeFurnitureColliders.push({ x, z, halfX, halfZ });
+}
+
+function createHomeInterior(houseGroup) {
+  const interior = new THREE.Group();
+  interior.name = 'House 01 furnished interior';
+  houseGroup.add(interior);
+
+  const floorMaterial = new THREE.MeshStandardMaterial({ map: makeWoodFloorTexture(), roughness: 0.78 });
+  const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e0cf, roughness: 0.92 });
+  const partitionMaterial = new THREE.MeshStandardMaterial({ color: 0xe2d8c4, roughness: 0.91 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x8a6248, roughness: 0.77 });
+  const cabinetMaterial = new THREE.MeshStandardMaterial({ color: 0x9b684b, roughness: 0.76 });
+  const cabinetLightMaterial = new THREE.MeshStandardMaterial({ color: 0xc29169, roughness: 0.73 });
+  const stoneMaterial = new THREE.MeshStandardMaterial({ color: 0xd3cbb7, roughness: 0.66 });
+  const hardwareMaterial = new THREE.MeshStandardMaterial({ color: 0x9c9b8d, metalness: 0.62, roughness: 0.36 });
+  const sofaMaterial = new THREE.MeshStandardMaterial({ color: 0x607d68, roughness: 0.94 });
+  const sofaCushionMaterial = new THREE.MeshStandardMaterial({ color: 0x91a083, roughness: 0.98 });
+  const rugMaterial = new THREE.MeshStandardMaterial({ color: 0x9ba889, roughness: 1 });
+  const rugTrimMaterial = new THREE.MeshStandardMaterial({ color: 0xd1c39e, roughness: 1 });
+  const bedMaterial = new THREE.MeshStandardMaterial({ color: 0xc3aa83, roughness: 0.98 });
+  const beddingMaterial = new THREE.MeshStandardMaterial({ color: 0xe5dfca, roughness: 0.99 });
+  const throwMaterial = new THREE.MeshStandardMaterial({ color: 0x789284, roughness: 0.97 });
+  const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x303638, roughness: 0.42, metalness: 0.12 });
+  const screenMaterial = new THREE.MeshStandardMaterial({ color: 0x182d35, roughness: 0.2, metalness: 0.08, emissive: 0x10232a, emissiveIntensity: 0.25 });
+  const warmBulbMaterial = new THREE.MeshStandardMaterial({ color: 0xffe6b2, emissive: 0xf0bd6e, emissiveIntensity: 0.7, roughness: 0.28 });
+
+  addHomeBox(interior, [7.92, 0.08, 7.92], [0, 0.34, 0], floorMaterial, false, true);
+  addHomeBox(interior, [7.9, 0.1, 7.9], [0, 3.18, 0], ceilingMaterial, false, true);
+
+  // A wide, open bedroom doorway makes the small cottage feel connected, not boxy.
+  const partitionZ = 0.66;
+  for (const [start, end] of [[-3.88, -0.88], [0.88, 3.88]]) {
+    addHomeBox(interior, [end - start, 2.28, 0.14], [(start + end) / 2, 1.55, partitionZ], partitionMaterial);
+  }
+  addHomeBox(interior, [1.76, 0.48, 0.14], [0, 2.93, partitionZ], partitionMaterial);
+  addHomeBox(interior, [0.12, 0.12, 7.65], [-3.94, 0.46, 0], trimMaterial, false, true);
+  addHomeBox(interior, [0.12, 0.12, 7.65], [3.94, 0.46, 0], trimMaterial, false, true);
+  addHomeBox(interior, [1.35, 0.055, 0.25], [0, 0.412, -4.02], trimMaterial, false, true);
+
+  addHomeBox(interior, [3.35, 0.035, 2.8], [1.95, 0.415, -1.95], rugMaterial, false, true);
+  addHomeBox(interior, [3.2, 0.018, 0.055], [1.95, 0.437, -3.31], rugTrimMaterial, false, false);
+  addHomeBox(interior, [3.2, 0.018, 0.055], [1.95, 0.437, -0.59], rugTrimMaterial, false, false);
+
+  // A deep, soft sofa, turned toward the television wall.
+  const sofa = new THREE.Group();
+  sofa.position.set(1.65, 0, -1.95);
+  sofa.rotation.y = -Math.PI / 2;
+  interior.add(sofa);
+  addHomeBox(sofa, [2.35, 0.36, 0.92], [0, 0.58, 0], sofaMaterial);
+  addHomeBox(sofa, [2.12, 0.24, 0.74], [0, 0.86, -0.04], sofaCushionMaterial);
+  addHomeBox(sofa, [2.36, 0.82, 0.24], [0, 1.12, 0.36], sofaMaterial);
+  addHomeBox(sofa, [0.22, 0.62, 0.96], [-1.08, 0.88, -0.02], sofaMaterial);
+  addHomeBox(sofa, [0.22, 0.62, 0.96], [1.08, 0.88, -0.02], sofaMaterial);
+  for (const [x, color] of [[-0.54, 0xc9b998], [0.45, 0x829582]]) {
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.44, 0.16), new THREE.MeshStandardMaterial({ color, roughness: 1 }));
+    pillow.position.set(x, 1.08, 0.18);
+    pillow.rotation.x = -0.16;
+    pillow.castShadow = true;
+    sofa.add(pillow);
+  }
+
+  // Low timber coffee table, books, and a small ceramic vase.
+  addHomeBox(interior, [1.28, 0.1, 0.72], [2.55, 0.66, -1.95], cabinetLightMaterial);
+  for (const [x, z] of [[2.08, -2.22], [3.02, -2.22], [2.08, -1.68], [3.02, -1.68]]) {
+    addHomeBox(interior, [0.07, 0.24, 0.07], [x, 0.52, z], trimMaterial, true, false);
+  }
+  addHomeBox(interior, [0.52, 0.045, 0.32], [2.5, 0.74, -1.95], new THREE.MeshStandardMaterial({ color: 0x547d6b, roughness: 0.9 }), false, false);
+  const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.31, 12), new THREE.MeshStandardMaterial({ color: 0xd9c79f, roughness: 0.35 }));
+  vase.position.set(2.95, 0.86, -1.9);
+  vase.castShadow = true;
+  interior.add(vase);
+
+  // A television and floating shelf on the living-room side wall.
+  addHomeBox(interior, [0.11, 0.95, 1.62], [3.83, 1.83, -1.95], darkMaterial, true, false);
+  addHomeBox(interior, [0.025, 0.77, 1.42], [3.765, 1.84, -1.95], screenMaterial, false, false);
+  addHomeBox(interior, [0.34, 0.08, 1.82], [3.57, 1.25, -1.95], trimMaterial);
+  const smallPlantPot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.29, 10), cabinetLightMaterial);
+  smallPlantPot.position.set(3.35, 1.0, -3.0);
+  interior.add(smallPlantPot);
+  for (const [x, y, z, scale] of [[3.35, 1.25, -3.0, 0.28], [3.15, 1.42, -3.05, 0.2], [3.53, 1.43, -2.93, 0.22]]) {
+    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 0), estateShrubMaterial);
+    leaf.position.set(x, y, z);
+    leaf.scale.setScalar(scale);
+    leaf.castShadow = true;
+    interior.add(leaf);
+  }
+
+  // Compact kitchen: timber fronts, stone worktop, inset sink, hob, and tall fridge.
+  addHomeBox(interior, [0.78, 0.72, 3.12], [-3.28, 0.77, -2.05], cabinetMaterial);
+  addHomeBox(interior, [0.86, 0.11, 3.28], [-3.24, 1.17, -2.05], stoneMaterial);
+  for (const z of [-3.1, -2.15, -1.2]) {
+    addHomeBox(interior, [0.045, 0.58, 0.88], [-2.87, 0.78, z], cabinetLightMaterial, false, true);
+    addHomeBox(interior, [0.055, 0.16, 0.06], [-2.83, 0.79, z], hardwareMaterial, false, false);
+  }
+  addHomeBox(interior, [0.72, 0.82, 2.44], [-3.44, 2.05, -2.17], cabinetLightMaterial);
+  for (const z of [-2.87, -2.05, -1.23]) {
+    addHomeBox(interior, [0.045, 0.68, 0.74], [-3.055, 2.05, z], cabinetMaterial, false, false);
+    addHomeBox(interior, [0.045, 0.16, 0.045], [-3.02, 2.05, z], hardwareMaterial, false, false);
+  }
+  // Sink bowl and a simple chrome gooseneck tap.
+  addHomeBox(interior, [0.42, 0.055, 0.58], [-3.18, 1.245, -2.58], new THREE.MeshStandardMaterial({ color: 0x7f918e, roughness: 0.34, metalness: 0.55 }), false, false);
+  const faucetStem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 10), hardwareMaterial);
+  faucetStem.position.set(-3.42, 1.38, -2.58);
+  interior.add(faucetStem);
+  const tapSpout = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.03, 7, 16, Math.PI), hardwareMaterial);
+  tapSpout.rotation.x = Math.PI / 2;
+  tapSpout.position.set(-3.42, 1.48, -2.58);
+  interior.add(tapSpout);
+  // Black glass hob with four burner rings.
+  addHomeBox(interior, [0.62, 0.045, 0.66], [-3.2, 1.25, -1.04], darkMaterial, false, false);
+  for (const [x, z] of [[-3.37, -1.21], [-3.03, -1.21], [-3.37, -0.87], [-3.03, -0.87]]) {
+    const burner = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.025, 12), hardwareMaterial);
+    burner.position.set(x, 1.285, z);
+    interior.add(burner);
+  }
+  // Tall fridge tucked beside the open-plan kitchen.
+  addHomeBox(interior, [0.88, 2.02, 0.9], [-3.12, 1.41, 0.05], new THREE.MeshStandardMaterial({ color: 0xd7d8d2, roughness: 0.4, metalness: 0.1 }));
+  addHomeBox(interior, [0.045, 1.78, 0.78], [-2.65, 1.43, 0.05], new THREE.MeshStandardMaterial({ color: 0xe8e6de, roughness: 0.36, metalness: 0.08 }), false, false);
+  addHomeBox(interior, [0.055, 0.58, 0.045], [-2.61, 1.55, 0.28], hardwareMaterial, false, false);
+
+  // Small dining table, two upholstered chairs, and pendant light.
+  addHomeBox(interior, [1.42, 0.12, 0.82], [-1.12, 0.99, -0.58], cabinetLightMaterial);
+  for (const x of [-1.66, -0.58]) addHomeBox(interior, [0.08, 0.64, 0.08], [x, 0.73, -0.86], trimMaterial, true, false);
+  for (const z of [-1.2, 0.03]) {
+    addHomeBox(interior, [0.56, 0.12, 0.54], [-1.12, 0.59, z], sofaMaterial);
+    addHomeBox(interior, [0.56, 0.62, 0.1], [-1.12, 0.92, z + 0.22], sofaMaterial);
+    for (const x of [-1.34, -0.9]) addHomeBox(interior, [0.055, 0.24, 0.055], [x, 0.5, z], trimMaterial, true, false);
+  }
+  addHomeBox(interior, [0.08, 0.24, 0.08], [-1.12, 2.93, -0.58], trimMaterial, false, false);
+  const pendant = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), warmBulbMaterial);
+  pendant.position.set(-1.12, 2.79, -0.58);
+  interior.add(pendant);
+  const kitchenLight = new THREE.PointLight(0xffdca8, 0.55, 5.5, 2);
+  kitchenLight.position.set(-1.3, 2.65, -0.6);
+  interior.add(kitchenLight);
+
+  // Bedroom: framed bed, layered linens, bedside drawers, lamps, wardrobe and rug.
+  addHomeBox(interior, [3.54, 0.035, 3.18], [1.42, 0.415, 2.25], new THREE.MeshStandardMaterial({ color: 0xb0a68e, roughness: 1 }), false, true);
+  addHomeBox(interior, [2.18, 0.42, 2.6], [1.68, 0.62, 2.27], bedMaterial);
+  addHomeBox(interior, [2.02, 0.28, 2.43], [1.68, 0.93, 2.24], beddingMaterial);
+  addHomeBox(interior, [1.9, 0.12, 1.45], [1.68, 1.12, 1.86], throwMaterial, false, true);
+  addHomeBox(interior, [0.78, 0.16, 0.48], [1.13, 1.14, 3.08], beddingMaterial, false, false);
+  addHomeBox(interior, [0.78, 0.16, 0.48], [2.23, 1.14, 3.08], beddingMaterial, false, false);
+  addHomeBox(interior, [2.26, 0.88, 0.15], [1.68, 1.02, 3.64], cabinetMaterial);
+  for (const x of [0.36, 3.0]) {
+    addHomeBox(interior, [0.62, 0.56, 0.58], [x, 0.69, 3.1], cabinetLightMaterial);
+    addHomeBox(interior, [0.64, 0.07, 0.6], [x, 1.0, 3.1], trimMaterial, false, false);
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.28, 10), warmBulbMaterial);
+    lamp.position.set(x, 1.19, 3.1);
+    interior.add(lamp);
+    const light = new THREE.PointLight(0xffd6a0, 0.25, 3.2, 2);
+    light.position.set(x, 1.42, 3.1);
+    interior.add(light);
+  }
+  addHomeBox(interior, [1.18, 2.02, 0.78], [-2.72, 1.42, 2.45], cabinetMaterial);
+  addHomeBox(interior, [1.08, 1.84, 0.055], [-2.72, 1.42, 2.03], cabinetLightMaterial, false, false);
+  addHomeBox(interior, [0.055, 1.72, 0.04], [-2.72, 1.42, 2.0], hardwareMaterial, false, false);
+
+  // Framed botanical prints lend the walls a lived-in, personal touch.
+  const artTexture = makeHomeArtTexture();
+  const artFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x72533e, roughness: 0.72 });
+  addHomeBox(interior, [0.08, 0.82, 0.66], [3.91, 2.25, -0.25], artFrameMaterial, false, false);
+  const sideArt = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.71), new THREE.MeshBasicMaterial({ map: artTexture, side: THREE.DoubleSide }));
+  sideArt.position.set(3.855, 2.25, -0.25);
+  sideArt.rotation.y = -Math.PI / 2;
+  interior.add(sideArt);
+  addHomeBox(interior, [1.28, 0.78, 0.09], [2.55, 2.14, 0.545], artFrameMaterial, false, false);
+  const bedroomArt = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.64), new THREE.MeshBasicMaterial({ map: artTexture, side: THREE.DoubleSide }));
+  bedroomArt.position.set(2.55, 2.14, 0.49);
+  bedroomArt.rotation.y = Math.PI;
+  interior.add(bedroomArt);
+
+  // Warm overhead light plus softer bedside and kitchen pools.
+  for (const [x, z] of [[1.7, -1.8], [1.65, 2.25]]) {
+    const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.1, 14), trimMaterial);
+    mount.position.set(x, 3.04, z);
+    interior.add(mount);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), warmBulbMaterial);
+    bulb.position.set(x, 2.91, z);
+    interior.add(bulb);
+    const light = new THREE.PointLight(0xffe1b7, 0.8, 8.5, 2);
+    light.position.set(x, 2.82, z);
+    interior.add(light);
+  }
+  const livingLight = new THREE.PointLight(0xffe3bf, 0.62, 7, 2);
+  livingLight.position.set(1.5, 2.5, -2.0);
+  interior.add(livingLight);
+
+  // Keep movement grounded around the larger furnishings while leaving the central passage clear.
+  addHomeCollider(-3.28, -2.05, 0.48, 1.65);
+  addHomeCollider(-3.12, 0.05, 0.5, 0.5);
+  addHomeCollider(-1.12, -0.58, 0.76, 0.5);
+  addHomeCollider(-1.12, -1.2, 0.31, 0.34);
+  addHomeCollider(-1.12, 0.03, 0.31, 0.34);
+  addHomeCollider(-2.38, partitionZ, 1.5, 0.1);
+  addHomeCollider(2.38, partitionZ, 1.5, 0.1);
+  addHomeCollider(1.65, -1.95, 0.55, 1.24);
+  addHomeCollider(2.55, -1.95, 0.68, 0.42);
+  addHomeCollider(1.68, 2.27, 1.12, 1.34);
+  addHomeCollider(-2.72, 2.45, 0.62, 0.43);
+  return interior;
+}
+
 function createEstateWindow(group, x, y, z, side = 'front') {
   const frame = new THREE.Mesh(
     side === 'front' ? new THREE.BoxGeometry(1.22, 1.04, 0.16) : new THREE.BoxGeometry(0.16, 1.04, 1.22),
@@ -454,6 +756,8 @@ function createEstateWindow(group, x, y, z, side = 'front') {
 function createEstateHouse({ number, x, z, facing, isHome = false }) {
   const group = new THREE.Group();
   const wallMaterial = new THREE.MeshStandardMaterial({ color: estateWallColors[number - 1], roughness: 0.9 });
+  const frontZ = -houseDepth / 2;
+  const wallThickness = 0.18;
   const roofMaterial = new THREE.MeshStandardMaterial({ color: estateRoofColors[number - 1], roughness: 0.88, flatShading: true });
   const foundation = new THREE.Mesh(new THREE.BoxGeometry(houseWidth + 0.42, 0.3, houseDepth + 0.42), estateFoundationMaterial);
   foundation.position.y = 0.15;
@@ -461,11 +765,81 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   foundation.castShadow = true;
   group.add(foundation);
 
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(houseWidth, houseWallHeight, houseDepth), wallMaterial);
-  walls.position.y = houseBaseY + houseWallHeight / 2;
-  walls.castShadow = true;
-  walls.receiveShadow = true;
-  group.add(walls);
+  if (!isHome) {
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(houseWidth, houseWallHeight, houseDepth), wallMaterial);
+    walls.position.y = houseBaseY + houseWallHeight / 2;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    group.add(walls);
+  } else {
+    const addFrontBand = (bottom, top, openings = []) => {
+      const sortedOpenings = [...openings].sort((a, b) => a[0] - b[0]);
+      let cursor = -houseWidth / 2;
+      for (const [openingStart, openingEnd] of sortedOpenings) {
+        if (openingStart > cursor) {
+          const width = openingStart - cursor;
+          const segment = new THREE.Mesh(new THREE.BoxGeometry(width, top - bottom, wallThickness), wallMaterial);
+          segment.position.set(cursor + width / 2, (bottom + top) / 2, frontZ + wallThickness / 2);
+          segment.castShadow = true;
+          segment.receiveShadow = true;
+          group.add(segment);
+        }
+        cursor = Math.max(cursor, openingEnd);
+      }
+      if (cursor < houseWidth / 2) {
+        const width = houseWidth / 2 - cursor;
+        const segment = new THREE.Mesh(new THREE.BoxGeometry(width, top - bottom, wallThickness), wallMaterial);
+        segment.position.set(cursor + width / 2, (bottom + top) / 2, frontZ + wallThickness / 2);
+        segment.castShadow = true;
+        segment.receiveShadow = true;
+        group.add(segment);
+      }
+    };
+    const doorGap = [-HOME_DOOR_OPENING_HALF_WIDTH, HOME_DOOR_OPENING_HALF_WIDTH];
+    const windowGaps = [[-3.1, -1.74], [1.74, 3.1]];
+    addFrontBand(houseBaseY, 1.58, [doorGap]);
+    addFrontBand(1.58, 2.34, [...windowGaps, doorGap]);
+    addFrontBand(2.34, 2.76, [...windowGaps, doorGap]);
+    addFrontBand(2.76, houseEaveY);
+
+    const rearWall = new THREE.Mesh(new THREE.BoxGeometry(houseWidth, houseWallHeight, wallThickness), wallMaterial);
+    rearWall.position.set(0, houseBaseY + houseWallHeight / 2, houseDepth / 2 - wallThickness / 2);
+    rearWall.castShadow = true;
+    rearWall.receiveShadow = true;
+    group.add(rearWall);
+
+    const addSideWall = (side, windowZ) => {
+      const wallX = side * (houseWidth / 2 - wallThickness / 2);
+      const addBand = (bottom, top, openings = []) => {
+        const sortedOpenings = [...openings].sort((a, b) => a[0] - b[0]);
+        let cursor = -houseDepth / 2;
+        for (const [openingStart, openingEnd] of sortedOpenings) {
+          if (openingStart > cursor) {
+            const depth = openingStart - cursor;
+            const segment = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, top - bottom, depth), wallMaterial);
+            segment.position.set(wallX, (bottom + top) / 2, cursor + depth / 2);
+            segment.castShadow = true;
+            segment.receiveShadow = true;
+            group.add(segment);
+          }
+          cursor = Math.max(cursor, openingEnd);
+        }
+        if (cursor < houseDepth / 2) {
+          const depth = houseDepth / 2 - cursor;
+          const segment = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, top - bottom, depth), wallMaterial);
+          segment.position.set(wallX, (bottom + top) / 2, cursor + depth / 2);
+          segment.castShadow = true;
+          segment.receiveShadow = true;
+          group.add(segment);
+        }
+      };
+      addBand(houseBaseY, 1.58);
+      addBand(1.58, 2.76, [[windowZ - 0.68, windowZ + 0.68]]);
+      addBand(2.76, houseEaveY);
+    };
+    addSideWall(-1, -1.5);
+    addSideWall(1, 1.5);
+  }
 
   const gableShape = new THREE.Shape();
   gableShape.moveTo(-houseWidth / 2, houseEaveY);
@@ -498,7 +872,6 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   ridge.castShadow = true;
   group.add(ridge);
 
-  const frontZ = -houseDepth / 2;
   const porch = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.2, 1.55), estateFoundationMaterial);
   porch.position.set(0, 0.34, frontZ - 0.78);
   porch.receiveShadow = true;
@@ -522,22 +895,27 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.52, 2.47, 0.15), estateTrimMaterial);
   doorFrame.position.set(0, 1.48, frontZ - 0.085);
   group.add(doorFrame);
-  const door = new THREE.Mesh(new THREE.BoxGeometry(1.25, 2.2, 0.1), estateDoorMaterials[number - 1]);
-  door.position.set(0, 1.42, frontZ - 0.17);
+  const doorWidth = 1.25;
+  const doorPivot = new THREE.Group();
+  doorPivot.position.set(-doorWidth / 2, 0, frontZ - 0.17);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, 2.2, 0.1), estateDoorMaterials[number - 1]);
+  door.position.set(doorWidth / 2, 1.42, 0);
   door.castShadow = true;
-  group.add(door);
+  doorPivot.add(door);
   const doorPanelMaterial = new THREE.MeshStandardMaterial({ color: isHome ? 0x77a28a : 0xb18b64, roughness: 0.74 });
   for (const panelY of [0.88, 1.75]) {
     const panel = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.48, 0.035), doorPanelMaterial);
-    panel.position.set(0, panelY, frontZ - 0.235);
-    group.add(panel);
+    panel.position.set(doorWidth / 2, panelY, -0.064);
+    doorPivot.add(panel);
   }
   const knob = new THREE.Mesh(
     new THREE.SphereGeometry(0.075, 10, 8),
     new THREE.MeshStandardMaterial({ color: 0xd9b768, metalness: 0.62, roughness: 0.33 }),
   );
-  knob.position.set(0.43, 1.38, frontZ - 0.25);
-  group.add(knob);
+  knob.position.set(doorWidth - 0.18, 1.38, -0.105);
+  doorPivot.add(knob);
+  group.add(doorPivot);
+  if (isHome) homeDoorPivot = doorPivot;
 
   createEstateWindow(group, -2.42, 2.16, frontZ - 0.08);
   createEstateWindow(group, 2.42, 2.16, frontZ - 0.08);
@@ -590,21 +968,25 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   );
   porchLight.position.set(-0.98, 2.52, frontZ - 0.2);
   group.add(porchLight);
+  if (isHome) createHomeInterior(group);
 
   group.position.set(x, terrainHeight(x, z), z);
   group.rotation.y = facing;
   scene.add(group);
   const doorOffset = new THREE.Vector3(0, 0, -houseDepth / 2 - 0.72).applyAxisAngle(new THREE.Vector3(0, 1, 0), facing);
-  estateHouses.push({
+  const house = {
     number,
     name: isHome ? 'Your home' : `House ${String(number).padStart(2, '0')}`,
     x,
     z,
+    facing,
     doorX: x + doorOffset.x,
     doorZ: z + doorOffset.z,
     isHome,
     group,
-  });
+  };
+  estateHouses.push(house);
+  if (isHome) homeHouse = house;
 }
 
 function createEstateLamp(x, z) {
@@ -1170,13 +1552,9 @@ window.addEventListener('keydown', (event) => {
     toggleCameraMode();
     return;
   }
-  if (key === 'e' && !event.repeat) {
-    const home = estateHouses.find((house) => house.isHome);
-    if (home && Math.hypot(player.position.x - home.doorX, player.position.z - home.doorZ) < 4.2) {
-      event.preventDefault();
-      openHomeDetails();
-      return;
-    }
+  if (key === 'e' && !event.repeat && handleHomeInteraction()) {
+    event.preventDefault();
+    return;
   }
   if (keyToMove.has(key)) event.preventDefault();
   pressedKeys.add(key);
@@ -1186,7 +1564,91 @@ window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLower
 window.addEventListener('blur', () => pressedKeys.clear());
 
 const PLAYER_COLLISION_RADIUS = 0.42;
+function homeWorldToLocal(x, z) {
+  const offsetX = x - homeHouse.x;
+  const offsetZ = z - homeHouse.z;
+  const cosYaw = Math.cos(homeHouse.facing);
+  const sinYaw = Math.sin(homeHouse.facing);
+  return {
+    x: offsetX * cosYaw - offsetZ * sinYaw,
+    z: offsetX * sinYaw + offsetZ * cosYaw,
+  };
+}
+
+function homeLocalToWorld(localX, localZ) {
+  const cosYaw = Math.cos(homeHouse.facing);
+  const sinYaw = Math.sin(homeHouse.facing);
+  return {
+    x: homeHouse.x + localX * cosYaw + localZ * sinYaw,
+    z: homeHouse.z - localX * sinYaw + localZ * cosYaw,
+  };
+}
+
+function resolveHomeInteriorCollisions() {
+  if (!homeHouse) return;
+  const local = homeWorldToLocal(player.position.x, player.position.z);
+  let localX = local.x;
+  let localZ = local.z;
+  const cosYaw = Math.cos(homeHouse.facing);
+  const sinYaw = Math.sin(homeHouse.facing);
+  let localVelocityX = velocity.x * cosYaw - velocity.z * sinYaw;
+  let localVelocityZ = velocity.x * sinYaw + velocity.z * cosYaw;
+  const bound = HOME_INTERIOR_BOUNDS - PLAYER_COLLISION_RADIUS;
+
+  const removeIntoSurfaceVelocity = (normalX, normalZ) => {
+    const inwardVelocity = localVelocityX * normalX + localVelocityZ * normalZ;
+    if (inwardVelocity < 0) {
+      localVelocityX -= inwardVelocity * normalX;
+      localVelocityZ -= inwardVelocity * normalZ;
+    }
+  };
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    if (localX < -bound) {
+      localX = -bound;
+      removeIntoSurfaceVelocity(1, 0);
+    } else if (localX > bound) {
+      localX = bound;
+      removeIntoSurfaceVelocity(-1, 0);
+    }
+    if (localZ < -bound) {
+      localZ = -bound;
+      removeIntoSurfaceVelocity(0, 1);
+    } else if (localZ > bound) {
+      localZ = bound;
+      removeIntoSurfaceVelocity(0, -1);
+    }
+
+    for (const obstacle of homeFurnitureColliders) {
+      const dx = localX - obstacle.x;
+      const dz = localZ - obstacle.z;
+      const overlapX = obstacle.halfX + PLAYER_COLLISION_RADIUS - Math.abs(dx);
+      const overlapZ = obstacle.halfZ + PLAYER_COLLISION_RADIUS - Math.abs(dz);
+      if (overlapX <= 0 || overlapZ <= 0) continue;
+      if (overlapX < overlapZ) {
+        const normalX = Math.sign(dx) || (localVelocityX > 0 ? -1 : 1);
+        localX = obstacle.x + normalX * (obstacle.halfX + PLAYER_COLLISION_RADIUS);
+        removeIntoSurfaceVelocity(normalX, 0);
+      } else {
+        const normalZ = Math.sign(dz) || (localVelocityZ > 0 ? -1 : 1);
+        localZ = obstacle.z + normalZ * (obstacle.halfZ + PLAYER_COLLISION_RADIUS);
+        removeIntoSurfaceVelocity(0, normalZ);
+      }
+    }
+  }
+
+  const world = homeLocalToWorld(localX, localZ);
+  player.position.x = world.x;
+  player.position.z = world.z;
+  velocity.x = localVelocityX * cosYaw + localVelocityZ * sinYaw;
+  velocity.z = -localVelocityX * sinYaw + localVelocityZ * cosYaw;
+}
+
 function resolveHouseCollisions() {
+  if (isInsideHome) {
+    resolveHomeInteriorCollisions();
+    return;
+  }
   const wallHalfWidth = houseWidth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
   const wallHalfDepth = houseDepth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
   for (const house of estateHouses) {
@@ -1301,6 +1763,55 @@ function showToast(message, duration = 2600) {
 
 function isPhoneOpen() {
   return !phonePanel.hidden && phonePanel.classList.contains('is-open');
+}
+
+function enterHome() {
+  if (!homeHouse || isInsideHome) return;
+  isInsideHome = true;
+  homeDoorTargetAngle = -Math.PI / 2;
+  const entryPosition = homeLocalToWorld(0, -3.35);
+  player.position.set(entryPosition.x, homeHouse.group.position.y + HOME_FLOOR_TOP, entryPosition.z);
+  player.rotation.y = homeHouse.facing + Math.PI;
+  cameraYaw = homeHouse.facing;
+  cameraPitch = 0;
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  velocity.set(0, 0, 0);
+  pressedKeys.clear();
+  resetJoystick();
+  updateLocationAndMap();
+  showToast('Welcome home. The living room, kitchen, and bedroom are yours to explore.', 3600);
+}
+
+function exitHome() {
+  if (!homeHouse || !isInsideHome) return;
+  isInsideHome = false;
+  homeDoorTargetAngle = 0;
+  const exitPosition = homeLocalToWorld(0, -6.35);
+  player.position.set(exitPosition.x, terrainHeight(exitPosition.x, exitPosition.z), exitPosition.z);
+  player.rotation.y = homeHouse.facing;
+  cameraYaw = homeHouse.facing + Math.PI;
+  cameraPitch = 0;
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  velocity.set(0, 0, 0);
+  pressedKeys.clear();
+  resetJoystick();
+  updateLocationAndMap();
+  showToast('You’re back outside at Meadow Court.', 2500);
+}
+
+function handleHomeInteraction() {
+  if (!homeHouse || isPhoneOpen()) return false;
+  if (isInsideHome) {
+    const local = homeWorldToLocal(player.position.x, player.position.z);
+    if (Math.hypot(local.x, local.z + 3.35) > 2.1) return false;
+    exitHome();
+    return true;
+  }
+  if (Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ) > 4.2) return false;
+  enterHome();
+  return true;
 }
 
 const phonePageCopy = {
@@ -1454,7 +1965,7 @@ function updatePhoneQuestProgress() {
 
 phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
-homeInteractionButton.addEventListener('click', openHomeDetails);
+homeInteractionButton.addEventListener('click', handleHomeInteraction);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
 phoneScrim.addEventListener('click', closePhone);
@@ -1599,8 +2110,23 @@ function updateLocationAndMap() {
   document.querySelector('#phone-home-coordinates').textContent = formattedCoordinates;
   document.querySelector('#phone-map-location').textContent = location;
   document.querySelector('#phone-map-coordinates').textContent = formattedCoordinates;
-  const home = estateHouses.find((house) => house.isHome);
-  homeInteraction.hidden = !home || Math.hypot(x - home.doorX, z - home.doorZ) > 4.2 || isPhoneOpen();
+  const home = homeHouse;
+  let canReachHomeDoor = false;
+  if (home) {
+    if (isInsideHome) {
+      const local = homeWorldToLocal(x, z);
+      canReachHomeDoor = Math.hypot(local.x, local.z + 3.35) <= 2.1;
+    } else {
+      canReachHomeDoor = Math.hypot(x - home.doorX, z - home.doorZ) <= 4.2;
+    }
+  }
+  homeInteraction.hidden = !canReachHomeDoor || isPhoneOpen();
+  if (home) {
+    homeInteractionEyebrow.textContent = isInsideHome ? 'MEADOW COURT · HOUSE 01' : 'HOUSE 01 · YOUR HOME';
+    homeInteractionMessage.textContent = isInsideHome ? 'Head back outside?' : 'Step inside your home';
+    homeInteractionAction.textContent = isInsideHome ? 'LEAVE HOME' : 'ENTER HOME';
+    homeInteractionButton.setAttribute('aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
+  }
   drawMap();
 }
 
@@ -1756,6 +2282,10 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
   updateClock();
+  if (homeDoorPivot) {
+    const doorResponse = 1 - Math.exp(-7.5 * delta);
+    homeDoorPivot.rotation.y += (homeDoorTargetAngle - homeDoorPivot.rotation.y) * doorResponse;
+  }
 
   for (const cloud of clouds) {
     cloud.position.x += cloud.userData.speed * delta;
@@ -1805,7 +2335,9 @@ function animate() {
   }
   resolveHouseCollisions();
 
-  const ground = terrainHeight(player.position.x, player.position.z);
+  const ground = isInsideHome && homeHouse
+    ? homeHouse.group.position.y + HOME_FLOOR_TOP
+    : terrainHeight(player.position.x, player.position.z);
   if (jumpRequested && jumpHeight <= 0.001) {
     jumpVelocity = 6.3;
     jumpRequested = false;
@@ -1892,6 +2424,20 @@ function animate() {
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
     camera.lookAt(eyePosition.clone().addScaledVector(viewDirection, 18));
+  } else if (isInsideHome && homeHouse) {
+    const local = homeWorldToLocal(player.position.x, player.position.z);
+    const orbitYaw = cameraYaw - homeHouse.facing;
+    const cameraLocal = homeLocalToWorld(
+      local.x + Math.sin(orbitYaw) * 4.15,
+      local.z + Math.cos(orbitYaw) * 4.15,
+    );
+    const desiredCameraPosition = new THREE.Vector3(
+      cameraLocal.x,
+      player.position.y + 2.35 + jumpHeight * 0.12,
+      cameraLocal.z,
+    );
+    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-7 * delta));
+    camera.lookAt(player.position.x, player.position.y + 1.2 + jumpHeight * 0.08, player.position.z);
   } else {
     // Smooth third-person follow camera.
     const cameraDistance = 10.8;
