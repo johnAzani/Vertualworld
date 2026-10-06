@@ -117,6 +117,15 @@ const cafeInventoryElement = document.querySelector('#cafe-inventory');
 const marketInventoryElement = document.querySelector('#market-inventory');
 const reducedMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 const showPerformanceHud = new URLSearchParams(window.location.search).get('perf') === '1';
+// The neighborhood is built below using the persisted lease to choose the active home.
+// Load it before any world construction so the rental selection never reads a TDZ binding.
+const economyStorage = {
+  getItem(key) { return window.localStorage.getItem(key); },
+  setItem(key, value) { window.localStorage.setItem(key, value); },
+};
+const economy = loadEconomy(economyStorage);
+// Persist the local game-account reference even before the first wallet transaction.
+saveEconomy(economyStorage, economy);
 let prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
 reducedMotionQuery?.addEventListener?.('change', (event) => {
   prefersReducedMotion = event.matches;
@@ -2325,13 +2334,6 @@ let phoneUnread = true;
 let phoneCloseTimer = 0;
 let previousPhoneFocus = null;
 let phoneNoteSaveTimer = 0;
-const economyStorage = {
-  getItem(key) { return window.localStorage.getItem(key); },
-  setItem(key, value) { window.localStorage.setItem(key, value); },
-};
-const economy = loadEconomy(economyStorage);
-// Persist the local game-account reference even before the first wallet transaction.
-saveEconomy(economyStorage, economy);
 let bankCheckoutIntent = null;
 if (activeResidence && activeResidence !== homeHouse) placePlayerOutsideResidence(activeResidence);
 
