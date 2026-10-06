@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const ROAD_ROUTE_XZ = [
   [44, 8], [36, 8], [28, 8], [20, 8], [13, 8],
@@ -63,6 +64,58 @@ function addBox(parent, width, height, depth, material, x, y, z, castShadow = tr
   mesh.receiveShadow = receiveShadow;
   parent.add(mesh);
   return mesh;
+}
+
+function mergeStaticMeshes(parent, excludedMeshes = new Set()) {
+  const batches = new Map();
+  for (const mesh of parent.children) {
+    if (!mesh.isMesh || excludedMeshes.has(mesh) || Array.isArray(mesh.material)) continue;
+    const key = `${mesh.material.id}:${Number(mesh.castShadow)}:${Number(mesh.receiveShadow)}`;
+    if (!batches.has(key)) {
+      batches.set(key, {
+        material: mesh.material,
+        castShadow: mesh.castShadow,
+        receiveShadow: mesh.receiveShadow,
+        meshes: [],
+      });
+    }
+    batches.get(key).meshes.push(mesh);
+  }
+
+  for (const batch of batches.values()) {
+    if (batch.meshes.length < 2) continue;
+    const geometries = [];
+    let mergedGeometry;
+    try {
+      for (const mesh of batch.meshes) {
+        mesh.updateMatrix();
+        const geometry = mesh.geometry.clone();
+        geometry.clearGroups();
+        geometry.applyMatrix4(mesh.matrix);
+        geometries.push(geometry);
+      }
+      mergedGeometry = mergeGeometries(geometries, false);
+    } catch {
+      for (const geometry of geometries) geometry.dispose();
+      continue;
+    }
+    if (!mergedGeometry) {
+      for (const geometry of geometries) geometry.dispose();
+      continue;
+    }
+
+    mergedGeometry.computeBoundingSphere();
+    const mergedMesh = new THREE.Mesh(mergedGeometry, batch.material);
+    mergedMesh.castShadow = batch.castShadow;
+    mergedMesh.receiveShadow = batch.receiveShadow;
+    mergedMesh.name = 'Merged static transport geometry';
+    for (const mesh of batch.meshes) {
+      parent.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    parent.add(mergedMesh);
+    for (const geometry of geometries) geometry.dispose();
+  }
 }
 
 function createPlanarCurve(points, closed = false) {
@@ -333,6 +386,7 @@ function addTrain(scene) {
     tail.position.set(side * 0.62, 0.98, TRAIN_LENGTH / 2 + 0.045);
     group.add(tail);
   }
+  mergeStaticMeshes(group, new Set(wheels));
   scene.add(group);
   return { group, wheels, headlightMaterial, tailLightMaterial, headlights };
 }
@@ -424,12 +478,10 @@ function addStation(scene, station, terrainHeight) {
     const terminalBulb = new THREE.Mesh(new THREE.SphereGeometry(0.095, 8, 6), lampMaterial);
     terminalBulb.position.set(x, 2.28, terminalCenterZ - station.platformSide * 1.92);
     root.add(terminalBulb);
-    const light = new THREE.PointLight(0xffd792, 0, 9, 2);
-    light.position.set(x, 2.12, terminalCenterZ - station.platformSide * 1.7);
-    root.add(light);
-    bulbs.push({ light, material: lampMaterial });
+    bulbs.push({ material: lampMaterial });
   }
 
+  mergeStaticMeshes(root);
   scene.add(root);
   station.group = root;
   station.platformTop = root.position.y + 0.34;
@@ -487,12 +539,10 @@ function addBusTerminal(scene, terminal, terrainHeight) {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), lampMaterial);
     bulb.position.set(x, 2.31, roadSide * 0.88);
     root.add(bulb);
-    const light = new THREE.PointLight(0xffd792, 0, 10, 2);
-    light.position.set(x, 2.14, roadSide * 0.75);
-    root.add(light);
-    lights.push({ light, material: lampMaterial });
+    lights.push({ material: lampMaterial });
   }
 
+  mergeStaticMeshes(root);
   scene.add(root);
   terminal.group = root;
   terminal.platformTop = root.position.y + 0.34;
@@ -587,14 +637,11 @@ function addBus(scene) {
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 9, 7), lampMaterial);
     lamp.position.set(side * 0.65, 1.0, -BUS_LENGTH / 2 - 0.07);
     group.add(lamp);
-    const light = new THREE.PointLight(0xffdfa0, 0, 13, 2);
-    light.position.copy(lamp.position);
-    group.add(light);
-    headlights.push(light);
     const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.11, 0.06), tailMaterial);
     tail.position.set(side * 0.67, 0.96, BUS_LENGTH / 2 + 0.04);
     group.add(tail);
   }
+  mergeStaticMeshes(group, new Set(wheels));
   scene.add(group);
   return { group, wheels, headlightMaterial: lampMaterial, tailLightMaterial: tailMaterial, headlights };
 }
@@ -1046,13 +1093,13 @@ export function updateTransitLighting(network, night) {
   if (!network) return;
   for (const station of network.stations) {
     for (const fixture of station.lights) {
-      fixture.light.intensity = THREE.MathUtils.lerp(0, 14, night);
+      if (fixture.light) fixture.light.intensity = THREE.MathUtils.lerp(0, 14, night);
       fixture.material.emissiveIntensity = THREE.MathUtils.lerp(0.12, 1.35, night);
     }
   }
   for (const terminal of network.busTerminals) {
     for (const fixture of terminal.lights) {
-      fixture.light.intensity = THREE.MathUtils.lerp(0, 12, night);
+      if (fixture.light) fixture.light.intensity = THREE.MathUtils.lerp(0, 12, night);
       fixture.material.emissiveIntensity = THREE.MathUtils.lerp(0.12, 1.25, night);
     }
   }
