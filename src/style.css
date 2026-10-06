@@ -447,7 +447,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-map-legend { display: flex; align-items: center; justify-content: space-between; margin: 10px 2px 12px; color: #7c8e80; font-size: 7px; }
 .phone-map-legend span { display: flex; align-items: center; gap: 4px; }
 .phone-map-legend i { width: 7px; height: 7px; display: inline-block; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; }
-.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }.legend-home { border-radius: 2px !important; background: #397b63; }
+.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }.legend-home { border-radius: 2px !important; background: #397b63; }.legend-stadium { border-radius: 2px !important; background: #5b9d65; }
 .phone-primary-button { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 13px; border: 0; border-radius: 12px; color: #f5f5e8; background: #3c8068; box-shadow: 0 5px 12px rgba(54,115,83,.14); cursor: pointer; font-size: 9px; font-weight: 600; transition: background .18s, transform .18s; }
 .phone-primary-button:hover { transform: translateY(-1px); background: #326f5b; }
 .phone-primary-button span { font-size: 13px; }

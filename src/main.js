@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -62,7 +63,7 @@ const SEED_POSITIONS = [
   new THREE.Vector2(-39, -42),
 ];
 const PATH_POINTS_XZ = [
-  [0, 18], [0.4, 13], [-1.8, 9], [1.6, 5], [1.4, 0], [-1.2, -5], [-2.2, -11], [0.8, -16], [1.2, -21], [0, -27],
+  [-13.1, 18], [-9, 18], [-5, 18], [0, 18], [0.4, 13], [-1.8, 9], [1.6, 5], [1.4, 0], [-1.2, -5], [-2.2, -11], [0.8, -16], [1.2, -21], [0, -27],
 ];
 
 let renderer;
@@ -142,9 +143,12 @@ function terrainHeight(x, z) {
   const meadow = 0.22
     + Math.sin(x * 0.105 + Math.sin(z * 0.08)) * Math.cos(z * 0.085) * 0.28
     + Math.sin((x + z) * 0.16) * 0.12;
-  if (radius < 69) return meadow;
-  const edge = smoothstep01((radius - 69) / 14);
-  return THREE.MathUtils.lerp(meadow, -15.5, edge);
+  const shorelineBlend = smoothstep01((radius - 69) / 14);
+  const naturalHeight = THREE.MathUtils.lerp(meadow, -15.5, shorelineBlend);
+  const outsideX = Math.max(Math.abs(x - STADIUM.x) - STADIUM.plateauHalfX, 0);
+  const outsideZ = Math.max(Math.abs(z - STADIUM.z) - STADIUM.plateauHalfZ, 0);
+  const stadiumBlend = 1 - smoothstep01(Math.hypot(outsideX, outsideZ) / STADIUM.terrainBlend);
+  return THREE.MathUtils.lerp(naturalHeight, STADIUM.level, stadiumBlend);
 }
 
 function distanceToPath(x, z) {
@@ -209,6 +213,8 @@ function isReservedSpot(x, z, extra = 0) {
   if (Math.hypot(x, z + 27) < 11 + extra) return true;
   if (Math.hypot(x, z - 12) < 7 + extra) return true;
   if (isInsideEstate(x, z, extra)) return true;
+  if (Math.abs(x - STADIUM.x) < STADIUM.standHalfX + 2 + extra
+    && Math.abs(z - STADIUM.z) < STADIUM.standHalfZ + 2 + extra) return true;
   return SEED_POSITIONS.some((point) => Math.hypot(x - point.x, z - point.y) < 5.5 + extra);
 }
 
@@ -430,6 +436,9 @@ function groundHeightAt(x, z) {
   let ground = terrainHeight(x, z);
   if (distanceToPath(x, z) <= TRAIL_HALF_WIDTH) {
     ground = Math.max(ground, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET);
+  }
+  if (Math.abs(x - STADIUM.x) <= STADIUM.fieldHalfX && Math.abs(z - STADIUM.z) <= STADIUM.fieldHalfZ) {
+    ground = Math.max(ground, terrainHeight(x, z) + STADIUM.pitchOffset);
   }
 
   for (const surface of estateRoadSurfaces) {
@@ -1412,6 +1421,8 @@ for (const [x, z] of [[11.8, 10.3], [29.35, -5], [29.35, 21], [42.5, 10.3]]) cre
 // A small paved bay places your car just off the porch walk, facing out toward the lane.
 addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
 playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
+const stadium = createStadium(terrainHeight);
+scene.add(stadium.group);
 
 const treeLocations = [];
 const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
@@ -2821,7 +2832,8 @@ function updateLocationAndMap() {
         ? 'Kitchen'
         : 'Living Room';
     location = `${currentHomeRoom} · House 01`;
-  } else if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
+  } else if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) location = 'Meadow Park Stadium';
+  else if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
   else if (isInsideEstate(x, z)) location = 'Meadow Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Meadow Rise';
   else if (x < -24) location = 'Fern Hollow';
@@ -2982,6 +2994,25 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.stroke();
   }
 
+  // Meadow Park's tiny pitch marker helps visitors find the live match on either map.
+  const stadiumMapX = mapX(STADIUM.x);
+  const stadiumMapY = mapY(STADIUM.z);
+  const stadiumIcon = Math.max(4.2, radius * 0.045);
+  ctx.fillStyle = '#315b48';
+  ctx.fillRect(stadiumMapX - stadiumIcon, stadiumMapY - stadiumIcon * 0.66, stadiumIcon * 2, stadiumIcon * 1.32);
+  ctx.fillStyle = '#79ad69';
+  ctx.fillRect(stadiumMapX - stadiumIcon * 0.72, stadiumMapY - stadiumIcon * 0.42, stadiumIcon * 1.44, stadiumIcon * 0.84);
+  ctx.strokeStyle = 'rgba(255,255,255,.96)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(stadiumMapX - stadiumIcon * 0.72, stadiumMapY - stadiumIcon * 0.42, stadiumIcon * 1.44, stadiumIcon * 0.84);
+  ctx.beginPath();
+  ctx.moveTo(stadiumMapX, stadiumMapY - stadiumIcon * 0.42);
+  ctx.lineTo(stadiumMapX, stadiumMapY + stadiumIcon * 0.42);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(stadiumMapX, stadiumMapY, stadiumIcon * 0.16, 0, Math.PI * 2);
+  ctx.stroke();
+
   // Beacon symbol.
   ctx.beginPath();
   ctx.arc(mapX(0), mapY(-27), Math.max(3.4, radius * 0.026), 0, Math.PI * 2);
@@ -3028,6 +3059,7 @@ function animate() {
   vehicleAccelerateTapTimer = Math.max(0, vehicleAccelerateTapTimer - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
+  updateStadiumMatch(stadium, delta);
   if (homeDoorPivot) {
     if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;
     else {
