@@ -289,6 +289,23 @@
         <button class="home-lights-button" id="home-lights-button" type="button" aria-label="Turn home lights off" hidden><kbd>L</kbd><span id="home-lights-action">LIGHTS OFF</span></button>
       </div>
 
+      <aside class="stadium-broadcast" id="stadium-broadcast" aria-label="Meadow Park live match" hidden>
+        <div class="stadium-broadcast-topline">
+          <span class="stadium-broadcast-live"><i aria-hidden="true"></i> LIVE MATCH</span>
+          <span class="stadium-broadcast-venue">MEADOW PARK · EAST STAND</span>
+          <time id="stadium-broadcast-clock" aria-label="Match clock">00:00</time>
+        </div>
+        <div class="stadium-broadcast-score" aria-live="polite" aria-atomic="true">
+          <span class="broadcast-team broadcast-team--foxes"><i aria-hidden="true">FF</i><span>Fern Foxes</span></span>
+          <strong id="stadium-broadcast-scoreline">0 – 0</strong>
+          <span class="broadcast-team broadcast-team--blues"><span>River Blues</span><i aria-hidden="true">RB</i></span>
+        </div>
+        <div class="stadium-broadcast-footer">
+          <span id="stadium-broadcast-status" role="status" aria-live="polite" aria-atomic="true">The match is underway</span>
+          <button id="stadium-watch-exit" type="button" aria-label="Return to walking around Meadow Park"><span>RETURN TO WORLD</span><kbd>E</kbd></button>
+        </div>
+      </aside>
+
       <div class="touch-controls" id="touch-controls" role="group" aria-label="Touch controls">
         <div class="joystick" id="joystick" role="group" aria-label="Movement joystick. Drag to move; keyboard movement is also available.">
           <span class="joystick-ring"></span>

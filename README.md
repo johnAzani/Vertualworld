@@ -20,12 +20,12 @@ Open the local URL Vite prints. Build a production bundle with `npm run build`.
 - House 01 has an enterable, furnished interior with a living room, kitchen, and bedroom
 - Visit **Meadow Court**, the four-home estate east of the trail. At your front door, press **E** or tap the home prompt to enter; use **E** or the prompt by the inside doorway to head back outside, and press **L** or tap the light control to toggle the lamps while indoors
 - A car is parked beside your front walk. Press **E** or tap the car prompt to enter; use **W/S** to drive, **A/D** or the touch joystick to steer, **Space** or the brake pedal to slow down, the accelerator pedal to move on touch screens, and **E** to get out
-- Follow the western path branch to **Meadow Park Stadium** and watch the Fern Foxes play the River Blues; the score and match clock update live as both teams chase and kick the ball
+- Follow the western path branch to **Meadow Park Stadium**. At the entrance, press **E** or tap **Watch Match** for a pitch-following broadcast view with a live score and clock; press **E** or tap **Return to World** to keep exploring. The teams chase and kick the ball, and the floodlights come on after dark
 - Open the in-world field phone with the phone button or **P**: check your live map, message Nia, track glow seeds, open the Meadow Court home app, and save a private field note on this device
 - On touch screens, use the joystick and jump button; tap the eye button in the top bar to change view
 - Find the three glowing seeds hidden around the island
 
-The island, trees, path, beacon, avatar, Meadow Court estate, and map are generated in Three.js—no external art assets required. The sky, moon, stars, and estate lighting follow the in-world clock.
+The island, trees, path, beacon, avatar, Meadow Court estate, Meadow Park, and maps are generated in Three.js—no external art assets required. The sky, moon, stars, estate lighting, and Meadow Park’s floodlights follow the in-world clock.
 
 ## Preview on your phone
 

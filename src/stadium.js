@@ -383,7 +383,8 @@ function addStandSeats(group, config, random) {
 
 function addFloodlights(group, config) {
   const mastMaterial = new THREE.MeshStandardMaterial({ color: 0x4a6157, roughness: 0.7, metalness: 0.28 });
-  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffedbd, emissive: 0xffd77e, emissiveIntensity: 1.0, roughness: 0.3 });
+  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffedbd, emissive: 0xffd77e, emissiveIntensity: 0.08, roughness: 0.3 });
+  const lights = [];
   for (const xSign of [-1, 1]) {
     for (const zSign of [-1, 1]) {
       const x = xSign * (config.standHalfX - 0.4);
@@ -392,6 +393,10 @@ function addFloodlights(group, config) {
       mast.position.set(x, 4.1, z);
       mast.castShadow = true;
       group.add(mast);
+      const light = new THREE.PointLight(0xffe2a8, 0, 40, 2);
+      light.position.set(x, 7.9, z);
+      group.add(light);
+      lights.push(light);
       addBox(group, 1.4, 0.3, 0.54, mastMaterial, x, 8.0, z);
       for (let lamp = 0; lamp < 5; lamp += 1) {
         const offsetX = (lamp - 2) * 0.24;
@@ -401,6 +406,7 @@ function addFloodlights(group, config) {
       }
     }
   }
+  return { lights, material: lampMaterial };
 }
 
 function createTeams(group, config) {
@@ -504,7 +510,7 @@ export function createStadium(terrainHeight) {
   addGoal(group, -1, config, postMaterial, netMaterial);
   addGoal(group, 1, config, postMaterial, netMaterial);
 
-  addFloodlights(group, config);
+  const floodlightRig = addFloodlights(group, config);
 
   const scoreboard = makeBoardTexture(true);
   const boardFrame = addBox(group, 0.42, 3.5, 10.2, concreteDark, -16.8, 6.4, 0);
@@ -552,6 +558,8 @@ export function createStadium(terrainHeight) {
     group,
     config,
     teams,
+    floodlights: floodlightRig.lights,
+    floodlightMaterial: floodlightRig.material,
     ball,
     ballShadow,
     ballVelocity: new THREE.Vector3(),

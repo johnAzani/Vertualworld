@@ -14,6 +14,11 @@ const homeInteractionMessage = document.querySelector('#home-interaction-message
 const homeInteractionAction = document.querySelector('#home-interaction-action');
 const homeInteractionButton = document.querySelector('#home-interaction-button');
 const homeLightsButton = document.querySelector('#home-lights-button');
+const stadiumBroadcast = document.querySelector('#stadium-broadcast');
+const stadiumBroadcastClock = document.querySelector('#stadium-broadcast-clock');
+const stadiumBroadcastScoreline = document.querySelector('#stadium-broadcast-scoreline');
+const stadiumBroadcastStatus = document.querySelector('#stadium-broadcast-status');
+const stadiumWatchExitButton = document.querySelector('#stadium-watch-exit');
 const homeLightsAction = document.querySelector('#home-lights-action');
 const controlsHint = document.querySelector('#controls-hint');
 const walkingControlsHint = document.querySelector('#walking-controls');
@@ -359,6 +364,8 @@ function updateDaylight() {
     fixture.light.intensity = THREE.MathUtils.lerp(fixture.dayIntensity, fixture.nightIntensity, night);
     fixture.material.emissiveIntensity = THREE.MathUtils.lerp(fixture.dayEmissive, fixture.nightEmissive, night);
   }
+  for (const floodlight of stadium.floodlights) floodlight.intensity = THREE.MathUtils.lerp(0, 210, night);
+  stadium.floodlightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.08, 1.55, night);
 }
 
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
@@ -1861,6 +1868,8 @@ let cameraYaw = 0;
 let cameraPitch = 0;
 let drivingViewYawOffset = 0;
 let isFirstPerson = false;
+let isWatchingMatch = false;
+let previousMatchCameraFov = camera.fov;
 let pointerDragging = false;
 let activeCameraPointer = null;
 let previousPointerX = 0;
@@ -1886,6 +1895,7 @@ let previousPhoneFocus = null;
 let phoneNoteSaveTimer = 0;
 
 function toggleCameraMode() {
+  if (isWatchingMatch) return;
   isFirstPerson = !isFirstPerson;
   avatarModel.visible = !isFirstPerson && !isDriving;
   playerShadow.visible = !isFirstPerson && !isDriving;
@@ -1940,6 +1950,15 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (isPhoneOpen()) return;
+  if (isWatchingMatch) {
+    if ((key === 'e' || key === 'escape') && !event.repeat) {
+      event.preventDefault();
+      exitMatchView();
+      return;
+    }
+    if (keyToMove.has(key)) event.preventDefault();
+    return;
+  }
   if (key === 'v' && !event.repeat) {
     event.preventDefault();
     toggleCameraMode();
@@ -2285,6 +2304,65 @@ function isPhoneOpen() {
   return !phonePanel.hidden && phonePanel.classList.contains('is-open');
 }
 
+function updateStadiumBroadcast() {
+  const matchSeconds = Math.floor(stadium.elapsed * 1.4);
+  const minutes = Math.floor(matchSeconds / 60);
+  const seconds = matchSeconds % 60;
+  setTextIfChanged(stadiumBroadcastClock, `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+  setTextIfChanged(stadiumBroadcastScoreline, `${stadium.score[0]} – ${stadium.score[1]}`);
+  const isGoal = stadium.goalFlash > 0;
+  stadiumBroadcast.classList.toggle('is-goal', isGoal);
+  setTextIfChanged(stadiumBroadcastStatus, isGoal
+    ? `GOAL! ${stadium.teams[stadium.lastScoringTeam].name}`
+    : 'The match is underway');
+}
+
+function enterMatchView() {
+  if (isWatchingMatch || isDriving || isInsideHome || homeTransitionPending) return;
+  isWatchingMatch = true;
+  previousMatchCameraFov = camera.fov;
+  camera.fov = 55;
+  camera.updateProjectionMatrix();
+  app.classList.add('is-watching-match');
+  stadiumBroadcast.hidden = false;
+  viewToggleButton.disabled = true;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  isGrounded = true;
+  player.position.y = groundHeightAt(player.position.x, player.position.z);
+  avatarModel.visible = false;
+  playerShadow.visible = false;
+  updateStadiumBroadcast();
+  updateLocationAndMap();
+  stadiumWatchExitButton.focus({ preventScroll: true });
+}
+
+function exitMatchView() {
+  if (!isWatchingMatch) return;
+  isWatchingMatch = false;
+  stadiumBroadcast.hidden = true;
+  stadiumBroadcast.classList.remove('is-goal');
+  app.classList.remove('is-watching-match');
+  viewToggleButton.disabled = false;
+  camera.fov = previousMatchCameraFov;
+  camera.updateProjectionMatrix();
+  avatarModel.visible = !isFirstPerson && !isDriving;
+  playerShadow.visible = !isFirstPerson && !isDriving;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  velocity.set(0, 0, 0);
+  updateLocationAndMap();
+  if (!isPhoneOpen()) canvas.focus({ preventScroll: true });
+  showToast('Back in the stands. The match keeps playing.', 2400);
+}
+
 function completeHomeEntry() {
   if (!homeHouse || isInsideHome) return;
   isInsideHome = true;
@@ -2344,12 +2422,16 @@ function beginHomeTransition(destination) {
 
 function getNearbyInteractionTarget() {
   if (isDriving) return 'exit-car';
-  if (!homeHouse) return null;
 
   if (isInsideHome) {
+    if (!homeHouse) return null;
     const local = homeWorldToLocal(player.position.x, player.position.z);
     return Math.hypot(local.x, local.z + 3.35) <= 2.1 ? 'exit-home' : null;
   }
+
+  const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
+  if (stadiumDistance <= 21) return 'watch-match';
+  if (!homeHouse) return null;
 
   const homeDistance = Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ);
   const carDistance = playerCar
@@ -2425,7 +2507,15 @@ function exitParkedCar() {
 
 function handleNearbyInteraction() {
   if (isPhoneOpen() || homeTransitionPending) return false;
+  if (isWatchingMatch) {
+    exitMatchView();
+    return true;
+  }
   const target = getNearbyInteractionTarget();
+  if (target === 'watch-match') {
+    enterMatchView();
+    return true;
+  }
   if (target === 'enter-car') {
     enterParkedCar();
     return true;
@@ -2660,6 +2750,7 @@ phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
 homeInteractionButton.addEventListener('click', handleNearbyInteraction);
 homeLightsButton.addEventListener('click', toggleHomeLighting);
+stadiumWatchExitButton.addEventListener('click', exitMatchView);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
 phoneScrim.addEventListener('click', closePhone);
@@ -2677,6 +2768,7 @@ phoneContent.addEventListener('click', (event) => {
   const actionButton = event.target.closest('[data-phone-action]');
   if (!actionButton) return;
   if (actionButton.dataset.phoneAction === 'camera-reset') {
+    if (isWatchingMatch) exitMatchView();
     cameraYaw = 0;
     cameraPitch = 0;
     document.querySelector('#phone-map-feedback').textContent = 'Camera view reset. Your location marker stays live.';
@@ -2768,6 +2860,7 @@ document.querySelector('#explore-button').addEventListener('click', () => {
   showToast('You’re here. Take the path, or make your own.', 3200);
 });
 document.querySelector('#camera-reset').addEventListener('click', () => {
+  if (isWatchingMatch) exitMatchView();
   cameraYaw = 0;
   cameraPitch = 0;
   showToast('Back to the island’s first view.', 1800);
@@ -2855,10 +2948,11 @@ function updateLocationAndMap() {
   const interactionTarget = getNearbyInteractionTarget();
   const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
-  homeInteraction.hidden = !(hasHomePrompt || hasCarPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car'].includes(interactionTarget);
+  const hasStadiumPrompt = interactionTarget === 'watch-match';
+  homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt) || isPhoneOpen();
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -2881,6 +2975,11 @@ function updateLocationAndMap() {
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isInsideHome ? 'LEAVE HOME' : 'ENTER HOME');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
+  } else if (hasStadiumPrompt) {
+    setTextIfChanged(homeInteractionEyebrow, 'MATCHDAY · MEADOW PARK');
+    setTextIfChanged(homeInteractionMessage, 'Fern Foxes vs River Blues · LIVE');
+    setTextIfChanged(homeInteractionAction, 'WATCH MATCH');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Watch the live Meadow Park football match');
   }
   drawMap();
 }
@@ -3096,6 +3195,10 @@ function animate() {
       sideInput /= movementMagnitude;
     }
   }
+  if (isWatchingMatch) {
+    forwardInput = 0;
+    sideInput = 0;
+  }
 
   const inputMagnitude = Math.hypot(forwardInput, sideInput);
   const hasMovementInput = inputMagnitude > 0.08;
@@ -3238,7 +3341,25 @@ function animate() {
   portalGlow.material.opacity = prefersReducedMotion ? 0.17 : 0.17 + Math.sin(elapsedWorldTime * 1.25) * 0.045;
   beaconLight.intensity = prefersReducedMotion ? 3.8 : 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
 
-  if (isFirstPerson) {
+  if (isWatchingMatch) {
+    const aspectRatio = window.innerWidth / Math.max(window.innerHeight, 1);
+    const portraitView = aspectRatio < 0.82;
+    const cameraDistance = portraitView ? 51 : 25;
+    const cameraHeight = portraitView ? 20.5 : 10.2;
+    const desiredCameraPosition = new THREE.Vector3(
+      STADIUM.x + cameraDistance,
+      stadium.group.position.y + cameraHeight,
+      STADIUM.z + 0.6,
+    );
+    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-3.4 * delta));
+    const lookAt = new THREE.Vector3(
+      STADIUM.x + stadium.ball.position.x * 0.14,
+      stadium.group.position.y + 1.15 + (stadium.ball.position.y - STADIUM.pitchOffset) * 0.1,
+      STADIUM.z + stadium.ball.position.z * 0.14,
+    );
+    camera.lookAt(lookAt);
+    updateStadiumBroadcast();
+  } else if (isFirstPerson) {
     const seatOffset = isDriving && playerCar
       ? new THREE.Vector3(-0.23, 0, -0.36).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerCar.group.rotation.y)
       : new THREE.Vector3();
