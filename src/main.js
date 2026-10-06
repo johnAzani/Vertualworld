@@ -3158,7 +3158,7 @@ function animate() {
   vehicleAccelerateTapTimer = Math.max(0, vehicleAccelerateTapTimer - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
-  updateStadiumMatch(stadium, delta);
+  updateStadiumMatch(stadium, delta, prefersReducedMotion);
   if (homeDoorPivot) {
     if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;
     else {

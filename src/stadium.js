@@ -20,6 +20,9 @@ const TEAM_NAMES = ['FERN FOXES', 'RIVER BLUES'];
 const TEAM_COLORS = [0xe87955, 0x477bc0];
 const CROWD_COLORS = [0xf0c46f, 0xe77e61, 0x6a9e86, 0x85a9cd, 0xd3b3d8, 0xe9e2cb];
 const BALL_RADIUS = 0.3;
+const PLAYER_SLEEVE_GEOMETRY = new THREE.CapsuleGeometry(0.071, 0.2, 2, 6);
+const PLAYER_FOREARM_GEOMETRY = new THREE.CapsuleGeometry(0.052, 0.16, 2, 6);
+const PLAYER_HAND_GEOMETRY = new THREE.SphereGeometry(0.055, 7, 5);
 
 function makeRandom(seed) {
   let state = seed >>> 0;
@@ -163,6 +166,34 @@ function createPlayer(teamIndex, index, formation, jerseyMaterials, shortsMateri
   hair.position.y = 1.42;
   group.add(hair);
 
+  const armMaterial = isKeeper ? keeperMaterials[teamIndex] : jerseyMaterials[teamIndex];
+  const arms = [];
+  const forearms = [];
+  for (const side of [-1, 1]) {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side * 0.205, 1.2, 0);
+    shoulder.rotation.z = side * 0.16;
+    const sleeve = new THREE.Mesh(PLAYER_SLEEVE_GEOMETRY, armMaterial);
+    sleeve.position.y = -0.145;
+    sleeve.castShadow = true;
+    shoulder.add(sleeve);
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.285;
+    shoulder.add(elbow);
+    const forearm = new THREE.Mesh(PLAYER_FOREARM_GEOMETRY, armMaterial);
+    forearm.position.y = -0.095;
+    forearm.castShadow = true;
+    elbow.add(forearm);
+    const hand = new THREE.Mesh(PLAYER_HAND_GEOMETRY, skinMaterial);
+    hand.position.y = -0.205;
+    hand.castShadow = true;
+    elbow.add(hand);
+    group.add(shoulder);
+    arms.push(shoulder);
+    forearms.push(elbow);
+  }
+
   const legs = [];
   for (const side of [-1, 1]) {
     const pivot = new THREE.Group();
@@ -181,6 +212,8 @@ function createPlayer(teamIndex, index, formation, jerseyMaterials, shortsMateri
 
   return {
     group,
+    arms,
+    forearms,
     legs,
     teamIndex,
     index,
@@ -217,6 +250,14 @@ function addGoal(group, direction, config, postMaterial, netMaterial) {
   for (let row = 0; row <= rows; row += 1) {
     const y = pitchOffset + (row / rows) * goalHeight;
     positions.push(-goalHalfWidth, y, backZ, goalHalfWidth, y, backZ);
+    positions.push(-goalHalfWidth, y, lineZ, -goalHalfWidth, y, backZ);
+    positions.push(goalHalfWidth, y, lineZ, goalHalfWidth, y, backZ);
+  }
+  for (let depth = 0; depth <= 4; depth += 1) {
+    const z = THREE.MathUtils.lerp(lineZ, backZ, depth / 4);
+    positions.push(-goalHalfWidth, pitchOffset, z, -goalHalfWidth, pitchOffset + goalHeight, z);
+    positions.push(goalHalfWidth, pitchOffset, z, goalHalfWidth, pitchOffset + goalHeight, z);
+    positions.push(-goalHalfWidth, pitchOffset + goalHeight, z, goalHalfWidth, pitchOffset + goalHeight, z);
   }
   const netGeometry = new THREE.BufferGeometry();
   netGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -251,6 +292,7 @@ function createPitch(group, config) {
   }
 
   const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xf5f5e8, toneMapped: false, side: THREE.DoubleSide });
+  const arcMaterial = new THREE.LineBasicMaterial({ color: 0xf5f5e8, toneMapped: false });
   const lineY = pitchOffset + 0.018;
   const lineThickness = 0.085;
   addBox(group, pitchWidth, 0.018, lineThickness, lineMaterial, 0, lineY, -fieldHalfZ);
@@ -282,7 +324,60 @@ function createPitch(group, config) {
     const penaltySpot = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.018, 12), lineMaterial);
     penaltySpot.position.set(0, lineY, direction * (fieldHalfZ - 4.0));
     group.add(penaltySpot);
+
+    const arcRadius = 3.15;
+    const arcCenterZ = direction * (fieldHalfZ - 4.0);
+    const arcStart = Math.asin(THREE.MathUtils.clamp((penaltyDepth - 4.0) / arcRadius, -1, 1));
+    const arcPoints = [];
+    for (let step = 0; step <= 32; step += 1) {
+      const angle = arcStart + ((Math.PI - arcStart * 2) * step) / 32;
+      arcPoints.push(new THREE.Vector3(
+        Math.cos(angle) * arcRadius,
+        lineY + 0.012,
+        arcCenterZ - direction * Math.sin(angle) * arcRadius,
+      ));
+    }
+    const penaltyArc = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPoints), arcMaterial);
+    group.add(penaltyArc);
   }
+
+  for (const xSign of [-1, 1]) {
+    for (const zSign of [-1, 1]) {
+      const cornerPoints = [];
+      const cornerRadius = 0.72;
+      for (let step = 0; step <= 12; step += 1) {
+        const angle = (Math.PI / 2) * (step / 12);
+        cornerPoints.push(new THREE.Vector3(
+          xSign * (fieldHalfX - Math.cos(angle) * cornerRadius),
+          lineY + 0.012,
+          zSign * (fieldHalfZ - Math.sin(angle) * cornerRadius),
+        ));
+      }
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cornerPoints), arcMaterial));
+    }
+  }
+}
+
+function addCornerFlags(group, config) {
+  const poleMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d7c9, roughness: 0.58, metalness: 0.18 });
+  const flagMaterials = TEAM_COLORS.map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.78, side: THREE.DoubleSide }));
+  const flags = [];
+  for (const xSign of [-1, 1]) {
+    for (const zSign of [-1, 1]) {
+      const x = xSign * (config.fieldHalfX - 0.1);
+      const z = zSign * (config.fieldHalfZ - 0.1);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.038, 1.25, 7), poleMaterial);
+      pole.position.set(x, config.pitchOffset + 0.625, z);
+      pole.castShadow = true;
+      group.add(pole);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.26), flagMaterials[flags.length % 2]);
+      flag.position.set(x + xSign * 0.13, config.pitchOffset + 1.08, z);
+      flag.rotation.y = Math.PI / 2;
+      group.add(flag);
+      flags.push({ mesh: flag, baseYaw: flag.rotation.y, phase: (xSign + 2) * 0.9 + zSign * 0.65 });
+    }
+  }
+  return flags;
 }
 
 function addStandSeats(group, config, random) {
@@ -337,7 +432,7 @@ function addStandSeats(group, config, random) {
     seatBacks.setMatrixAt(index, transform.matrix);
     seatBacks.setColorAt(index, color.clone().multiplyScalar(0.82));
     if (!seat.end && index % 9 === 0 && !(seat.side === 1 && Math.abs(seat.z) < 2.2)) {
-      crowdSlots.push({ x: seat.x, z: seat.z, y: seat.y, rotation: seat.rotation, side: seat.side, end: seat.end });
+      crowdSlots.push({ x: seat.x, z: seat.z, y: seat.y, rotation: seat.side > 0 ? Math.PI / 2 : -Math.PI / 2, side: seat.side, end: seat.end });
     }
   }
   seatBases.instanceMatrix.needsUpdate = true;
@@ -357,11 +452,22 @@ function addStandSeats(group, config, random) {
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 }),
     spectators.length,
   );
+  const spectatorArms = new THREE.InstancedMesh(
+    new THREE.CapsuleGeometry(0.025, 0.17, 1, 5),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
+    spectators.length * 2,
+  );
+  spectatorBody.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  spectatorHead.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  spectatorArms.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   spectatorBody.castShadow = false;
   spectatorHead.castShadow = false;
+  spectatorArms.castShadow = false;
+  const crowdMotions = [];
   for (let index = 0; index < spectators.length; index += 1) {
     const seat = spectators[index];
     const shirtColor = new THREE.Color(CROWD_COLORS[Math.floor(random() * CROWD_COLORS.length)]);
+    const skinColor = new THREE.Color(0xb97c5d + Math.floor(random() * 0x141414));
     transform.position.set(seat.x, seat.y + 0.4, seat.z);
     transform.rotation.set(0, seat.rotation, 0);
     transform.scale.set(1, 1, 1);
@@ -369,16 +475,81 @@ function addStandSeats(group, config, random) {
     spectatorBody.setMatrixAt(index, transform.matrix);
     spectatorBody.setColorAt(index, shirtColor);
     transform.position.set(seat.x, seat.y + 0.7, seat.z);
-    transform.rotation.set(0, 0, 0);
+    transform.rotation.set(0, seat.rotation, 0);
     transform.updateMatrix();
     spectatorHead.setMatrixAt(index, transform.matrix);
-    spectatorHead.setColorAt(index, new THREE.Color(0xb97c5d + Math.floor(random() * 0x141414)));
+    spectatorHead.setColorAt(index, skinColor);
+    spectatorArms.setColorAt(index * 2, shirtColor);
+    spectatorArms.setColorAt(index * 2 + 1, shirtColor);
+    crowdMotions.push({
+      ...seat,
+      phase: random() * Math.PI * 2,
+      cheer: random() < 0.62 ? 1 : 0.18,
+    });
   }
   spectatorBody.instanceMatrix.needsUpdate = true;
   spectatorHead.instanceMatrix.needsUpdate = true;
+  spectatorArms.instanceMatrix.needsUpdate = true;
   if (spectatorBody.instanceColor) spectatorBody.instanceColor.needsUpdate = true;
   if (spectatorHead.instanceColor) spectatorHead.instanceColor.needsUpdate = true;
-  group.add(spectatorBody, spectatorHead);
+  if (spectatorArms.instanceColor) spectatorArms.instanceColor.needsUpdate = true;
+  group.add(spectatorBody, spectatorHead, spectatorArms);
+  return {
+    body: spectatorBody,
+    head: spectatorHead,
+    arms: spectatorArms,
+    motions: crowdMotions,
+    transform: new THREE.Object3D(),
+  };
+}
+
+function updateCrowd(stadium, reducedMotion = false) {
+  const crowd = stadium.crowd;
+  if (!crowd.motions.length) return;
+  const up = new THREE.Vector3(0, 1, 0);
+  const localShoulder = new THREE.Vector3();
+  const shoulder = new THREE.Vector3();
+  const restDirection = new THREE.Vector3();
+  const raisedDirection = new THREE.Vector3();
+  const armDirection = new THREE.Vector3();
+  const armRotation = new THREE.Quaternion();
+  const transform = crowd.transform;
+  const cheerLevel = reducedMotion ? 0 : THREE.MathUtils.clamp(stadium.goalFlash / 1.15, 0, 1);
+
+  for (let index = 0; index < crowd.motions.length; index += 1) {
+    const spectator = crowd.motions[index];
+    const wave = reducedMotion ? 0 : Math.sin(stadium.elapsed * 10 + spectator.phase);
+    const bob = reducedMotion ? 0 : Math.sin(stadium.elapsed * 2.6 + spectator.phase) * 0.014
+      + cheerLevel * spectator.cheer * (0.035 + Math.max(0, wave) * 0.055);
+    transform.position.set(spectator.x, spectator.y + 0.4 + bob, spectator.z);
+    transform.rotation.set(0, spectator.rotation, 0);
+    transform.scale.set(1, 1, 1);
+    transform.updateMatrix();
+    crowd.body.setMatrixAt(index, transform.matrix);
+    transform.position.set(spectator.x, spectator.y + 0.7 + bob * 1.35, spectator.z);
+    transform.updateMatrix();
+    crowd.head.setMatrixAt(index, transform.matrix);
+
+    for (let arm = 0; arm < 2; arm += 1) {
+      const armSide = arm === 0 ? -1 : 1;
+      const cheerAmount = 0.025 + cheerLevel * spectator.cheer;
+      restDirection.set(armSide * 0.46, -0.89, 0);
+      raisedDirection.set(armSide * 0.42, 0.88, wave * cheerLevel * 0.18);
+      armDirection.lerpVectors(restDirection, raisedDirection, cheerAmount).normalize();
+      armDirection.applyAxisAngle(up, spectator.rotation);
+      localShoulder.set(armSide * 0.12, 0.57, 0).applyAxisAngle(up, spectator.rotation);
+      shoulder.set(spectator.x, spectator.y, spectator.z).add(localShoulder);
+      transform.position.copy(shoulder).addScaledVector(armDirection, 0.12);
+      armRotation.setFromUnitVectors(up, armDirection);
+      transform.quaternion.copy(armRotation);
+      transform.scale.set(1, 1, 1);
+      transform.updateMatrix();
+      crowd.arms.setMatrixAt(index * 2 + arm, transform.matrix);
+    }
+  }
+  crowd.body.instanceMatrix.needsUpdate = true;
+  crowd.head.instanceMatrix.needsUpdate = true;
+  crowd.arms.instanceMatrix.needsUpdate = true;
 }
 
 function addFloodlights(group, config) {
@@ -467,6 +638,7 @@ export function createStadium(terrainHeight) {
   addBox(group, 0.2, 0.05, config.fieldHalfZ * 2 + 3.25, trimMaterial, -config.fieldHalfX - 1.5, 0.035, 0, false, true);
   addBox(group, 0.2, 0.05, config.fieldHalfZ * 2 + 3.25, trimMaterial, config.fieldHalfX + 1.5, 0.035, 0, false, true);
   createPitch(group, config);
+  const cornerFlags = addCornerFlags(group, config);
 
   const tierMaterials = [
     new THREE.MeshStandardMaterial({ color: 0x99a496, roughness: 0.97, flatShading: true }),
@@ -488,7 +660,7 @@ export function createStadium(terrainHeight) {
       addBox(group, 26, 0.34, 0.82, tierMaterials[row % 2], 0, y, z);
     }
   }
-  addStandSeats(group, config, random);
+  const crowd = addStandSeats(group, config, random);
 
   for (const side of [-1, 1]) {
     addBox(group, 7.0, 0.34, 35.5, roofMaterial, side * 15.7, 4.15, 0);
@@ -558,8 +730,10 @@ export function createStadium(terrainHeight) {
     group,
     config,
     teams,
+    crowd,
     floodlights: floodlightRig.lights,
     floodlightMaterial: floodlightRig.material,
+    cornerFlags,
     ball,
     ballShadow,
     ballVelocity: new THREE.Vector3(),
@@ -579,6 +753,7 @@ export function createStadium(terrainHeight) {
   // Keep the entrance welcome graphic separate from the live score display.
   stadium.entranceCanvas = entranceBoard.canvas;
   stadium.entranceContext = entranceBoard.context;
+  updateCrowd(stadium);
   drawScoreboard(stadium);
   return stadium;
 }
@@ -606,11 +781,16 @@ function kickBall(stadium, kicker) {
   kicker.kickPulse = 0.34;
 }
 
-export function updateStadiumMatch(stadium, delta) {
+export function updateStadiumMatch(stadium, delta, reducedMotion = false) {
   const { config, ball, ballVelocity } = stadium;
   stadium.elapsed += delta;
   stadium.kickCooldown = Math.max(0, stadium.kickCooldown - delta);
   stadium.goalFlash = Math.max(0, stadium.goalFlash - delta);
+  for (const flag of stadium.cornerFlags) {
+    const wind = reducedMotion ? 0 : Math.sin(stadium.elapsed * 1.8 + flag.phase);
+    flag.mesh.rotation.y = flag.baseYaw + wind * 0.08;
+    flag.mesh.rotation.z = reducedMotion ? 0 : Math.sin(stadium.elapsed * 2.5 + flag.phase) * 0.05;
+  }
 
   ball.position.x += ballVelocity.x * delta;
   ball.position.z += ballVelocity.z * delta;
@@ -698,13 +878,19 @@ export function updateStadiumMatch(stadium, delta) {
       player.runAmount += (distance > 0.18 ? 1 : 0) - player.runAmount;
       player.runAmount = THREE.MathUtils.clamp(player.runAmount, 0, 1);
       player.kickPulse = Math.max(0, player.kickPulse - delta);
-      const gait = Math.sin(stadium.elapsed * 10.5 + player.phase) * 0.52 * player.runAmount;
+      const gait = reducedMotion ? 0 : Math.sin(stadium.elapsed * 10.5 + player.phase) * 0.52 * player.runAmount;
+      const armSwing = gait * 0.76;
       player.legs[0].rotation.x = gait + (player.kickPulse > 0 ? -player.kickPulse * 1.8 : 0);
       player.legs[1].rotation.x = -gait;
+      player.arms[0].rotation.x = -armSwing + (player.kickPulse > 0 ? 0.22 : 0);
+      player.arms[1].rotation.x = armSwing - (player.kickPulse > 0 ? 0.14 : 0);
+      player.forearms[0].rotation.x = -0.3 - armSwing * 0.18;
+      player.forearms[1].rotation.x = -0.3 + armSwing * 0.18;
     }
   }
 
   if (stadium.kickCooldown <= 0 && chaser && closestDistanceSq < 1.55 * 1.55) kickBall(stadium, chaser);
+  updateCrowd(stadium, reducedMotion);
   stadium.scoreboardAccumulator += delta;
   if (stadium.scoreboardAccumulator >= 0.24) {
     stadium.scoreboardAccumulator = 0;
