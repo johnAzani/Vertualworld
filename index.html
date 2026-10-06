@@ -173,7 +173,7 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">05</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">07</span></div>
                 <div class="phone-app-grid">
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
@@ -195,6 +195,14 @@
                     <span class="phone-app-icon app-icon-home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 10.2 8.5-7 8.5 7v9.2a1.1 1.1 0 0 1-1.1 1.1H4.6a1.1 1.1 0 0 1-1.1-1.1v-9.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 20.2v-6.1h5.6v6.1M7.2 10.6h.01M16.8 10.6h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
                     <span>My home</span>
                   </button>
+                  <button class="phone-app-button" type="button" data-phone-app="cafe" aria-label="Open the Fern and Cup cafe menu">
+                    <span class="phone-app-icon app-icon-cafe"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 8h11v7.2A4.8 4.8 0 0 1 11.2 20h-1.4A4.8 4.8 0 0 1 5 15.2V8ZM16 10h1.4a2.6 2.6 0 1 1 0 5.2H16M7 4.5c0 1 .9 1 0 2M11 4.5c0 1 .9 1 0 2M15 4.5c0 1 .9 1 0 2" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Café</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="market" aria-label="Open the Meadow Market grocery shop">
+                    <span class="phone-app-icon app-icon-market"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9h16l-1.4 11H5.4L4 9ZM3 9l2.2-5h13.6L21 9M8 9V4M16 9V4M9 20v-6h6v6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Market</span>
+                  </button>
                 </div>
 
                 <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
@@ -205,33 +213,47 @@
                 <p class="phone-local-note"><span aria-hidden="true">✦</span> Your notes stay on this device.</p>
               </section>
 
-              <section class="phone-page" data-phone-page="property" aria-label="Your home at Meadow Court" hidden>
+              <section class="phone-page" data-phone-page="property" aria-label="Meadow Court homes and rental leases" hidden>
                 <div class="property-overview">
-                  <div class="property-stamp"><strong>01</strong><span>HOUSE</span></div>
-                  <div class="property-overview-copy"><span class="phone-card-label">YOUR HOME</span><h3>Meadow Court</h3><p>House 01 · west lane</p></div>
+                  <div class="property-stamp"><strong id="property-house-number">01</strong><span>HOUSE</span></div>
+                  <div class="property-overview-copy"><span class="phone-card-label" id="property-home-label">YOUR HOME</span><h3 id="property-home-title">Meadow Court</h3><p id="property-home-subtitle">House 01 · west lane</p></div>
                 </div>
-                <div class="property-status"><i></i><span>FURNISHED INTERIOR · READY TO EXPLORE</span></div>
-                <div class="property-detail"><span>INSIDE HOUSE 01</span><strong>Living room · full kitchen · bedroom</strong></div>
-                <div class="estate-roster">
-                  <div class="estate-roster-heading"><span>THE FOUR-HOME ESTATE</span><strong>4 HOMES</strong></div>
-                  <div class="estate-home-row estate-home-row--owned"><span class="estate-home-number">01</span><span><strong>Your home</strong><small>Front porch · green mailbox</small></span><em>YOURS</em></div>
-                  <div class="estate-home-row"><span class="estate-home-number">02</span><span><strong>House 02</strong><small>Neighbour’s cottage</small></span></div>
-                  <div class="estate-home-row"><span class="estate-home-number">03</span><span><strong>House 03</strong><small>Neighbour’s cottage</small></span></div>
-                  <div class="estate-home-row"><span class="estate-home-number">04</span><span><strong>House 04</strong><small>Neighbour’s cottage</small></span></div>
-                </div>
+                <div class="economy-wallet"><span>YOUR ISLAND CREDITS</span><strong id="wallet-balance">1,200 IC</strong></div>
+                <div class="property-status" id="residence-status"><i></i><span>HOUSE 01 · OWNED HOME</span></div>
+                <div class="property-detail"><span id="property-interior-label">INSIDE HOUSE 01</span><strong id="property-interior-description">Living room · full kitchen · bedroom</strong></div>
+                <div class="estate-roster" id="estate-roster" aria-live="polite"></div>
+                <div id="lease-management" aria-live="polite"></div>
                 <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
-                <p class="property-help">Press E at your front door—or tap its prompt—to step inside. Use E by the doorway to head back out, and press L (or tap the light control) to switch the lamps.</p>
+                <p class="property-help">Rent from a local NPC landlord with in-game credits. Move-in requires the first month’s rent and a refundable deposit; each new 30-day month is billed locally on this device. Press E at your current home’s front door to enter, and use L for the lights.</p>
                 <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Meadow Court on the map <span aria-hidden="true">↗</span></button>
+              </section>
+
+              <section class="phone-page" data-phone-page="cafe" aria-label="Fern and Cup cafe menu" hidden>
+                <div class="shop-heading shop-heading--cafe"><span class="shop-avatar" aria-hidden="true">F</span><span><span class="phone-card-label">MEADOW COURT · CAFÉ</span><strong>Fern &amp; Cup</strong><small>Fresh food for the road.</small></span></div>
+                <div class="economy-wallet"><span>YOUR ISLAND CREDITS</span><strong id="cafe-wallet-balance">1,200 IC</strong></div>
+                <p class="shop-proximity" id="cafe-proximity" aria-live="polite">Visit the café to shop.</p>
+                <div class="shop-items" id="cafe-shop-items"></div>
+                <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="cafe-inventory">Nothing yet</strong></div>
+                <p class="phone-help shop-help">Tap an item to buy one. Purchases use in-game credits and stay saved on this device.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="market" aria-label="Meadow Market groceries" hidden>
+                <div class="shop-heading shop-heading--market"><span class="shop-avatar" aria-hidden="true">M</span><span><span class="phone-card-label">MEADOW COURT · GROCERIES</span><strong>Meadow Market</strong><small>Everyday goods from local growers.</small></span></div>
+                <div class="economy-wallet"><span>YOUR ISLAND CREDITS</span><strong id="market-wallet-balance">1,200 IC</strong></div>
+                <p class="shop-proximity" id="market-proximity" aria-live="polite">Visit the market to shop.</p>
+                <div class="shop-items" id="market-shop-items"></div>
+                <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
+                <p class="phone-help shop-help">Tap an item to buy one. Purchases use in-game credits and stay saved on this device.</p>
               </section>
 
               <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>
                 <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
-                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon">Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon.</canvas></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map showing your position, the connected street grid and bus route, rail and bus terminals, Meadow Court homes, Fern and Cup cafe, Meadow Market, stadium, glow seeds, and beacon">Map showing your position, the connected street grid and bus route, rail and bus terminals, Meadow Court homes, Fern and Cup cafe, Meadow Market, stadium, glow seeds, and beacon.</canvas></div>
                 <div class="phone-map-details">
                   <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Meadow Rise</strong></div>
                   <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
                 </div>
-                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Island Line</span><span><i class="legend-bus"></i>Bus terminal</span></div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Island Line</span><span><i class="legend-bus"></i>Bus terminal</span><span><i class="legend-shop"></i>Café &amp; market</span></div>
                 <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
                 <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">The map shows the connected street grid and bus route. Gold circles mark rail terminals; orange squares mark bus terminals at all three hubs.</p>
               </section>

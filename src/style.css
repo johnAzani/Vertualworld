@@ -463,6 +463,8 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .app-icon-journal { color: #897548; background: linear-gradient(145deg,#f6edc8,#e5d59d); }
 .app-icon-quests { color: #a87831; background: linear-gradient(145deg,#f7e4a7,#edc56f); }
 .app-icon-home { color: #3f785d; background: linear-gradient(145deg,#d9efd5,#a8cfaf); }
+.app-icon-cafe { color: #8f6042; background: linear-gradient(145deg,#f6dcc0,#e7b789); }
+.app-icon-market { color: #508063; background: linear-gradient(145deg,#e4f1cf,#bad39d); }
 .phone-app-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border: 1.5px solid #f7f7ed; border-radius: 50%; background: #e97861; }
 .phone-message-preview { width: 100%; min-height: 63px; display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(66,100,76,.1); border-radius: 15px; color: #4f6859; background: rgba(255,255,255,.62); text-align: left; cursor: pointer; transition: background .18s, transform .18s; }
 .phone-message-preview:hover { background: #fff; transform: translateY(-1px); }
@@ -485,7 +487,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .phone-map-legend { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 6px 12px; margin: 10px 2px 12px; color: #7c8e80; font-size: 7px; }
 .phone-map-legend span { display: flex; align-items: center; gap: 4px; }
 .phone-map-legend i { width: 7px; height: 7px; display: inline-block; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; }
-.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }.legend-home { border-radius: 2px !important; background: #397b63; }.legend-stadium { border-radius: 2px !important; background: #5b9d65; }.legend-road { background: #68706a; }.legend-rail { background: #d4b45f; }.legend-bus { border-radius: 2px !important; background: #d9895c; }
+.legend-you { background: #e98665; }.legend-seed { background: #f0b856; }.legend-beacon { background: #77b8a0; }.legend-home { border-radius: 2px !important; background: #397b63; }.legend-stadium { border-radius: 2px !important; background: #5b9d65; }.legend-road { background: #68706a; }.legend-rail { background: #d4b45f; }.legend-bus { border-radius: 2px !important; background: #d9895c; }.legend-shop { background: #bd8052; }
 .phone-primary-button { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 13px; border: 0; border-radius: 12px; color: #f5f5e8; background: #3c8068; box-shadow: 0 5px 12px rgba(54,115,83,.14); cursor: pointer; font-size: 9px; font-weight: 600; transition: background .18s, transform .18s; }
 .phone-primary-button:hover { transform: translateY(-1px); background: #326f5b; }
 .phone-primary-button span { font-size: 13px; }
@@ -589,7 +591,55 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .property-detail { display: flex; flex-direction: column; gap: 4px; margin: 11px 2px 0; }
 .property-detail span { color: #93a094; font-size: 6px; font-weight: 700; letter-spacing: .13em; }
 .property-detail strong { color: #657c6d; font-size: 8px; line-height: 1.35; }
-.property-help { margin: 10px 2px; color: #89998b; font-size: 7px; line-height: 1.5; }
+.property-help, .phone-help { margin: 10px 2px; color: #89998b; font-size: 7px; line-height: 1.5; }
+.economy-wallet { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0; padding: 8px 11px; border: 1px solid rgba(61,105,77,.12); border-radius: 12px; background: linear-gradient(110deg,rgba(255,255,255,.72),rgba(232,242,220,.74)); }
+.economy-wallet span { color: #829483; font-size: 7px; font-weight: 700; letter-spacing: .11em; }
+.economy-wallet strong { color: #3d7556; font-size: 12px; font-variant-numeric: tabular-nums; }
+.estate-home-row--rented { background: rgba(233,242,216,.72); }
+.estate-home-row--rented .estate-home-number { color: #f8f3df; background: #648653; }
+.estate-home-row--listing .estate-home-number { color: #8f6c3c; background: #f1e7c9; }
+.estate-home-row em.estate-available { color: #899883; }
+.estate-home-row em.estate-rented { color: #5b895f; }
+.rental-lease-card { margin-top: 9px; padding: 10px; border: 1px solid rgba(74,120,81,.17); border-radius: 13px; background: rgba(233,243,222,.72); }
+.rental-lease-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #456c50; font-size: 8px; font-weight: 700; }
+.rental-lease-heading small { color: #82927f; font-size: 6px; font-weight: 700; letter-spacing: .1em; }
+.rental-lease-card p { margin: 6px 0 8px; color: #7b8a79; font-size: 7px; line-height: 1.5; }
+.rental-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rental-action-button, .shop-buy-button { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; border: 0; border-radius: 9px; color: #fbf8e9; background: #478164; cursor: pointer; font-size: 7px; font-weight: 700; transition: background .16s, transform .16s, opacity .16s; }
+.rental-action-button:hover, .shop-buy-button:hover:not(:disabled) { transform: translateY(-1px); background: #356d53; }
+.rental-action-button--quiet { border: 1px solid rgba(70,112,79,.18); color: #637660; background: rgba(255,255,255,.62); }
+.rental-action-button--quiet:hover { background: #fff; }
+.rental-action-button:disabled, .shop-buy-button:disabled { opacity: .48; cursor: not-allowed; }
+.rental-listing { padding: 2px 8px 8px; border-top: 1px solid rgba(60,100,72,.07); }
+.rental-listing .estate-home-row { padding-right: 1px; padding-left: 1px; border-bottom: 0; }
+.rental-listing-details { display: flex; flex-direction: column; gap: 3px; padding-left: 34px; color: #809080; font-size: 6px; }
+.rental-listing-details strong { color: #59735e; font-size: 7px; }
+.rental-listing-owner { display: inline-flex; align-items: center; gap: 5px; color: #829081; font-size: 6px; }
+.rental-listing-owner i { width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.9); border-radius: 50%; color: #fff8e8; background: #72967b; font-size: 7px; font-style: normal; font-weight: 700; }
+.rental-listing-button { width: calc(100% - 34px); min-height: 27px; margin: 5px 0 0 34px; padding: 4px 8px; }
+.shop-heading { min-height: 65px; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(255,255,255,.82); border-radius: 15px; background: linear-gradient(125deg,#f4e2ce,#e8d9c2); }
+.shop-heading--market { background: linear-gradient(125deg,#e6edd3,#d5e3cb); }
+.shop-avatar { width: 39px; height: 39px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.8); border-radius: 12px; color: #fff7e7; background: #9a6a49; font: 20px/1 'DM Serif Display', Georgia, serif; box-shadow: 0 3px 8px rgba(64,75,52,.1); }
+.shop-heading--market .shop-avatar { background: #5e8967; }
+.shop-heading > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.shop-heading .phone-card-label { color: #8e8d75; font-size: 6px; font-weight: 700; letter-spacing: .12em; }
+.shop-heading strong { color: #4a614d; font: 400 17px/1 'DM Serif Display', Georgia, serif; }
+.shop-heading small { color: #879184; font-size: 7px; }
+.shop-proximity { min-height: 24px; margin: 5px 2px; color: #849281; font-size: 7px; line-height: 1.45; }
+.shop-proximity.is-near { color: #588566; }
+.shop-proximity.is-away { color: #a17c51; }
+.shop-items { display: flex; flex-direction: column; gap: 6px; }
+.shop-item { min-height: 53px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; border: 1px solid rgba(66,105,77,.1); border-radius: 12px; background: rgba(255,255,255,.64); }
+.shop-item-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.shop-item-copy strong { overflow: hidden; color: #4e6953; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.shop-item-copy small { overflow: hidden; color: #909d8c; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
+.shop-item-copy em { color: #ae9361; font-size: 6px; font-style: normal; font-weight: 700; letter-spacing: .06em; }
+.shop-buy-button { min-width: 64px; flex-direction: column; gap: 2px; font-size: 6px; }
+.shop-buy-button strong { font-size: 8px; }
+.shop-inventory { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; padding: 9px 10px; border: 1px solid rgba(66,105,77,.1); border-radius: 11px; background: rgba(236,242,223,.65); }
+.shop-inventory span { color: #8b9a87; font-size: 6px; font-weight: 700; letter-spacing: .12em; }
+.shop-inventory strong { color: #5d765f; font-size: 7px; line-height: 1.5; }
+.shop-help { margin-top: 7px; }
 .phone-feedback { margin: 8px 2px 0; color: #89998a; font-size: 7px; line-height: 1.4; text-align: center; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 .phone-message-composer { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 4px 5px 4px 11px; border: 1px solid rgba(65,110,81,.17); border-radius: 14px; background: rgba(255,255,255,.74); box-shadow: inset 0 1px 2px rgba(41,69,48,.03); }

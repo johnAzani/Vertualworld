@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
 import {
   createTransportNetwork,
@@ -15,6 +16,19 @@ import {
   updateTransitLighting,
   updateTransportNetwork,
 } from './transport.js';
+import {
+  RENTAL_LISTINGS,
+  RENTAL_MONTH_MS,
+  SHOP_CATALOG,
+  advanceRentalBilling,
+  endRentalLease,
+  getProduct,
+  loadEconomy,
+  payRentalRent,
+  purchaseProduct,
+  saveEconomy,
+  signRentalLease,
+} from './economy.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -71,6 +85,24 @@ const phoneNoteCount = document.querySelector('#phone-note-count');
 const phoneTimeElement = document.querySelector('#phone-time');
 const phoneHomeTime = document.querySelector('#phone-home-time');
 const worldPeriodElement = document.querySelector('#world-period');
+const walletBalanceElement = document.querySelector('#wallet-balance');
+const cafeWalletBalanceElement = document.querySelector('#cafe-wallet-balance');
+const marketWalletBalanceElement = document.querySelector('#market-wallet-balance');
+const estateRosterElement = document.querySelector('#estate-roster');
+const leaseManagementElement = document.querySelector('#lease-management');
+const propertyHouseNumberElement = document.querySelector('#property-house-number');
+const propertyHomeLabelElement = document.querySelector('#property-home-label');
+const propertyHomeTitleElement = document.querySelector('#property-home-title');
+const propertyHomeSubtitleElement = document.querySelector('#property-home-subtitle');
+const propertyInteriorLabelElement = document.querySelector('#property-interior-label');
+const propertyInteriorDescriptionElement = document.querySelector('#property-interior-description');
+const residenceStatusElement = document.querySelector('#residence-status');
+const cafeShopItemsElement = document.querySelector('#cafe-shop-items');
+const marketShopItemsElement = document.querySelector('#market-shop-items');
+const cafeProximityElement = document.querySelector('#cafe-proximity');
+const marketProximityElement = document.querySelector('#market-proximity');
+const cafeInventoryElement = document.querySelector('#cafe-inventory');
+const marketInventoryElement = document.querySelector('#market-inventory');
 const reducedMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 let prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
 reducedMotionQuery?.addEventListener?.('change', (event) => {
@@ -201,6 +233,7 @@ const JUMP_SPEED = 6.5;
 const JUMP_BUFFER_SECONDS = 0.16;
 const COYOTE_TIME_SECONDS = 0.12;
 const estateHouses = [];
+const commerceVenues = [];
 const estateRoadSurfaces = [];
 const exteriorNightLights = [];
 const worldObstacleColliders = [];
@@ -216,16 +249,55 @@ let vehicleAccelerateTapTimer = 0;
 const vehicleTouchInput = { accelerate: false, brake: false };
 const homeFurnitureColliders = [];
 const homeLightFixtures = [];
+let homeLightFixtureSequence = 0;
 const HOME_FLOOR_TOP = 0.38;
 const HOME_DOOR_OPENING_HALF_WIDTH = 0.8;
 const HOME_INTERIOR_BOUNDS = 3.92;
 let homeHouse = null;
+let activeResidence = null;
 let homeDoorPivot = null;
 let homeDoorTargetAngle = 0;
 let homeLightSwitchIndicator = null;
 let homeTransitionPending = null;
 let homeLightingEnabled = true;
 let isInsideHome = false;
+
+function getCurrentResidence() {
+  return activeResidence || homeHouse;
+}
+
+function residenceLocalToWorld(residence, localX, localZ) {
+  const cosYaw = Math.cos(residence.facing);
+  const sinYaw = Math.sin(residence.facing);
+  return {
+    x: residence.x + localX * cosYaw + localZ * sinYaw,
+    z: residence.z - localX * sinYaw + localZ * cosYaw,
+  };
+}
+
+function residenceWorldToLocal(residence, x, z) {
+  const offsetX = x - residence.x;
+  const offsetZ = z - residence.z;
+  const cosYaw = Math.cos(residence.facing);
+  const sinYaw = Math.sin(residence.facing);
+  return { x: offsetX * cosYaw - offsetZ * sinYaw, z: offsetX * sinYaw + offsetZ * cosYaw };
+}
+
+function placePlayerOutsideResidence(residence) {
+  if (!residence) return;
+  const outside = residenceLocalToWorld(residence, 0, -6.0);
+  player.position.set(outside.x, groundHeightAt(outside.x, outside.z), outside.z);
+  player.rotation.y = residence.facing;
+  cameraYaw = residence.facing + Math.PI;
+  cameraPitch = 0;
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  isGrounded = true;
+  isInsideHome = false;
+  velocity.set(0, 0, 0);
+  avatarModel.visible = !isFirstPerson && !isDriving && !isRidingTransit;
+  playerShadow.visible = !isFirstPerson && !isDriving && !isRidingTransit;
+}
 
 function isInsideEstate(x, z, margin = 0) {
   return x >= ESTATE_BOUNDS.minX - margin
@@ -480,13 +552,15 @@ function groundHeightAt(x, z) {
   const transportSurface = getTransportSurfaceHeight(transitNetwork, x, z);
   if (transportSurface !== null) ground = Math.max(ground, transportSurface);
 
-  if (homeHouse && !isInsideHome) {
-    const local = homeWorldToLocal(x, z);
-    const baseY = homeHouse.group.position.y;
-    const onPorch = Math.abs(local.x) <= 1.85 && local.z >= -5.66 && local.z <= -4.1;
-    const onStep = Math.abs(local.x) <= 1.25 && local.z >= -6.12 && local.z <= -5.55;
-    if (onPorch) ground = Math.max(ground, baseY + 0.44);
-    else if (onStep) ground = Math.max(ground, baseY + 0.26);
+  if (!isInsideHome) {
+    for (const porchHouse of estateHouses) {
+      const local = residenceWorldToLocal(porchHouse, x, z);
+      const baseY = porchHouse.group.position.y;
+      const onPorch = Math.abs(local.x) <= 1.85 && local.z >= -5.66 && local.z <= -4.1;
+      const onStep = Math.abs(local.x) <= 1.25 && local.z >= -6.12 && local.z <= -5.55;
+      if (onPorch) ground = Math.max(ground, baseY + 0.44);
+      else if (onStep) ground = Math.max(ground, baseY + 0.26);
+    }
   }
 
   return ground + PLAYER_FOOT_OFFSET;
@@ -776,6 +850,11 @@ function addHomeCollider(x, z, halfX, halfZ) {
 }
 
 function registerHomeLightFixture(light, bulb = null) {
+  const fixtureId = homeLightFixtureSequence;
+  homeLightFixtureSequence += 1;
+  light.userData.homeLightFixtureId = fixtureId;
+  light.userData.homeLightIntensity = light.intensity;
+  if (bulb) bulb.userData.homeLightBulbId = fixtureId;
   homeLightFixtures.push({ light, bulb, intensity: light.intensity });
   light.intensity = homeLightingEnabled ? light.intensity : 0;
   if (bulb) bulb.visible = homeLightingEnabled;
@@ -838,6 +917,7 @@ function createHomeInterior(houseGroup) {
   const switchIndicatorMaterial = new THREE.MeshStandardMaterial({ color: 0x709276, emissive: 0x304b33, emissiveIntensity: 0.35, roughness: 0.45 });
   addHomeBox(interior, [0.14, 0.23, 0.065], [0.99, 1.38, -3.82], switchPlateMaterial, false, false);
   homeLightSwitchIndicator = addHomeBox(interior, [0.055, 0.09, 0.025], [0.99, 1.38, -3.775], switchIndicatorMaterial, false, false);
+  homeLightSwitchIndicator.userData.isHomeLightSwitch = true;
 
   addHomeBox(interior, [3.35, 0.035, 2.8], [1.95, 0.415, -1.95], rugMaterial, false, true);
   addHomeBox(interior, [3.2, 0.018, 0.055], [1.95, 0.437, -3.31], rugTrimMaterial, false, false);
@@ -1039,6 +1119,7 @@ function createEstateWindow(group, x, y, z, side = 'front') {
 
 function createEstateHouse({ number, x, z, facing, isHome = false }) {
   const group = new THREE.Group();
+  let interiorGroup = null;
   const wallMaterial = new THREE.MeshStandardMaterial({ color: estateWallColors[number - 1], roughness: 0.9 });
   const frontZ = -houseDepth / 2;
   const wallThickness = 0.18;
@@ -1263,7 +1344,7 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
     dayEmissive: 0.05,
     nightEmissive: 1.1,
   });
-  if (isHome) createHomeInterior(group);
+  if (isHome) interiorGroup = createHomeInterior(group);
 
   group.position.set(x, terrainHeight(x, z), z);
   group.rotation.y = facing;
@@ -1279,9 +1360,78 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
     doorZ: z + doorOffset.z,
     isHome,
     group,
+    doorPivot,
+    interiorGroup,
   };
   estateHouses.push(house);
-  if (isHome) homeHouse = house;
+  if (isHome) {
+    homeHouse = house;
+    activeResidence = house;
+  }
+}
+
+function prepareRentalInteriors() {
+  if (!homeHouse?.interiorGroup) return;
+  const interiorTemplate = homeHouse.interiorGroup;
+  for (const house of estateHouses) {
+    if (house.isHome) continue;
+    const interior = interiorTemplate.clone(true);
+    interior.name = `House ${String(house.number).padStart(2, '0')} furnished rental interior`;
+    interior.position.copy(house.group.position);
+    interior.rotation.y = house.facing;
+    interior.visible = false;
+    scene.add(interior);
+    house.interiorGroup = interior;
+  }
+}
+
+function refreshActiveHomeLights() {
+  homeLightFixtures.length = 0;
+  homeLightSwitchIndicator = null;
+  const interior = getCurrentResidence()?.interiorGroup;
+  if (!interior) return;
+  const bulbsByFixture = new Map();
+  interior.traverse((object) => {
+    const bulbId = object.userData?.homeLightBulbId;
+    if (Number.isInteger(bulbId)) bulbsByFixture.set(bulbId, object);
+    if (object.userData?.isHomeLightSwitch) homeLightSwitchIndicator = object;
+  });
+  interior.traverse((object) => {
+    const fixtureId = object.userData?.homeLightFixtureId;
+    const intensity = object.userData?.homeLightIntensity;
+    if (!Number.isInteger(fixtureId) || !Number.isFinite(intensity)) return;
+    const bulb = bulbsByFixture.get(fixtureId) || null;
+    homeLightFixtures.push({ light: object, bulb, intensity });
+    object.intensity = homeLightingEnabled ? intensity : 0;
+    if (bulb) bulb.visible = homeLightingEnabled;
+  });
+  if (homeLightSwitchIndicator) {
+    homeLightSwitchIndicator.material.color.setHex(homeLightingEnabled ? 0x709276 : 0x918e7e);
+    homeLightSwitchIndicator.material.emissive.setHex(homeLightingEnabled ? 0x304b33 : 0x000000);
+    homeLightSwitchIndicator.material.emissiveIntensity = homeLightingEnabled ? 0.35 : 0;
+  }
+}
+
+function setActiveResidence(residence) {
+  activeResidence = residence || homeHouse;
+  homeDoorPivot = activeResidence?.doorPivot || null;
+  homeDoorTargetAngle = 0;
+  if (homeHouse?.interiorGroup) homeHouse.interiorGroup.visible = activeResidence === homeHouse;
+  for (const house of estateHouses) {
+    if (!house.isHome && house.interiorGroup && house !== activeResidence) house.interiorGroup.visible = false;
+  }
+  refreshActiveHomeLights();
+}
+
+function setResidenceInteriorVisible(residence, isVisible) {
+  if (!residence) return;
+  if (residence.isHome) {
+    residence.group.visible = true;
+    if (residence.interiorGroup) residence.interiorGroup.visible = true;
+    return;
+  }
+  residence.group.visible = !isVisible;
+  if (residence.interiorGroup) residence.interiorGroup.visible = isVisible;
 }
 
 function createEstateLamp(x, z) {
@@ -1311,6 +1461,132 @@ function createEstateLamp(x, z) {
   });
   group.position.set(x, terrainHeight(x, z), z);
   scene.add(group);
+}
+
+function batchStaticVenueMeshes(group) {
+  const batches = new Map();
+  for (const mesh of group.children) {
+    if (!mesh.isMesh || Array.isArray(mesh.material)) continue;
+    const key = `${mesh.material.id}:${Number(mesh.castShadow)}:${Number(mesh.receiveShadow)}`;
+    if (!batches.has(key)) batches.set(key, { material: mesh.material, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, meshes: [] });
+    batches.get(key).meshes.push(mesh);
+  }
+
+  for (const batch of batches.values()) {
+    if (batch.meshes.length < 2) continue;
+    const geometries = [];
+    let mergedGeometry;
+    try {
+      for (const mesh of batch.meshes) {
+        mesh.updateMatrix();
+        const geometry = mesh.geometry.clone();
+        geometry.clearGroups();
+        geometry.applyMatrix4(mesh.matrix);
+        geometries.push(geometry);
+      }
+      mergedGeometry = mergeGeometries(geometries, false);
+    } catch {
+      for (const geometry of geometries) geometry.dispose();
+      continue;
+    }
+    if (!mergedGeometry) {
+      for (const geometry of geometries) geometry.dispose();
+      continue;
+    }
+    mergedGeometry.computeBoundingSphere();
+    const mergedMesh = new THREE.Mesh(mergedGeometry, batch.material);
+    mergedMesh.castShadow = batch.castShadow;
+    mergedMesh.receiveShadow = batch.receiveShadow;
+    mergedMesh.name = 'Batched static shop geometry';
+    for (const mesh of batch.meshes) {
+      group.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    group.add(mergedMesh);
+    for (const geometry of geometries) geometry.dispose();
+  }
+}
+
+function makeCommerceSignTexture(label, backgroundColor, foregroundColor) {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 128;
+  const context = signCanvas.getContext('2d');
+  context.fillStyle = backgroundColor;
+  context.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  context.strokeStyle = 'rgba(255, 248, 220, .78)';
+  context.lineWidth = 7;
+  context.strokeRect(8, 8, signCanvas.width - 16, signCanvas.height - 16);
+  context.fillStyle = foregroundColor;
+  context.font = '700 46px system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label, signCanvas.width / 2, signCanvas.height / 2 + 2, 460);
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function createCommerceVenue({ id, name, sign, x, z, facing, wallColor, roofColor, awningColor }) {
+  const width = 8.2;
+  const depth = 6.4;
+  const frontZ = -depth / 2;
+  const group = new THREE.Group();
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.88 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.82 });
+  const awningMaterial = new THREE.MeshStandardMaterial({ color: awningColor, roughness: 0.8 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xf1e5c9, roughness: 0.7 });
+  const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x76533f, roughness: 0.72 });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x9bcac3, roughness: 0.22, metalness: 0.04, transparent: true, opacity: 0.72, side: THREE.DoubleSide });
+  const signMaterial = new THREE.MeshBasicMaterial({ map: makeCommerceSignTexture(sign, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8') });
+  const addBox = (dimensions, position, material, castShadow = true, receiveShadow = true) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
+    mesh.position.set(...position);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    group.add(mesh);
+    return mesh;
+  };
+
+  addBox([width, 4.05, depth], [0, 2.025, 0], wallMaterial);
+  const roofRise = 1.25;
+  const roofSlope = Math.hypot(width / 2, roofRise);
+  const roofAngle = Math.atan2(roofRise, width / 2);
+  const leftRoof = addBox([roofSlope + 0.32, 0.28, depth + 0.38], [-width / 4, 4.05 + roofRise / 2, 0], roofMaterial);
+  leftRoof.rotation.z = roofAngle;
+  const rightRoof = addBox([roofSlope + 0.32, 0.28, depth + 0.38], [width / 4, 4.05 + roofRise / 2, 0], roofMaterial);
+  rightRoof.rotation.z = -roofAngle;
+  addBox([0.24, 0.2, depth + 0.45], [0, 5.32, 0], trimMaterial);
+  addBox([1.38, 2.35, 0.12], [0, 1.25, frontZ - 0.09], trimMaterial, false, false);
+  addBox([1.16, 2.15, 0.13], [0, 1.22, frontZ - 0.17], doorMaterial, true, false);
+  for (const side of [-1, 1]) {
+    addBox([1.82, 1.42, 0.08], [side * 2.42, 2.18, frontZ - 0.09], trimMaterial, false, false);
+    addBox([1.58, 1.18, 0.09], [side * 2.42, 2.18, frontZ - 0.15], glassMaterial, false, false);
+    addBox([1.96, 0.12, 0.28], [side * 2.42, 1.42, frontZ - 0.13], trimMaterial, false, false);
+  }
+  addBox([7.35, 0.22, 0.86], [0, 3.18, frontZ - 0.42], awningMaterial);
+  const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.82), signMaterial);
+  signBoard.position.set(0, 3.76, frontZ - 0.135);
+  signBoard.rotation.y = Math.PI;
+  signBoard.receiveShadow = false;
+  group.add(signBoard);
+  const doorKnob = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xd8bb78, metalness: 0.5, roughness: 0.36 }),
+  );
+  doorKnob.position.set(0.39, 1.22, frontZ - 0.25);
+  group.add(doorKnob);
+  batchStaticVenueMeshes(group);
+
+  group.position.set(x, terrainHeight(x, z), z);
+  group.rotation.y = facing;
+  scene.add(group);
+  const doorPosition = residenceLocalToWorld({ x, z, facing }, 0, frontZ - 0.58);
+  const venue = { id, name, x, z, facing, group, interactionX: doorPosition.x, interactionZ: doorPosition.z };
+  commerceVenues.push(venue);
+  worldObstacleColliders.push({ x, z, radius: 4.2, height: 5.7 });
+  return venue;
 }
 
 function createParkedCar(x, z, heading) {
@@ -1448,6 +1724,14 @@ for (const [number, x, z, facing] of [
 ]) {
   createEstateHouse({ number, x, z, facing, isHome: number === 1 });
 }
+prepareRentalInteriors();
+const savedRentalHouse = economy.lease
+  ? estateHouses.find((house) => house.number === economy.lease.houseNumber)
+  : null;
+if (economy.lease && !savedRentalHouse) economy.lease = null;
+setActiveResidence(savedRentalHouse || homeHouse);
+createCommerceVenue({ id: 'cafe', name: 'Fern & Cup', sign: 'FERN & CUP', x: 29, z: 33, facing: -Math.PI / 2, wallColor: 0xe8dcc8, roofColor: 0x526f5d, awningColor: 0x986849 });
+createCommerceVenue({ id: 'market', name: 'Meadow Market', sign: 'MEADOW MARKET', x: 55, z: 33, facing: Math.PI / 2, wallColor: 0xdfe2c6, roofColor: 0x647450, awningColor: 0x5d8665 });
 // Keep the street lamps on the verges so they don't stand in the middle of the walking and driving lanes.
 for (const [x, z] of [[11.8, 10.3], [29.35, -5], [29.35, 21], [42.5, 10.3]]) createEstateLamp(x, z);
 
@@ -1922,6 +2206,12 @@ let phoneUnread = true;
 let phoneCloseTimer = 0;
 let previousPhoneFocus = null;
 let phoneNoteSaveTimer = 0;
+const economyStorage = {
+  getItem(key) { return window.localStorage.getItem(key); },
+  setItem(key, value) { window.localStorage.setItem(key, value); },
+};
+const economy = loadEconomy(economyStorage);
+if (activeResidence && activeResidence !== homeHouse) placePlayerOutsideResidence(activeResidence);
 
 function toggleCameraMode() {
   if (isWatchingMatch || isRidingTransit) return;
@@ -2020,10 +2310,12 @@ window.addEventListener('blur', () => {
 });
 
 function homeWorldToLocal(x, z) {
-  const offsetX = x - homeHouse.x;
-  const offsetZ = z - homeHouse.z;
-  const cosYaw = Math.cos(homeHouse.facing);
-  const sinYaw = Math.sin(homeHouse.facing);
+  const residence = getCurrentResidence();
+  if (!residence) return { x: 0, z: 0 };
+  const offsetX = x - residence.x;
+  const offsetZ = z - residence.z;
+  const cosYaw = Math.cos(residence.facing);
+  const sinYaw = Math.sin(residence.facing);
   return {
     x: offsetX * cosYaw - offsetZ * sinYaw,
     z: offsetX * sinYaw + offsetZ * cosYaw,
@@ -2031,21 +2323,19 @@ function homeWorldToLocal(x, z) {
 }
 
 function homeLocalToWorld(localX, localZ) {
-  const cosYaw = Math.cos(homeHouse.facing);
-  const sinYaw = Math.sin(homeHouse.facing);
-  return {
-    x: homeHouse.x + localX * cosYaw + localZ * sinYaw,
-    z: homeHouse.z - localX * sinYaw + localZ * cosYaw,
-  };
+  const residence = getCurrentResidence();
+  if (!residence) return { x: 0, z: 0 };
+  return residenceLocalToWorld(residence, localX, localZ);
 }
 
 function resolveHomeInteriorCollisions() {
-  if (!homeHouse) return;
+  const residence = getCurrentResidence();
+  if (!residence) return;
   const local = homeWorldToLocal(player.position.x, player.position.z);
   let localX = local.x;
   let localZ = local.z;
-  const cosYaw = Math.cos(homeHouse.facing);
-  const sinYaw = Math.sin(homeHouse.facing);
+  const cosYaw = Math.cos(residence.facing);
+  const sinYaw = Math.sin(residence.facing);
   let localVelocityX = velocity.x * cosYaw - velocity.z * sinYaw;
   let localVelocityZ = velocity.x * sinYaw + velocity.z * cosYaw;
   const bound = HOME_INTERIOR_BOUNDS - PLAYER_COLLISION_RADIUS;
@@ -2396,13 +2686,15 @@ function exitMatchView() {
 }
 
 function completeHomeEntry() {
-  if (!homeHouse || isInsideHome) return;
+  const residence = getCurrentResidence();
+  if (!residence || isInsideHome) return;
   isInsideHome = true;
+  setResidenceInteriorVisible(residence, true);
   homeDoorTargetAngle = -Math.PI / 2;
   const entryPosition = homeLocalToWorld(0, -3.35);
-  player.position.set(entryPosition.x, homeHouse.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET, entryPosition.z);
-  player.rotation.y = homeHouse.facing + Math.PI;
-  cameraYaw = homeHouse.facing;
+  player.position.set(entryPosition.x, residence.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET, entryPosition.z);
+  player.rotation.y = residence.facing + Math.PI;
+  cameraYaw = residence.facing;
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
@@ -2411,17 +2703,21 @@ function completeHomeEntry() {
   jumpBufferTimer = 0;
   coyoteTimer = 0;
   updateLocationAndMap();
-  showToast('Welcome home. The living room, kitchen, and bedroom are yours to explore.', 3600);
+  showToast(residence.isHome
+    ? 'Welcome home. The living room, kitchen, and bedroom are yours to explore.'
+    : `Welcome to your furnished House ${String(residence.number).padStart(2, '0')} rental.`, 3600);
 }
 
 function completeHomeExit() {
-  if (!homeHouse || !isInsideHome) return;
+  const residence = getCurrentResidence();
+  if (!residence || !isInsideHome) return;
   isInsideHome = false;
+  setResidenceInteriorVisible(residence, false);
   homeDoorTargetAngle = 0;
   const exitPosition = homeLocalToWorld(0, -6.35);
   player.position.set(exitPosition.x, groundHeightAt(exitPosition.x, exitPosition.z), exitPosition.z);
-  player.rotation.y = homeHouse.facing;
-  cameraYaw = homeHouse.facing + Math.PI;
+  player.rotation.y = residence.facing;
+  cameraYaw = residence.facing + Math.PI;
   cameraPitch = 0;
   jumpHeight = 0;
   jumpVelocity = 0;
@@ -2430,11 +2726,11 @@ function completeHomeExit() {
   jumpBufferTimer = 0;
   coyoteTimer = 0;
   updateLocationAndMap();
-  showToast('You’re back outside at Meadow Court.', 2500);
+  showToast(`You’re back outside House ${String(residence.number).padStart(2, '0')} at Meadow Court.`, 2500);
 }
 
 function beginHomeTransition(destination) {
-  if (!homeHouse || homeTransitionPending) return;
+  if (!getCurrentResidence() || homeTransitionPending) return;
   homeTransitionPending = destination;
   homeDoorTargetAngle = -Math.PI / 2;
   velocity.set(0, 0, 0);
@@ -2554,18 +2850,46 @@ function getNearbyBusTerminal() {
   return getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6)?.terminal ?? null;
 }
 
+function getNearbyCommerceVenue(maxDistance = 5.8) {
+  let nearest = null;
+  let nearestDistance = maxDistance;
+  for (const venue of commerceVenues) {
+    const distance = Math.hypot(player.position.x - venue.interactionX, player.position.z - venue.interactionZ);
+    if (distance <= nearestDistance) {
+      nearest = venue;
+      nearestDistance = distance;
+    }
+  }
+  return nearest ? { venue: nearest, distance: nearestDistance } : null;
+}
+
+function getNearbyRentalHouse(maxDistance = 4.6) {
+  let nearest = null;
+  let nearestDistance = maxDistance;
+  for (const house of estateHouses) {
+    if (house.isHome) continue;
+    const distance = Math.hypot(player.position.x - house.doorX, player.position.z - house.doorZ);
+    if (distance <= nearestDistance) {
+      nearest = house;
+      nearestDistance = distance;
+    }
+  }
+  return nearest ? { house: nearest, distance: nearestDistance } : null;
+}
+
 function getNearbyInteractionTarget() {
   if (isRidingTransit) return 'request-transit-stop';
   if (isDriving) return 'exit-car';
 
   if (isInsideHome) {
-    if (!homeHouse) return null;
+    if (!getCurrentResidence()) return null;
     const local = homeWorldToLocal(player.position.x, player.position.z);
     return Math.hypot(local.x, local.z + 3.35) <= 2.1 ? 'exit-home' : null;
   }
 
-  const homeDistance = homeHouse
-    ? Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ)
+  const residence = getCurrentResidence();
+  const homeDistance = residence
+    ? Math.hypot(player.position.x - residence.doorX, player.position.z - residence.doorZ)
     : Infinity;
   const carDistance = playerCar
     ? Math.hypot(player.position.x - playerCar.group.position.x, player.position.z - playerCar.group.position.z)
@@ -2573,6 +2897,9 @@ function getNearbyInteractionTarget() {
   if (homeDistance <= HOME_INTERACTION_PRIORITY_RADIUS) return 'enter-home';
   if (vehicleInteractionCooldown <= 0 && carDistance <= CAR_INTERACTION_RADIUS) return 'enter-car';
   if (homeDistance <= 4.2) return 'enter-home';
+  if (getNearbyRentalHouse()) return 'view-rentals';
+  const nearbyVenue = getNearbyCommerceVenue();
+  if (nearbyVenue) return `open-${nearbyVenue.venue.id}`;
 
   const railStop = getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6);
   const busStop = getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6);
@@ -2654,6 +2981,16 @@ function handleNearbyInteraction() {
     return true;
   }
   const target = getNearbyInteractionTarget();
+  if (target === 'view-rentals') {
+    openPhone();
+    setPhonePage('property');
+    renderPropertyPage();
+    return true;
+  }
+  if (target === 'open-cafe' || target === 'open-market') {
+    openCommercePage(target.slice('open-'.length));
+    return true;
+  }
   if (target === 'watch-match') {
     enterMatchView();
     return true;
@@ -2759,13 +3096,237 @@ function toggleHomeLighting() {
   showToast(homeLightingEnabled ? 'The home lights are on.' : 'The home lights are off.');
 }
 
+function formatCredits(amount) {
+  return `IC ${Math.max(0, Math.floor(amount)).toLocaleString()}`;
+}
+
+function persistEconomy() {
+  if (!saveEconomy(economyStorage, economy)) {
+    showToast('This browser could not save your credits and purchases locally.', 3600);
+    return false;
+  }
+  return true;
+}
+
+function refreshRentalBilling(now = Date.now()) {
+  const newPeriods = advanceRentalBilling(economy, now);
+  if (newPeriods > 0) persistEconomy();
+  return newPeriods;
+}
+
+function updateWalletBalances() {
+  const balance = formatCredits(economy.wallet);
+  setTextIfChanged(walletBalanceElement, balance);
+  setTextIfChanged(cafeWalletBalanceElement, balance);
+  setTextIfChanged(marketWalletBalanceElement, balance);
+}
+
+function getHouseLane(house) {
+  return house.number <= 2 ? 'west lane' : 'east lane';
+}
+
+function renderRentalRoster() {
+  const leasedHouseNumber = economy.lease?.houseNumber;
+  const leaseActive = Boolean(economy.lease);
+  const rows = RENTAL_LISTINGS.map((listing) => {
+    const house = estateHouses.find((candidate) => candidate.number === listing.houseNumber);
+    const isCurrentRental = leasedHouseNumber === listing.houseNumber;
+    const moveInCost = listing.monthlyRent + listing.deposit;
+    const actionLabel = isCurrentRental
+      ? 'CURRENT RENTAL'
+      : leaseActive
+        ? 'END CURRENT LEASE FIRST'
+        : `SIGN LEASE · ${formatCredits(moveInCost)}`;
+    const disabled = leaseActive || economy.wallet < moveInCost || isInsideHome || isDriving || isRidingTransit;
+    return `<div class="rental-listing">
+      <div class="estate-home-row ${isCurrentRental ? 'estate-home-row--rented' : 'estate-home-row--listing'}">
+        <span class="estate-home-number">${String(listing.houseNumber).padStart(2, '0')}</span>
+        <span><strong>House ${String(listing.houseNumber).padStart(2, '0')} · ${house ? getHouseLane(house) : 'Meadow Court'}</strong><small class="rental-listing-owner"><i aria-hidden="true">${listing.landlord[0]}</i>NPC landlord · ${listing.landlord}</small></span>
+        <em class="${isCurrentRental ? 'estate-rented' : 'estate-available'}">${isCurrentRental ? 'RENTED' : 'AVAILABLE'}</em>
+      </div>
+      <div class="rental-listing-details"><span>Furnished cottage · ${Math.round(RENTAL_MONTH_MS / 86400000)}-day rolling lease</span><strong>${formatCredits(listing.monthlyRent)} / month · ${formatCredits(listing.deposit)} refundable deposit</strong></div>
+      <button class="rental-action-button rental-listing-button" type="button" data-rent-house="${listing.houseNumber}" ${disabled ? 'disabled' : ''}>${actionLabel}</button>
+    </div>`;
+  }).join('');
+  estateRosterElement.innerHTML = `<div class="estate-roster-heading"><span>MEADOW COURT · NPC LANDLORDS</span><strong>4 HOMES</strong></div>
+    <div class="estate-home-row estate-home-row--owned"><span class="estate-home-number">01</span><span><strong>Your owned home · ${getHouseLane(homeHouse)}</strong><small>Furnished · front porch · green mailbox</small></span><em>YOURS</em></div>${rows}`;
+}
+
+function renderLeaseManagement() {
+  if (!economy.lease) {
+    leaseManagementElement.innerHTML = '<div class="rental-lease-card"><div class="rental-lease-heading">No active rental <small>LEASES ARE OPTIONAL</small></div><p>Choose a cottage above to sign with its NPC landlord. The first month and refundable deposit are due at move-in.</p></div>';
+    return;
+  }
+  const lease = economy.lease;
+  const dueDate = new Date(lease.nextDueAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const dueText = lease.rentDue > 0
+    ? `${formatCredits(lease.rentDue)} rent is due now. Next billing date: ${dueDate}.`
+    : `Next ${formatCredits(lease.monthlyRent)} rent installment is due ${dueDate}.`;
+  const isInsideRentedHome = isInsideHome && getCurrentResidence()?.number === lease.houseNumber;
+  const payLabel = lease.rentDue > 0 ? `PAY RENT · ${formatCredits(lease.rentDue)}` : 'NO RENT DUE';
+  leaseManagementElement.innerHTML = `<div class="rental-lease-card">
+    <div class="rental-lease-heading">House ${String(lease.houseNumber).padStart(2, '0')} lease <small>LANDLORD · ${lease.landlord.toUpperCase()}</small></div>
+    <p>${formatCredits(lease.monthlyRent)} per 30-day month · ${formatCredits(lease.deposit)} refundable deposit. ${dueText}</p>
+    ${isInsideRentedHome ? '<p>Step outside before ending this lease.</p>' : ''}
+    <div class="rental-actions">
+      <button class="rental-action-button" type="button" data-rental-action="pay" ${lease.rentDue === 0 ? 'disabled' : ''}>${payLabel}</button>
+      <button class="rental-action-button rental-action-button--quiet" type="button" data-rental-action="end" ${isInsideRentedHome ? 'disabled' : ''}>END LEASE</button>
+    </div>
+  </div>`;
+}
+
+function renderPropertyPage() {
+  refreshRentalBilling();
+  updateWalletBalances();
+  const residence = getCurrentResidence() || homeHouse;
+  if (!residence) return;
+  const number = String(residence.number).padStart(2, '0');
+  propertyHouseNumberElement.textContent = number;
+  propertyHomeLabelElement.textContent = residence.isHome ? 'OWNED HOME' : 'YOUR RENTAL';
+  propertyHomeTitleElement.textContent = 'Meadow Court';
+  propertyHomeSubtitleElement.textContent = `House ${number} · ${getHouseLane(residence)}`;
+  propertyInteriorLabelElement.textContent = isInsideHome ? 'CURRENT ROOM' : 'FURNISHED INTERIOR';
+  propertyInteriorDescriptionElement.textContent = isInsideHome
+    ? 'Living room · full kitchen · bedroom'
+    : 'Move-in ready · living room · kitchen · bedroom';
+  const statusText = economy.lease && !residence.isHome
+    ? `HOUSE ${number} · RENTED FROM ${economy.lease.landlord.toUpperCase()}`
+    : residence.isHome ? 'HOUSE 01 · OWNED HOME' : `HOUSE ${number} · ACTIVE RENTAL`;
+  setTextIfChanged(residenceStatusElement.querySelector('span'), statusText);
+  renderRentalRoster();
+  renderLeaseManagement();
+}
+
+function getInventorySummary() {
+  const inventory = Object.values(SHOP_CATALOG).flat()
+    .filter((product) => economy.inventory[product.id] > 0)
+    .map((product) => `${product.name} ×${economy.inventory[product.id]}`);
+  return inventory.length ? inventory.join(' · ') : 'Nothing yet';
+}
+
+function isPlayerAtCommerceVenue(venueId) {
+  return getNearbyCommerceVenue()?.venue.id === venueId;
+}
+
+function renderCommercePage(venueId) {
+  refreshRentalBilling();
+  updateWalletBalances();
+  const products = SHOP_CATALOG[venueId];
+  if (!products) return;
+  const venue = commerceVenues.find((candidate) => candidate.id === venueId);
+  const isNearby = isPlayerAtCommerceVenue(venueId);
+  const proximityElement = venueId === 'cafe' ? cafeProximityElement : marketProximityElement;
+  const inventoryElement = venueId === 'cafe' ? cafeInventoryElement : marketInventoryElement;
+  const itemsElement = venueId === 'cafe' ? cafeShopItemsElement : marketShopItemsElement;
+  proximityElement.textContent = isNearby
+    ? `Welcome to ${venue.name}. Your purchases use island credits.`
+    : `Visit ${venue.name} in person to buy. This menu can be browsed from anywhere.`;
+  proximityElement.classList.toggle('is-near', isNearby);
+  proximityElement.classList.toggle('is-away', !isNearby);
+  inventoryElement.textContent = getInventorySummary();
+  itemsElement.innerHTML = products.map((product) => {
+    const count = economy.inventory[product.id] || 0;
+    const cannotAfford = economy.wallet < product.price;
+    return `<div class="shop-item">
+      <span class="shop-item-copy"><strong>${product.name}</strong><small>${product.description}</small><em>${product.category}${count > 0 ? ` · IN BAG ×${count}` : ''}</em></span>
+      <button class="shop-buy-button" type="button" data-shop-buy="${product.id}" ${!isNearby || cannotAfford ? 'disabled' : ''}><span>BUY ONE</span><strong>${formatCredits(product.price)}</strong></button>
+    </div>`;
+  }).join('');
+}
+
+function openCommercePage(venueId) {
+  if (!SHOP_CATALOG[venueId]) return;
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage(venueId);
+}
+
+function rentHouseFromPhone(houseNumber) {
+  if (isInsideHome || isDriving || isRidingTransit) {
+    showToast('Step outside and leave your vehicle before signing a new lease.');
+    return;
+  }
+  const result = signRentalLease(economy, houseNumber, Date.now());
+  if (!result.ok) {
+    if (result.reason === 'lease-active') showToast('End your current lease before renting another house.');
+    else if (result.reason === 'insufficient-funds') showToast(`Move-in needs ${formatCredits(result.cost)} for the deposit and first month.`);
+    else showToast('That rental listing is no longer available.');
+    renderPropertyPage();
+    return;
+  }
+  const residence = estateHouses.find((house) => house.number === result.listing.houseNumber);
+  if (!residence) return;
+  setActiveResidence(residence);
+  setResidenceInteriorVisible(residence, false);
+  placePlayerOutsideResidence(residence);
+  persistEconomy();
+  renderPropertyPage();
+  updateLocationAndMap();
+  closePhone();
+  showToast(`Lease signed with ${result.listing.landlord}. House ${String(residence.number).padStart(2, '0')} is ready; first month and deposit paid.`, 4200);
+}
+
+function payRentFromPhone() {
+  const result = payRentalRent(economy, Date.now());
+  persistEconomy();
+  renderPropertyPage();
+  if (result.ok) showToast(`Rent paid · ${formatCredits(result.paid)} from your island credits.`);
+  else if (result.reason === 'insufficient-funds') showToast(`You need ${formatCredits(result.due)} to clear rent due.`);
+  else showToast('No rent is due yet.');
+}
+
+function endRentalFromPhone() {
+  const leasedHouse = economy.lease
+    ? estateHouses.find((house) => house.number === economy.lease.houseNumber)
+    : null;
+  if (isInsideHome && getCurrentResidence() === leasedHouse) {
+    showToast('Step outside the rental before ending the lease.');
+    return;
+  }
+  const result = endRentalLease(economy, Date.now());
+  if (!result.ok) return;
+  if (leasedHouse) setResidenceInteriorVisible(leasedHouse, false);
+  setActiveResidence(homeHouse);
+  placePlayerOutsideResidence(homeHouse);
+  persistEconomy();
+  renderPropertyPage();
+  updateLocationAndMap();
+  closePhone();
+  const moveOutMessage = result.refund > 0
+    ? `Lease ended · ${formatCredits(result.refund)} deposit returned. You’re home at House 01.`
+    : result.unpaidAfterDeposit > 0
+      ? 'Lease ended · the deposit was kept and remaining rent was settled with the landlord. You’re home at House 01.'
+      : 'Lease ended · the deposit was applied to outstanding rent. You’re home at House 01.';
+  showToast(moveOutMessage, 4200);
+}
+
+function buyShopItem(productId) {
+  const product = getProduct(productId);
+  if (!product) return;
+  const venueId = Object.keys(SHOP_CATALOG).find((key) => SHOP_CATALOG[key].some((item) => item.id === productId));
+  if (!venueId || !isPlayerAtCommerceVenue(venueId)) {
+    showToast('Visit the café or market in person before buying.');
+    return;
+  }
+  const result = purchaseProduct(economy, productId);
+  if (!result.ok) {
+    showToast(`Not enough island credits · ${formatCredits(result.price)} needed.`);
+    renderCommercePage(venueId);
+    return;
+  }
+  persistEconomy();
+  renderCommercePage(venueId);
+  showToast(`Bought ${result.product.name} · ${formatCredits(result.product.price)}. Added to your bag.`);
+}
+
 const phonePageCopy = {
   home: { eyebrow: 'YOUR POCKET GUIDE', title: 'Your little world', subtitle: 'Useful things for wherever the path takes you.' },
   map: { eyebrow: 'ISLAND 01 · LIVE', title: 'Field map', subtitle: 'Find your place and see what’s close.' },
   messages: { eyebrow: 'YOUR NEIGHBORHOOD', title: 'Messages', subtitle: 'A small check-in from someone nearby.' },
   journal: { eyebrow: 'FIELD NOTES · PRIVATE', title: 'Journal', subtitle: 'A note to keep, just for you.' },
   quests: { eyebrow: 'YOUR PROGRESS', title: 'Small things to do', subtitle: 'A gentle reason to keep wandering.' },
-  property: { eyebrow: 'YOUR HOME · HOUSE 01', title: 'Meadow Court', subtitle: 'Your front door, your little corner of the island.' },
+  property: { eyebrow: 'MEADOW COURT · HOMES', title: 'Homes & rentals', subtitle: 'Meet local landlords and manage your lease.' },
+  cafe: { eyebrow: 'FERN & CUP · CAFÉ', title: 'A little something', subtitle: 'Fresh food and a warm drink for the road.' },
+  market: { eyebrow: 'MEADOW MARKET · GROCERIES', title: 'Good things for home', subtitle: 'Stock up with your island credits.' },
 };
 
 function updatePhoneBadge() {
@@ -2787,6 +3348,8 @@ function setPhonePage(pageName) {
   phonePageSubtitle.textContent = phonePageCopy[page].subtitle;
   phoneBackButton.hidden = page === 'home';
   phoneContent.scrollTop = 0;
+  if (page === 'property') renderPropertyPage();
+  else if (page === 'cafe' || page === 'market') renderCommercePage(page);
   if (page === 'messages') {
     phoneUnread = false;
     updatePhoneBadge();
@@ -2926,6 +3489,22 @@ phoneContent.addEventListener('click', (event) => {
   const appButton = event.target.closest('[data-phone-app]');
   if (appButton) {
     setPhonePage(appButton.dataset.phoneApp);
+    return;
+  }
+  const shopButton = event.target.closest('[data-shop-buy]');
+  if (shopButton) {
+    buyShopItem(shopButton.dataset.shopBuy);
+    return;
+  }
+  const rentButton = event.target.closest('[data-rent-house]');
+  if (rentButton) {
+    rentHouseFromPhone(Number(rentButton.dataset.rentHouse));
+    return;
+  }
+  const rentalActionButton = event.target.closest('[data-rental-action]');
+  if (rentalActionButton) {
+    if (rentalActionButton.dataset.rentalAction === 'pay') payRentFromPhone();
+    else if (rentalActionButton.dataset.rentalAction === 'end') endRentalFromPhone();
     return;
   }
   const replyButton = event.target.closest('[data-phone-reply]');
@@ -3085,16 +3664,19 @@ function updateLocationAndMap() {
   const z = player.position.z;
   let location = 'Wildflower Path';
   let currentHomeRoom = '';
-  if (isInsideHome && homeHouse) {
+  const currentResidence = getCurrentResidence();
+  const currentCommerceVenue = commerceVenues.find((venue) => Math.hypot(x - venue.x, z - venue.z) < 10);
+  if (isInsideHome && currentResidence) {
     const local = homeWorldToLocal(x, z);
     currentHomeRoom = local.z > 0.9
       ? 'Bedroom'
       : local.x < -2.1 && local.z < 0.7
         ? 'Kitchen'
         : 'Living Room';
-    location = `${currentHomeRoom} · House 01`;
+    location = `${currentHomeRoom} · House ${String(currentResidence.number).padStart(2, '0')}`;
   } else if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) location = 'Meadow Park Stadium';
   else if (Math.hypot(x, z + 27) < 10) location = 'Beacon Circle';
+  else if (currentCommerceVenue) location = currentCommerceVenue.name;
   else if (isInsideEstate(x, z)) location = 'Meadow Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Meadow Rise';
   else if (x < -24) location = 'Fern Hollow';
@@ -3112,16 +3694,18 @@ function updateLocationAndMap() {
   setTextIfChanged(document.querySelector('#phone-home-coordinates'), formattedCoordinates);
   setTextIfChanged(document.querySelector('#phone-map-location'), location);
   setTextIfChanged(document.querySelector('#phone-map-coordinates'), formattedCoordinates);
-  const home = homeHouse;
+  const home = currentResidence;
   const interactionTarget = getNearbyInteractionTarget();
   const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
   const hasStadiumPrompt = interactionTarget === 'watch-match';
   const hasTransitPrompt = ['board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
-  homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
+  const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market';
+  const hasPropertyPrompt = interactionTarget === 'view-rentals';
+  homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt || hasCommercePrompt || hasPropertyPrompt) || isPhoneOpen();
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -3135,15 +3719,34 @@ function updateLocationAndMap() {
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isDriving ? 'EXIT CAR' : 'ENTER CAR');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', isDriving ? 'Exit your car' : 'Enter your car');
+  } else if (interactionTarget === 'view-rentals') {
+    const rentalHouse = getNearbyRentalHouse()?.house;
+    const listing = RENTAL_LISTINGS.find((candidate) => candidate.houseNumber === rentalHouse?.number);
+    setTextIfChanged(homeInteractionEyebrow, `HOUSE ${String(rentalHouse?.number || '').padStart(2, '0')} · MEADOW COURT`);
+    setTextIfChanged(homeInteractionMessage, listing
+      ? `${listing.landlord} has a furnished cottage available · ${formatCredits(listing.monthlyRent)} / month`
+      : 'Browse furnished cottages from local landlords.');
+    setTextIfChanged(homeInteractionAction, 'VIEW RENTALS');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', 'View Meadow Court rental listings');
+  } else if (hasCommercePrompt) {
+    const venue = getNearbyCommerceVenue()?.venue;
+    const venueLabel = venue?.id === 'cafe' ? 'CAFÉ' : 'MARKET';
+    setTextIfChanged(homeInteractionEyebrow, `${venue?.name.toUpperCase() || 'LOCAL SHOP'} · CITY STREET`);
+    setTextIfChanged(homeInteractionMessage, venue?.id === 'cafe'
+      ? 'Fresh food and warm drinks · pay with island credits'
+      : 'Groceries and pantry goods · pay with island credits');
+    setTextIfChanged(homeInteractionAction, `OPEN ${venueLabel}`);
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', `Open the ${venueLabel.toLowerCase()} shop`);
   } else if (home && hasHomePrompt) {
+    const number = String(home.number).padStart(2, '0');
     const canReachHomeDoor = interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
-    setTextIfChanged(homeInteractionEyebrow, isInsideHome ? `HOUSE 01 · ${currentHomeRoom.toUpperCase()}` : 'HOUSE 01 · YOUR HOME');
+    setTextIfChanged(homeInteractionEyebrow, isInsideHome ? `HOUSE ${number} · ${currentHomeRoom.toUpperCase()}` : `HOUSE ${number} · ${home.isHome ? 'YOUR HOME' : 'YOUR RENTAL'}`);
     const interactionMessage = isInsideHome
       ? (canReachHomeDoor ? 'The front door is right here' : `You’re in the ${currentHomeRoom.toLowerCase()}`)
-      : 'Step inside your home';
+      : 'Step inside your furnished home';
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isInsideHome ? 'LEAVE HOME' : 'ENTER HOME');
-    setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? `Leave House ${number}` : `Enter House ${number}`);
   } else if (hasTransitPrompt && interactionTarget === 'request-transit-stop') {
     const nextStop = getNextActiveTransitStop();
     const serviceName = transitRideMode === 'bus' ? 'ISLAND BUS' : 'ISLAND LINE';
@@ -3359,6 +3962,23 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.strokeRect(-houseIconSize * 0.48, -houseIconSize * 0.08, houseIconSize * 0.96, houseIconSize * 0.7);
     ctx.restore();
   }
+  for (const venue of commerceVenues) {
+    const venueX = mapX(venue.x);
+    const venueY = mapY(venue.z);
+    const size = Math.max(3.1, radius * 0.032);
+    ctx.beginPath();
+    ctx.arc(venueX, venueY, size, 0, Math.PI * 2);
+    ctx.fillStyle = venue.id === 'cafe' ? '#bd8052' : '#6d956c';
+    ctx.fill();
+    ctx.strokeStyle = '#fff7e8';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.fillStyle = '#fff9ec';
+    ctx.font = `700 ${Math.max(4.5, radius * 0.052)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(venue.id === 'cafe' ? 'C' : 'M', venueX, venueY + 0.2);
+  }
 
   ctx.beginPath();
   PATH_POINTS_XZ.forEach(([x, z], index) => {
@@ -3559,8 +4179,9 @@ function animate() {
     resolveWorldObstacleCollisions();
   }
 
-  const ground = isInsideHome && homeHouse
-    ? homeHouse.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET
+  const residence = getCurrentResidence();
+  const ground = isInsideHome && residence
+    ? residence.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET
     : groundHeightAt(player.position.x, player.position.z);
   if (isRidingTransit) {
     jumpHeight = 0;
@@ -3698,9 +4319,10 @@ function animate() {
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
     camera.lookAt(eyePosition.clone().addScaledVector(viewDirection, 18));
-  } else if (isInsideHome && homeHouse) {
+  } else if (isInsideHome && getCurrentResidence()) {
+    const residence = getCurrentResidence();
     const local = homeWorldToLocal(player.position.x, player.position.z);
-    const orbitYaw = cameraYaw - homeHouse.facing;
+    const orbitYaw = cameraYaw - residence.facing;
     const cameraLocal = homeLocalToWorld(
       local.x + Math.sin(orbitYaw) * 4.15,
       local.z + Math.cos(orbitYaw) * 4.15,
