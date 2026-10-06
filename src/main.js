@@ -137,9 +137,14 @@ try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
 } catch (error) {
   console.error('WebGL could not be initialized:', error);
-  loadingScreen.querySelector('.loading-title').textContent = 'THIS WORLD NEEDS WEBGL';
-  loadingScreen.querySelector('.loading-subtitle').textContent = 'Try opening it in a browser with 3D graphics enabled.';
-  loadingScreen.querySelector('.loading-line').hidden = true;
+  const webglMessage = 'This browser or device could not start WebGL 2 graphics. Try an up-to-date browser with hardware acceleration enabled.';
+  if (typeof window.vertualworldBoot?.fail === 'function') {
+    window.vertualworldBoot.fail(webglMessage, error);
+  } else {
+    loadingScreen.querySelector('.loading-title').textContent = 'THIS WORLD NEEDS WEBGL';
+    loadingScreen.querySelector('.loading-subtitle').textContent = webglMessage;
+    loadingScreen.querySelector('.loading-line').hidden = true;
+  }
   throw error;
 }
 
@@ -4358,6 +4363,7 @@ const animationScratch = {
 const FRAME_INTERVAL_MS = 1000 / 60;
 const SHADOW_UPDATE_INTERVAL_MS = 1000 / 30;
 let animationFrameHandle = null;
+let hasRenderedInitialFrame = false;
 let lastAnimationTimestamp = null;
 let lastShadowUpdateTimestamp = null;
 let frameIntervalAccumulator = 0;
@@ -4733,6 +4739,14 @@ function animate(timestamp) {
   }
   if (performanceHud) renderer.info.reset();
   renderer.render(scene, camera);
+  if (!hasRenderedInitialFrame) {
+    hasRenderedInitialFrame = true;
+    if (typeof window.vertualworldBoot?.ready === 'function') {
+      window.vertualworldBoot.ready();
+    } else {
+      requestAnimationFrame(() => loadingScreen.classList.add('is-ready'));
+    }
+  }
   if (performanceHud) updatePerformanceHud(timestamp, performance.now() - performanceFrameStart);
 }
 
@@ -4766,5 +4780,4 @@ document.addEventListener('visibilitychange', () => {
 updateLocationAndMap();
 updateClock();
 updateDaylight();
-requestAnimationFrame(() => loadingScreen.classList.add('is-ready'));
 scheduleAnimationFrame();

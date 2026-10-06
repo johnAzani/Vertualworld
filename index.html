@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#d7eee6">
     <meta name="description" content="Take a breath, find your path, and wander a little world of your own.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Serif+Display:ital@0;1&amp;display=swap" media="print" onload="this.media='all'">
     <title>Vertualworld — somewhere to begin</title>
   </head>
   <body>
@@ -386,9 +389,141 @@
         <div class="loading-mark"><span>V</span><i></i></div>
         <div class="loading-title">OPENING THE ISLAND</div>
         <div class="loading-subtitle">One small world, coming right up.</div>
+        <div class="loading-detail" hidden></div>
+        <button class="loading-retry-button" id="loading-retry" type="button" hidden>Reload island</button>
         <div class="loading-line"><span></span></div>
+        <noscript><p class="loading-subtitle">This island needs JavaScript and WebGL 2 graphics. Enable them in your browser, then reload.</p></noscript>
       </div>
     </div>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" id="world-entry" src="/src/main.js"></script>
+    <script id="world-boot">
+(() => {
+  const screen = document.getElementById('loading-screen');
+  if (!screen) return;
+
+  const title = screen.querySelector('.loading-title');
+  const subtitle = screen.querySelector('.loading-subtitle');
+  const line = screen.querySelector('.loading-line');
+  const detail = screen.querySelector('.loading-detail');
+  const retryButton = screen.querySelector('.loading-retry-button');
+  const entryScripts = Array.from(document.querySelectorAll('script[type="module"]'));
+  const canvas = document.getElementById('world-canvas');
+  const STARTUP_TIMEOUT_MS = 20_000;
+  let state = 'loading';
+  let timeoutId;
+
+  function describeCause(cause) {
+    if (!cause) return '';
+    if (typeof cause === 'string') return cause.trim().slice(0, 180);
+    if (typeof cause === 'object') {
+      const message = typeof cause.message === 'string'
+        ? cause.message
+        : typeof cause.statusMessage === 'string'
+          ? cause.statusMessage
+          : '';
+      const name = typeof cause.name === 'string' ? cause.name : '';
+      return `${name && message ? `${name}: ` : ''}${message}`.trim().slice(0, 180);
+    }
+    return String(cause).slice(0, 180);
+  }
+
+  function setCopy(nextTitle, nextSubtitle, cause = '') {
+    if (title) title.textContent = nextTitle;
+    if (subtitle) subtitle.textContent = nextSubtitle;
+    if (detail) {
+      const diagnostic = describeCause(cause);
+      detail.textContent = diagnostic ? `Technical detail: ${diagnostic}` : '';
+      detail.hidden = !diagnostic;
+    }
+  }
+
+  function showFailure(message, cause = '') {
+    if (state === 'ready' || state === 'error') return false;
+    state = 'error';
+    window.clearTimeout(timeoutId);
+    setCopy('THE ISLAND COULD NOT OPEN', message, cause);
+    if (line) line.hidden = true;
+    if (retryButton) retryButton.hidden = false;
+    screen.classList.remove('is-slow');
+    screen.classList.add('is-error');
+    return true;
+  }
+
+  function showSlowNotice() {
+    if (state !== 'loading') return;
+    state = 'slow';
+    setCopy(
+      'STILL OPENING',
+      'This is taking longer than expected. You can keep waiting or reload the island.',
+    );
+    if (line) line.hidden = true;
+    if (retryButton) retryButton.hidden = false;
+    screen.classList.add('is-slow');
+  }
+
+  function markReady() {
+    if (state === 'ready' || state === 'error') return false;
+    state = 'ready';
+    window.clearTimeout(timeoutId);
+    if (retryButton) retryButton.hidden = true;
+    screen.classList.remove('is-slow', 'is-error');
+    screen.classList.add('is-ready');
+    return true;
+  }
+
+  window.vertualworldBoot = Object.freeze({ ready: markReady, fail: showFailure });
+
+  retryButton?.addEventListener('click', () => window.location.reload());
+
+  const showEntryFailure = (script) => showFailure(
+    'The game code could not be loaded. Check your connection, then reload the page.',
+    script?.src,
+  );
+  for (const script of entryScripts) {
+    script.addEventListener('error', () => showEntryFailure(script));
+  }
+
+  // Resource error events do not bubble, so listen during capture and only act on app modules.
+  document.addEventListener('error', (event) => {
+    if (entryScripts.includes(event.target)) showEntryFailure(event.target);
+  }, true);
+
+  window.addEventListener('error', (event) => {
+    if (state === 'ready' || (!event?.error && !event?.message)) return;
+    const cause = event.error || event.message;
+    console.error('Vertualworld startup error:', cause);
+    showFailure(
+      'A script error interrupted startup. Reload the page; if it happens again, share the technical detail below.',
+      cause,
+    );
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (state === 'ready') return;
+    console.error('Vertualworld startup promise rejected:', event.reason);
+    showFailure(
+      'A startup task failed. Reload the page; if it happens again, share the technical detail below.',
+      event.reason,
+    );
+  });
+
+  canvas?.addEventListener('webglcontextcreationerror', (event) => {
+    showFailure(
+      'This browser or device could not start WebGL 2 graphics. Try an up-to-date browser with hardware acceleration enabled.',
+      event.statusMessage,
+    );
+  });
+
+  canvas?.addEventListener('webglcontextlost', (event) => {
+    if (state === 'ready') return;
+    event.preventDefault?.();
+    showFailure(
+      'The 3D graphics context was lost while opening. Close other graphics-heavy tabs, then reload the island.',
+    );
+  });
+
+  timeoutId = window.setTimeout(showSlowNotice, STARTUP_TIMEOUT_MS);
+})();
+    </script>
   </body>
 </html>
