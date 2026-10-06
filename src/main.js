@@ -14,6 +14,12 @@ const homeInteractionAction = document.querySelector('#home-interaction-action')
 const homeInteractionButton = document.querySelector('#home-interaction-button');
 const homeLightsButton = document.querySelector('#home-lights-button');
 const homeLightsAction = document.querySelector('#home-lights-action');
+const controlsHint = document.querySelector('#controls-hint');
+const walkingControlsHint = document.querySelector('#walking-controls');
+const vehicleControlsHint = document.querySelector('#vehicle-controls');
+const jumpButtonLabel = document.querySelector('#jump-button-label');
+const jumpButtonIcon = document.querySelector('#jump-button-icon');
+const touchLabel = document.querySelector('#touch-label');
 const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
@@ -155,15 +161,26 @@ function distanceToPath(x, z) {
 }
 
 const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
+const TRAIL_HALF_WIDTH = 0.82;
+const TRAIL_SURFACE_OFFSET = 0.065;
+const PLAYER_FOOT_OFFSET = 0.042;
 const PLAYER_COLLISION_RADIUS = 0.42;
 const PLAYER_BODY_HEIGHT = 1.82;
+const CAR_COLLISION_RADIUS = 1.52;
+const CAR_BODY_HEIGHT = 1.62;
+const CAR_INTERACTION_RADIUS = 3.15;
+const HOME_INTERACTION_PRIORITY_RADIUS = 1.8;
 const PLAYER_GRAVITY = 17;
 const JUMP_SPEED = 6.5;
 const JUMP_BUFFER_SECONDS = 0.16;
 const COYOTE_TIME_SECONDS = 0.12;
 const estateHouses = [];
+const estateRoadSurfaces = [];
 const exteriorNightLights = [];
 const worldObstacleColliders = [];
+let playerCar = null;
+let isDriving = false;
+let vehicleInteractionCooldown = 0;
 const homeFurnitureColliders = [];
 const homeLightFixtures = [];
 const HOME_FLOOR_TOP = 0.38;
@@ -353,15 +370,82 @@ for (let i = 0; i < 7; i += 1) {
   scene.add(cloud);
 }
 
-// A winding sandy trail, lifted just enough to sit cleanly on the terrain.
-const trailPoints = PATH_POINTS_XZ.map(([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + 0.075, z));
+// A flat, terrain-following ribbon keeps the path walkable instead of burying the avatar in a raised tube.
+const trailPoints = PATH_POINTS_XZ.map(([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET, z));
 const trailCurve = new THREE.CatmullRomCurve3(trailPoints, false, 'centripetal');
+function createTrailRibbonGeometry(curve, segments, halfWidth) {
+  const positions = new Float32Array((segments + 1) * 2 * 3);
+  const uvs = new Float32Array((segments + 1) * 2 * 2);
+  const indices = [];
+  const tangent = new THREE.Vector3();
+  const side = new THREE.Vector3();
+
+  for (let segment = 0; segment <= segments; segment += 1) {
+    const t = segment / segments;
+    const center = curve.getPointAt(t);
+    tangent.copy(curve.getTangentAt(t));
+    tangent.y = 0;
+    tangent.normalize();
+    side.set(-tangent.z, 0, tangent.x).normalize();
+
+    for (let edge = 0; edge < 2; edge += 1) {
+      const offset = edge === 0 ? -halfWidth : halfWidth;
+      const x = center.x + side.x * offset;
+      const z = center.z + side.z * offset;
+      const vertex = segment * 2 + edge;
+      const positionOffset = vertex * 3;
+      positions[positionOffset] = x;
+      positions[positionOffset + 1] = terrainHeight(x, z) + TRAIL_SURFACE_OFFSET;
+      positions[positionOffset + 2] = z;
+      const uvOffset = vertex * 2;
+      uvs[uvOffset] = edge;
+      uvs[uvOffset + 1] = t;
+    }
+
+    if (segment < segments) {
+      const first = segment * 2;
+      indices.push(first, first + 1, first + 2, first + 1, first + 3, first + 2);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 const trail = new THREE.Mesh(
-  new THREE.TubeGeometry(trailCurve, 150, 0.82, 8, false),
-  new THREE.MeshStandardMaterial({ color: 0xd5c493, roughness: 0.95 }),
+  createTrailRibbonGeometry(trailCurve, 180, TRAIL_HALF_WIDTH),
+  new THREE.MeshStandardMaterial({ color: 0xd5c493, roughness: 0.95, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }),
 );
 trail.receiveShadow = true;
 scene.add(trail);
+
+function groundHeightAt(x, z) {
+  let ground = terrainHeight(x, z);
+  if (distanceToPath(x, z) <= TRAIL_HALF_WIDTH) {
+    ground = Math.max(ground, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET);
+  }
+
+  for (const surface of estateRoadSurfaces) {
+    if (x >= surface.minX && x <= surface.maxX && z >= surface.minZ && z <= surface.maxZ) {
+      ground = Math.max(ground, surface.top);
+    }
+  }
+
+  if (homeHouse && !isInsideHome) {
+    const local = homeWorldToLocal(x, z);
+    const baseY = homeHouse.group.position.y;
+    const onPorch = Math.abs(local.x) <= 1.85 && local.z >= -5.66 && local.z <= -4.1;
+    const onStep = Math.abs(local.x) <= 1.25 && local.z >= -6.12 && local.z <= -5.55;
+    if (onPorch) ground = Math.max(ground, baseY + 0.44);
+    else if (onStep) ground = Math.max(ground, baseY + 0.26);
+  }
+
+  return ground + PLAYER_FOOT_OFFSET;
+}
 
 // Small handmade stepping stones set into the trail.
 const stoneGeometry = new THREE.CylinderGeometry(0.42, 0.48, 0.13, 7, 1);
@@ -484,6 +568,9 @@ const houseRoofAngle = Math.atan2(houseRoofRise, houseWidth / 2);
 const houseRoofSlope = Math.hypot(houseWidth / 2, houseRoofRise);
 
 function addEstateRoad(length, width, x, z, vertical = false) {
+  const halfX = (vertical ? width : length) / 2;
+  const halfZ = (vertical ? length : width) / 2;
+  const roadTop = terrainHeight(x, z) + 0.16;
   const road = new THREE.Mesh(
     new THREE.BoxGeometry(vertical ? width : length, 0.16, vertical ? length : width),
     estateRoadMaterial,
@@ -491,6 +578,7 @@ function addEstateRoad(length, width, x, z, vertical = false) {
   road.position.set(x, terrainHeight(x, z) + 0.08, z);
   road.receiveShadow = true;
   scene.add(road);
+  estateRoadSurfaces.push({ minX: x - halfX, maxX: x + halfX, minZ: z - halfZ, maxZ: z + halfZ, top: roadTop });
 
   const edgeY = terrainHeight(x, z) + 0.17;
   for (const side of [-1, 1]) {
@@ -1180,6 +1268,84 @@ function createEstateLamp(x, z) {
   scene.add(group);
 }
 
+function createParkedCar(x, z, heading) {
+  const group = new THREE.Group();
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8069, roughness: 0.58, metalness: 0.08 });
+  const bodyShadowMaterial = new THREE.MeshStandardMaterial({ color: 0x345a4b, roughness: 0.72, metalness: 0.06 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xe2d5b7, roughness: 0.72 });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x8fc2bd, roughness: 0.2, metalness: 0.08, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x293330, roughness: 0.9 });
+  const hubMaterial = new THREE.MeshStandardMaterial({ color: 0xd1be8b, roughness: 0.42, metalness: 0.42 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xe8dfca, roughness: 0.5, metalness: 0.2 });
+  const headlightMaterial = new THREE.MeshStandardMaterial({ color: 0xffe6b2, emissive: 0xffd981, emissiveIntensity: 0.55, roughness: 0.3 });
+  const tailLightMaterial = new THREE.MeshStandardMaterial({ color: 0xb74e45, emissive: 0x6e1e1b, emissiveIntensity: 0.2, roughness: 0.36 });
+  const wheelPivots = [];
+  const wheelGeometry = new THREE.CylinderGeometry(0.34, 0.34, 0.18, 16);
+  wheelGeometry.rotateZ(Math.PI / 2);
+  const hubGeometry = new THREE.CylinderGeometry(0.17, 0.17, 0.19, 12);
+  hubGeometry.rotateZ(Math.PI / 2);
+
+  const addCarMesh = (geometry, material, position, rotation = [0, 0, 0]) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(...position);
+    mesh.rotation.set(...rotation);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+
+  addCarMesh(new THREE.BoxGeometry(1.72, 0.22, 3.28), bodyShadowMaterial, [0, 0.49, 0]);
+  addCarMesh(new THREE.BoxGeometry(1.88, 0.34, 3.38), bodyMaterial, [0, 0.66, 0]);
+  addCarMesh(new THREE.BoxGeometry(1.78, 0.27, 1.12), bodyMaterial, [0, 0.83, -1.06]);
+  addCarMesh(new THREE.BoxGeometry(1.78, 0.28, 0.72), bodyMaterial, [0, 0.81, 1.22]);
+  addCarMesh(new THREE.BoxGeometry(1.48, 0.63, 1.8), bodyMaterial, [0, 1.17, 0.04]);
+  addCarMesh(new THREE.BoxGeometry(1.43, 0.12, 1.35), roofMaterial, [0, 1.54, 0.06]);
+  addCarMesh(new THREE.BoxGeometry(1.31, 0.42, 0.045), glassMaterial, [0, 1.23, -0.91], [-0.32, 0, 0]);
+  addCarMesh(new THREE.BoxGeometry(1.26, 0.4, 0.045), glassMaterial, [0, 1.21, 0.98], [0.32, 0, 0]);
+
+  for (const side of [-1, 1]) {
+    for (const windowZ of [-0.42, 0.39]) {
+      addCarMesh(new THREE.BoxGeometry(0.035, 0.38, 0.68), glassMaterial, [side * 0.755, 1.2, windowZ]);
+    }
+    addCarMesh(new THREE.BoxGeometry(0.045, 0.32, 0.045), bodyShadowMaterial, [side * 0.77, 1.2, -0.015]);
+    addCarMesh(new THREE.BoxGeometry(0.19, 0.11, 0.16), bodyMaterial, [side * 0.93, 1.13, -0.55]);
+    addCarMesh(new THREE.BoxGeometry(0.06, 0.31, 0.88), bodyShadowMaterial, [side * 0.94, 0.72, -0.04]);
+  }
+
+  addCarMesh(new THREE.BoxGeometry(1.92, 0.11, 0.12), trimMaterial, [0, 0.54, -1.74]);
+  addCarMesh(new THREE.BoxGeometry(1.92, 0.11, 0.12), bodyShadowMaterial, [0, 0.54, 1.74]);
+  addCarMesh(new THREE.BoxGeometry(0.74, 0.08, 0.035), bodyShadowMaterial, [0, 0.69, -1.72]);
+  for (const side of [-1, 1]) {
+    addCarMesh(new THREE.BoxGeometry(0.24, 0.13, 0.11), headlightMaterial, [side * 0.61, 0.77, -1.72]);
+    addCarMesh(new THREE.BoxGeometry(0.21, 0.12, 0.1), tailLightMaterial, [side * 0.64, 0.78, 1.72]);
+  }
+
+  for (const side of [-1, 1]) {
+    for (const wheelZ of [-1.12, 1.12]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(side * 0.91, 0.34, wheelZ);
+      group.add(pivot);
+      const tire = new THREE.Mesh(wheelGeometry, tireMaterial);
+      tire.castShadow = true;
+      tire.receiveShadow = true;
+      pivot.add(tire);
+      const hub = new THREE.Mesh(hubGeometry, hubMaterial);
+      hub.position.x = side * 0.015;
+      hub.castShadow = true;
+      pivot.add(hub);
+      wheelPivots.push({ pivot, tire, isFront: wheelZ < 0 });
+    }
+  }
+
+  group.position.set(x, groundHeightAt(x, z) - PLAYER_FOOT_OFFSET, z);
+  group.rotation.y = heading;
+  scene.add(group);
+  const collider = { vehicleGroup: group, radius: CAR_COLLISION_RADIUS, height: CAR_BODY_HEIGHT };
+  worldObstacleColliders.push(collider);
+  return { group, wheelPivots, collider, speed: 0, steering: 0 };
+}
+
 // A paved entry lane meets a quiet shared street, with a short drive to each front porch.
 addEstateRoad(28, 3.7, 14.1, 8, false);
 addEstateRoad(33, 3.7, 27, 8, true);
@@ -1236,7 +1402,12 @@ for (const [number, x, z, facing] of [
 ]) {
   createEstateHouse({ number, x, z, facing, isHome: number === 1 });
 }
-for (const [x, z] of [[11.8, 8], [27, -5], [27, 21], [42.5, 8]]) createEstateLamp(x, z);
+// Keep the street lamps on the verges so they don't stand in the middle of the walking and driving lanes.
+for (const [x, z] of [[11.8, 10.3], [29.35, -5], [29.35, 21], [42.5, 10.3]]) createEstateLamp(x, z);
+
+// A small paved bay places your car just off the porch walk, facing out toward the lane.
+addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
+playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
 
 const treeLocations = [];
 const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
@@ -1663,10 +1834,10 @@ const playerShadow = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0x315c4d, transparent: true, opacity: 0.24, depthWrite: false }),
 );
 playerShadow.rotation.x = -Math.PI / 2;
-playerShadow.position.y = 0.035;
+playerShadow.position.y = 0.035 - PLAYER_FOOT_OFFSET;
 player.add(playerShadow);
 
-const startPosition = new THREE.Vector3(0, terrainHeight(0, 12), 12);
+const startPosition = new THREE.Vector3(0, groundHeightAt(0, 12), 12);
 player.position.copy(startPosition);
 // Let the player greet the camera at the trailhead, then turn naturally when movement begins.
 player.rotation.y = Math.PI - 0.28;
@@ -1700,8 +1871,8 @@ let phoneNoteSaveTimer = 0;
 
 function toggleCameraMode() {
   isFirstPerson = !isFirstPerson;
-  avatarModel.visible = !isFirstPerson;
-  playerShadow.visible = !isFirstPerson;
+  avatarModel.visible = !isFirstPerson && !isDriving;
+  playerShadow.visible = !isFirstPerson && !isDriving;
   camera.fov = isFirstPerson ? 68 : 49;
   camera.updateProjectionMatrix();
   viewToggleButton.classList.toggle('is-active', isFirstPerson);
@@ -1711,6 +1882,16 @@ function toggleCameraMode() {
   viewToggleButton.title = `Switch to ${nextMode} view (V)`;
   if (isFirstPerson) showToast('First-person view · drag to look up, down, and around.', 2400);
   else showToast('Third-person view · drag to orbit around you.', 2200);
+}
+
+function updateVehicleControlUi() {
+  walkingControlsHint.hidden = isDriving;
+  vehicleControlsHint.hidden = !isDriving;
+  controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : 'Keyboard controls');
+  jumpButtonLabel.textContent = isDriving ? 'BRAKE' : 'JUMP';
+  jumpButtonIcon.textContent = isDriving ? '■' : '↑';
+  jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : 'Jump');
+  touchLabel.textContent = isDriving ? 'DRIVE / STEER' : 'MOVE';
 }
 
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
@@ -1741,7 +1922,7 @@ window.addEventListener('keydown', (event) => {
     toggleCameraMode();
     return;
   }
-  if (key === 'e' && !event.repeat && handleHomeInteraction()) {
+  if (key === 'e' && !event.repeat && handleNearbyInteraction()) {
     event.preventDefault();
     return;
   }
@@ -1752,7 +1933,7 @@ window.addEventListener('keydown', (event) => {
   }
   if (keyToMove.has(key)) event.preventDefault();
   pressedKeys.add(key);
-  if (key === ' ' && !event.repeat) jumpRequested = true;
+  if (key === ' ' && !event.repeat && !isDriving) jumpRequested = true;
 });
 window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLowerCase()));
 window.addEventListener('blur', () => {
@@ -1848,8 +2029,9 @@ function resolveHouseCollisions() {
     resolveHomeInteriorCollisions();
     return;
   }
-  const wallHalfWidth = houseWidth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
-  const wallHalfDepth = houseDepth / 2 + 0.22 + PLAYER_COLLISION_RADIUS;
+  const collisionRadius = isDriving ? CAR_COLLISION_RADIUS : PLAYER_COLLISION_RADIUS;
+  const wallHalfWidth = houseWidth / 2 + 0.22 + collisionRadius;
+  const wallHalfDepth = houseDepth / 2 + 0.22 + collisionRadius;
   for (const house of estateHouses) {
     const yaw = house.group.rotation.y;
     const cosYaw = Math.cos(yaw);
@@ -1878,26 +2060,37 @@ function resolveHouseCollisions() {
 
     player.position.x = house.x + localX * cosYaw + localZ * sinYaw;
     player.position.z = house.z - localX * sinYaw + localZ * cosYaw;
-    const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
-    if (inwardVelocity < 0) {
-      velocity.x -= inwardVelocity * normalX;
-      velocity.z -= inwardVelocity * normalZ;
+    if (isDriving && playerCar) {
+      const forwardX = -Math.sin(playerCar.group.rotation.y);
+      const forwardZ = -Math.cos(playerCar.group.rotation.y);
+      if (playerCar.speed * (forwardX * normalX + forwardZ * normalZ) < 0) playerCar.speed = 0;
+    } else {
+      const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
+      if (inwardVelocity < 0) {
+        velocity.x -= inwardVelocity * normalX;
+        velocity.z -= inwardVelocity * normalZ;
+      }
     }
   }
 }
 
 function resolveWorldObstacleCollisions() {
   if (isInsideHome) return;
+  const collisionRadius = isDriving ? CAR_COLLISION_RADIUS : PLAYER_COLLISION_RADIUS;
+  const collisionHeight = isDriving ? CAR_BODY_HEIGHT : PLAYER_BODY_HEIGHT;
   for (let pass = 0; pass < 3; pass += 1) {
     let resolvedAny = false;
     const playerBottom = jumpHeight;
-    const playerTop = playerBottom + PLAYER_BODY_HEIGHT;
+    const playerTop = playerBottom + collisionHeight;
     for (const obstacle of worldObstacleColliders) {
+      if (isDriving && obstacle.vehicleGroup === playerCar?.group) continue;
       const overlapsVertically = playerBottom < obstacle.height && playerTop > 0;
       if (!overlapsVertically) continue;
-      const dx = player.position.x - obstacle.x;
-      const dz = player.position.z - obstacle.z;
-      const minimumDistance = obstacle.radius + PLAYER_COLLISION_RADIUS;
+      const obstacleX = obstacle.vehicleGroup ? obstacle.vehicleGroup.position.x : obstacle.x;
+      const obstacleZ = obstacle.vehicleGroup ? obstacle.vehicleGroup.position.z : obstacle.z;
+      const dx = player.position.x - obstacleX;
+      const dz = player.position.z - obstacleZ;
+      const minimumDistance = obstacle.radius + collisionRadius;
       const distanceSquared = dx * dx + dz * dz;
       if (distanceSquared >= minimumDistance * minimumDistance) continue;
 
@@ -1907,18 +2100,27 @@ function resolveWorldObstacleCollisions() {
       if (distance > 1e-5) {
         normalX = dx / distance;
         normalZ = dz / distance;
+      } else if (isDriving && playerCar) {
+        normalX = Math.sin(playerCar.group.rotation.y);
+        normalZ = Math.cos(playerCar.group.rotation.y);
       } else {
         const speed = Math.hypot(velocity.x, velocity.z);
         normalX = speed > 1e-5 ? -velocity.x / speed : 1;
         normalZ = speed > 1e-5 ? -velocity.z / speed : 0;
       }
 
-      player.position.x = obstacle.x + normalX * minimumDistance;
-      player.position.z = obstacle.z + normalZ * minimumDistance;
-      const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
-      if (inwardVelocity < 0) {
-        velocity.x -= inwardVelocity * normalX;
-        velocity.z -= inwardVelocity * normalZ;
+      player.position.x = obstacleX + normalX * minimumDistance;
+      player.position.z = obstacleZ + normalZ * minimumDistance;
+      if (isDriving && playerCar) {
+        const forwardX = -Math.sin(playerCar.group.rotation.y);
+        const forwardZ = -Math.cos(playerCar.group.rotation.y);
+        if (playerCar.speed * (forwardX * normalX + forwardZ * normalZ) < 0) playerCar.speed = 0;
+      } else {
+        const inwardVelocity = velocity.x * normalX + velocity.z * normalZ;
+        if (inwardVelocity < 0) {
+          velocity.x -= inwardVelocity * normalX;
+          velocity.z -= inwardVelocity * normalZ;
+        }
       }
       resolvedAny = true;
     }
@@ -1998,6 +2200,10 @@ joystick.addEventListener('pointercancel', (event) => {
 });
 function requestJump() {
   if (homeTransitionPending || isPhoneOpen()) return;
+  if (isDriving && playerCar) {
+    playerCar.speed *= 0.48;
+    return;
+  }
   jumpRequested = true;
 }
 
@@ -2028,7 +2234,7 @@ function completeHomeEntry() {
   isInsideHome = true;
   homeDoorTargetAngle = -Math.PI / 2;
   const entryPosition = homeLocalToWorld(0, -3.35);
-  player.position.set(entryPosition.x, homeHouse.group.position.y + HOME_FLOOR_TOP, entryPosition.z);
+  player.position.set(entryPosition.x, homeHouse.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET, entryPosition.z);
   player.rotation.y = homeHouse.facing + Math.PI;
   cameraYaw = homeHouse.facing;
   cameraPitch = 0;
@@ -2047,7 +2253,7 @@ function completeHomeExit() {
   isInsideHome = false;
   homeDoorTargetAngle = 0;
   const exitPosition = homeLocalToWorld(0, -6.35);
-  player.position.set(exitPosition.x, terrainHeight(exitPosition.x, exitPosition.z), exitPosition.z);
+  player.position.set(exitPosition.x, groundHeightAt(exitPosition.x, exitPosition.z), exitPosition.z);
   player.rotation.y = homeHouse.facing;
   cameraYaw = homeHouse.facing + Math.PI;
   cameraPitch = 0;
@@ -2080,17 +2286,141 @@ function beginHomeTransition(destination) {
   }, transitionDuration);
 }
 
-function handleHomeInteraction() {
-  if (!homeHouse || isPhoneOpen() || homeTransitionPending) return false;
+function getNearbyInteractionTarget() {
+  if (isDriving) return 'exit-car';
+  if (!homeHouse) return null;
+
   if (isInsideHome) {
     const local = homeWorldToLocal(player.position.x, player.position.z);
-    if (Math.hypot(local.x, local.z + 3.35) > 2.1) return false;
+    return Math.hypot(local.x, local.z + 3.35) <= 2.1 ? 'exit-home' : null;
+  }
+
+  const homeDistance = Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ);
+  const carDistance = playerCar
+    ? Math.hypot(player.position.x - playerCar.group.position.x, player.position.z - playerCar.group.position.z)
+    : Infinity;
+  if (homeDistance <= HOME_INTERACTION_PRIORITY_RADIUS) return 'enter-home';
+  if (vehicleInteractionCooldown <= 0 && carDistance <= CAR_INTERACTION_RADIUS) return 'enter-car';
+  if (homeDistance <= 4.2) return 'enter-home';
+  return null;
+}
+
+function enterParkedCar() {
+  if (!playerCar || isDriving || isInsideHome) return;
+  isDriving = true;
+  playerCar.speed = 0;
+  playerCar.steering = 0;
+  player.position.set(playerCar.group.position.x, groundHeightAt(playerCar.group.position.x, playerCar.group.position.z), playerCar.group.position.z);
+  player.rotation.y = playerCar.group.rotation.y;
+  cameraYaw = playerCar.group.rotation.y;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  avatarModel.visible = false;
+  playerShadow.visible = false;
+  pressedKeys.clear();
+  resetJoystick();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  showToast('You’re in your car · W/S drive, A/D steer, Space brake, E to hop out.', 3800);
+}
+
+function exitParkedCar() {
+  if (!playerCar || !isDriving) return;
+  isDriving = false;
+  playerCar.speed = 0;
+  const exitOffset = new THREE.Vector3(
+    -(CAR_COLLISION_RADIUS + PLAYER_COLLISION_RADIUS + 0.2),
+    0,
+    0,
+  ).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerCar.group.rotation.y);
+  const exitX = playerCar.group.position.x + exitOffset.x;
+  const exitZ = playerCar.group.position.z + exitOffset.z;
+  player.position.set(exitX, groundHeightAt(exitX, exitZ), exitZ);
+  player.rotation.y = playerCar.group.rotation.y;
+  cameraYaw = playerCar.group.rotation.y;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  vehicleInteractionCooldown = 0.8;
+  avatarModel.visible = !isFirstPerson;
+  playerShadow.visible = !isFirstPerson;
+  pressedKeys.clear();
+  resetJoystick();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  showToast('You’re out of the car. Walk back up and press E to drive again.', 3000);
+}
+
+function handleNearbyInteraction() {
+  if (isPhoneOpen() || homeTransitionPending) return false;
+  const target = getNearbyInteractionTarget();
+  if (target === 'enter-car') {
+    enterParkedCar();
+    return true;
+  }
+  if (target === 'exit-car') {
+    exitParkedCar();
+    return true;
+  }
+  if (target === 'enter-home') {
+    beginHomeTransition('enter');
+    return true;
+  }
+  if (target === 'exit-home') {
     beginHomeTransition('exit');
     return true;
   }
-  if (Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ) > 4.2) return false;
-  beginHomeTransition('enter');
-  return true;
+  return false;
+}
+
+function updateVehicleMovement(delta, forwardInput, steeringInput) {
+  if (!playerCar || !isDriving) return;
+  const throttle = clamp(forwardInput, -1, 1);
+  if (pressedKeys.has(' ')) {
+    const braking = Math.min(Math.abs(playerCar.speed), 13 * delta);
+    playerCar.speed -= Math.sign(playerCar.speed) * braking;
+  } else if (Math.abs(throttle) > 0.08) {
+    if (playerCar.speed * throttle < 0) {
+      const braking = Math.min(Math.abs(playerCar.speed), 11 * delta * Math.abs(throttle));
+      playerCar.speed -= Math.sign(playerCar.speed) * braking;
+    } else {
+      playerCar.speed += throttle * 5.6 * delta;
+    }
+  } else {
+    playerCar.speed *= Math.exp(-1.45 * delta);
+    if (Math.abs(playerCar.speed) < 0.025) playerCar.speed = 0;
+  }
+  playerCar.speed = clamp(playerCar.speed, -3.8, 8.2);
+
+  const directionSign = playerCar.speed < -0.08 ? -1 : 1;
+  const speedFactor = clamp(Math.abs(playerCar.speed) / 1.2, 0, 1);
+  const turnDelta = -clamp(steeringInput, -1, 1) * 1.05 * speedFactor * directionSign * delta;
+  playerCar.group.rotation.y += turnDelta;
+  playerCar.steering = -clamp(steeringInput, -1, 1) * directionSign * 0.42;
+  if (!pointerDragging) cameraYaw += turnDelta;
+
+  const forwardX = -Math.sin(playerCar.group.rotation.y);
+  const forwardZ = -Math.cos(playerCar.group.rotation.y);
+  player.position.x += forwardX * playerCar.speed * delta;
+  player.position.z += forwardZ * playerCar.speed * delta;
+  player.rotation.y = playerCar.group.rotation.y;
+  velocity.set(0, 0, 0);
+
+  for (const wheel of playerCar.wheelPivots) {
+    wheel.pivot.rotation.y = wheel.isFront ? playerCar.steering : 0;
+    wheel.tire.rotation.x += playerCar.speed * delta / 0.34;
+  }
 }
 
 function toggleHomeLighting() {
@@ -2267,7 +2597,7 @@ function updatePhoneQuestProgress() {
 
 phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
-homeInteractionButton.addEventListener('click', handleHomeInteraction);
+homeInteractionButton.addEventListener('click', handleNearbyInteraction);
 homeLightsButton.addEventListener('click', toggleHomeLighting);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
@@ -2460,21 +2790,28 @@ function updateLocationAndMap() {
   setTextIfChanged(document.querySelector('#phone-map-location'), location);
   setTextIfChanged(document.querySelector('#phone-map-coordinates'), formattedCoordinates);
   const home = homeHouse;
-  let canReachHomeDoor = false;
-  if (home) {
-    if (isInsideHome) {
-      const local = homeWorldToLocal(x, z);
-      canReachHomeDoor = Math.hypot(local.x, local.z + 3.35) <= 2.1;
-    } else {
-      canReachHomeDoor = Math.hypot(x - home.doorX, z - home.doorZ) <= 4.2;
-    }
-  }
-    homeInteraction.hidden = (!isInsideHome && !canReachHomeDoor) || isPhoneOpen();
-  homeInteractionButton.hidden = isInsideHome && !canReachHomeDoor;
+  const interactionTarget = getNearbyInteractionTarget();
+  const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
+  const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
+  homeInteraction.hidden = !(hasHomePrompt || hasCarPrompt) || isPhoneOpen();
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
-  if (home) {
+
+  if (hasCarPrompt && playerCar) {
+    setTextIfChanged(homeInteractionEyebrow, isDriving ? 'MEADOW COURT · YOUR CAR' : 'YOUR CAR · MEADOW COURT');
+    const speed = Math.round(Math.abs(playerCar.speed) * 5);
+    const touchDriving = Boolean(navigator.maxTouchPoints);
+    const interactionMessage = isDriving
+      ? `Driving · ${speed} km/h · ${touchDriving ? 'joystick to drive and steer' : 'W/S drive, A/D steer'}`
+      : 'Your car is parked just ahead';
+    setTextIfChanged(homeInteractionMessage, interactionMessage);
+    setTextIfChanged(homeInteractionAction, isDriving ? 'EXIT CAR' : 'ENTER CAR');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', isDriving ? 'Exit your car' : 'Enter your car');
+  } else if (home && hasHomePrompt) {
+    const canReachHomeDoor = interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
     setTextIfChanged(homeInteractionEyebrow, isInsideHome ? `HOUSE 01 · ${currentHomeRoom.toUpperCase()}` : 'HOUSE 01 · YOUR HOME');
     const interactionMessage = isInsideHome
       ? (canReachHomeDoor ? 'The front door is right here' : `You’re in the ${currentHomeRoom.toLowerCase()}`)
@@ -2637,6 +2974,7 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
+  vehicleInteractionCooldown = Math.max(0, vehicleInteractionCooldown - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
   if (homeDoorPivot) {
@@ -2669,20 +3007,28 @@ function animate() {
     forwardInput /= inputMagnitude;
     sideInput /= inputMagnitude;
   }
-  const forward = new THREE.Vector3(Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-  const right = new THREE.Vector3(Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
-  const desiredDirection = forward.multiplyScalar(forwardInput).add(right.multiplyScalar(sideInput));
   const hasMovementInput = inputMagnitude > 0.08;
-  const isRunning = pressedKeys.has('shift');
-  const speed = isRunning ? 9.0 : 5.1;
-  const desiredVelocity = desiredDirection.multiplyScalar(speed);
-  const acceleration = isGrounded ? (hasMovementInput ? 12 : 17) : (hasMovementInput ? 4.8 : 1.5);
-  const response = 1 - Math.exp(-acceleration * delta);
-  velocity.x += (desiredVelocity.x - velocity.x) * response;
-  velocity.z += (desiredVelocity.z - velocity.z) * response;
+  const isRunning = !isDriving && pressedKeys.has('shift');
+  const desiredDirection = new THREE.Vector3();
+  let isMoving = false;
+  if (isDriving) {
+    updateVehicleMovement(delta, forwardInput, sideInput);
+    isMoving = Math.abs(playerCar?.speed || 0) > 0.15;
+  } else {
+    const forward = new THREE.Vector3(Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+    const right = new THREE.Vector3(Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
+    desiredDirection.copy(forward.multiplyScalar(forwardInput).add(right.multiplyScalar(sideInput)));
+    const speed = isRunning ? 9.0 : 5.1;
+    const desiredVelocity = desiredDirection.clone().multiplyScalar(speed);
+    const acceleration = isGrounded ? (hasMovementInput ? 12 : 17) : (hasMovementInput ? 4.8 : 1.5);
+    const response = 1 - Math.exp(-acceleration * delta);
+    velocity.x += (desiredVelocity.x - velocity.x) * response;
+    velocity.z += (desiredVelocity.z - velocity.z) * response;
+    player.position.x += velocity.x * delta;
+    player.position.z += velocity.z * delta;
+    isMoving = Math.hypot(velocity.x, velocity.z) > 0.15;
+  }
 
-  player.position.x += velocity.x * delta;
-  player.position.z += velocity.z * delta;
   const planarDistance = Math.hypot(player.position.x, player.position.z);
   if (planarDistance > 70) {
     const correction = 70 / planarDistance;
@@ -2690,44 +3036,61 @@ function animate() {
     player.position.z *= correction;
     const outwardX = player.position.x / 70;
     const outwardZ = player.position.z / 70;
-    const outwardVelocity = velocity.x * outwardX + velocity.z * outwardZ;
-    if (outwardVelocity > 0) {
-      velocity.x -= outwardX * outwardVelocity;
-      velocity.z -= outwardZ * outwardVelocity;
+    if (isDriving && playerCar) {
+      const forwardX = -Math.sin(playerCar.group.rotation.y);
+      const forwardZ = -Math.cos(playerCar.group.rotation.y);
+      if (playerCar.speed * (forwardX * outwardX + forwardZ * outwardZ) > 0) playerCar.speed = 0;
+    } else {
+      const outwardVelocity = velocity.x * outwardX + velocity.z * outwardZ;
+      if (outwardVelocity > 0) {
+        velocity.x -= outwardX * outwardVelocity;
+        velocity.z -= outwardZ * outwardVelocity;
+      }
     }
   }
   resolveHouseCollisions();
   resolveWorldObstacleCollisions();
-  const isMoving = Math.hypot(velocity.x, velocity.z) > 0.15;
 
   const ground = isInsideHome && homeHouse
-    ? homeHouse.group.position.y + HOME_FLOOR_TOP
-    : terrainHeight(player.position.x, player.position.z);
-  if (jumpRequested) {
-    jumpBufferTimer = JUMP_BUFFER_SECONDS;
+    ? homeHouse.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET
+    : groundHeightAt(player.position.x, player.position.z);
+  if (isDriving) {
+    jumpHeight = 0;
+    jumpVelocity = 0;
     jumpRequested = false;
-  } else {
-    jumpBufferTimer = Math.max(0, jumpBufferTimer - delta);
-  }
-  coyoteTimer = isGrounded ? COYOTE_TIME_SECONDS : Math.max(0, coyoteTimer - delta);
-  if (jumpBufferTimer > 0 && (isGrounded || coyoteTimer > 0)) {
-    jumpVelocity = JUMP_SPEED;
-    isGrounded = false;
-    coyoteTimer = 0;
     jumpBufferTimer = 0;
-  }
-  if (!isGrounded) {
-    jumpHeight += jumpVelocity * delta;
-    jumpVelocity -= PLAYER_GRAVITY * delta;
-    if (jumpHeight <= 0) {
-      jumpHeight = 0;
-      jumpVelocity = 0;
-      isGrounded = true;
+    isGrounded = true;
+    if (playerCar) {
+      playerCar.group.position.set(player.position.x, ground - PLAYER_FOOT_OFFSET, player.position.z);
+      playerCar.group.rotation.y = player.rotation.y;
+    }
+  } else {
+    if (jumpRequested) {
+      jumpBufferTimer = JUMP_BUFFER_SECONDS;
+      jumpRequested = false;
+    } else {
+      jumpBufferTimer = Math.max(0, jumpBufferTimer - delta);
+    }
+    coyoteTimer = isGrounded ? COYOTE_TIME_SECONDS : Math.max(0, coyoteTimer - delta);
+    if (jumpBufferTimer > 0 && (isGrounded || coyoteTimer > 0)) {
+      jumpVelocity = JUMP_SPEED;
+      isGrounded = false;
+      coyoteTimer = 0;
+      jumpBufferTimer = 0;
+    }
+    if (!isGrounded) {
+      jumpHeight += jumpVelocity * delta;
+      jumpVelocity -= PLAYER_GRAVITY * delta;
+      if (jumpHeight <= 0) {
+        jumpHeight = 0;
+        jumpVelocity = 0;
+        isGrounded = true;
+      }
     }
   }
   player.position.y = ground + jumpHeight;
 
-  if (hasMovementInput) {
+  if (!isDriving && hasMovementInput) {
     const targetYaw = Math.atan2(-desiredDirection.x, -desiredDirection.z);
     const angleDelta = Math.atan2(Math.sin(targetYaw - player.rotation.y), Math.cos(targetYaw - player.rotation.y));
     player.rotation.y += angleDelta * (1 - Math.exp(-12 * delta));
@@ -2785,10 +3148,13 @@ function animate() {
   beaconLight.intensity = prefersReducedMotion ? 3.8 : 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
 
   if (isFirstPerson) {
+    const seatOffset = isDriving && playerCar
+      ? new THREE.Vector3(-0.23, 0, -0.36).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerCar.group.rotation.y)
+      : new THREE.Vector3();
     const eyePosition = new THREE.Vector3(
-      player.position.x,
-      player.position.y + avatarModel.position.y + 1.73,
-      player.position.z,
+      player.position.x + seatOffset.x,
+      player.position.y + (isDriving ? 1.31 : avatarModel.position.y + 1.73),
+      player.position.z + seatOffset.z,
     );
     const pitchCos = Math.cos(cameraPitch);
     const viewDirection = new THREE.Vector3(
@@ -2813,15 +3179,17 @@ function animate() {
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-7 * delta));
     camera.lookAt(player.position.x, player.position.y + 1.2 + jumpHeight * 0.08, player.position.z);
   } else {
-    // Smooth third-person follow camera.
-    const cameraDistance = 10.8;
+    // Smooth third-person follow camera, pulled back a little farther for the car.
+    const cameraDistance = isDriving ? 12.6 : 10.8;
+    const cameraHeight = isDriving ? 4.8 : 6.2;
+    const lookHeight = isDriving ? 0.98 : 1.24;
     const desiredCameraPosition = new THREE.Vector3(
       player.position.x + Math.sin(cameraYaw) * cameraDistance,
-      player.position.y + 6.2 + jumpHeight * 0.16,
+      player.position.y + cameraHeight + jumpHeight * 0.16,
       player.position.z + Math.cos(cameraYaw) * cameraDistance,
     );
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-5.2 * delta));
-    camera.lookAt(player.position.x, player.position.y + 1.24 + jumpHeight * 0.12, player.position.z);
+    camera.lookAt(player.position.x, player.position.y + lookHeight + jumpHeight * 0.12, player.position.z);
   }
 
   uiAccumulator += delta;

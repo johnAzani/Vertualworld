@@ -208,6 +208,8 @@ button { -webkit-tap-highlight-color: transparent; }
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   white-space: nowrap; pointer-events: none;
 }
+.controls-hint .hint-set { display: contents; }
+.controls-hint .hint-set[hidden] { display: none !important; }
 .control-pair { display: flex; align-items: center; gap: 4px; }
 .control-pair > span:last-child { margin-left: 4px; color: #d0dfd3; font-size: 8px; line-height: 1; font-weight: 700; letter-spacing: .1em; }
 kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding: 0 4px; border: 1px solid rgba(224,240,224,.27); border-radius: 5px; color: #eff3df; background: rgba(236,245,225,.09); font: 700 8px/1 'DM Sans', sans-serif; }

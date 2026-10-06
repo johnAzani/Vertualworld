@@ -101,16 +101,29 @@
           <progress id="progress-fill" class="progress-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress>
         </aside>
 
-        <div class="controls-hint" role="group" aria-label="Keyboard controls">
-          <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
-          <span class="control-separator"></span>
-          <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
-          <span class="control-separator"></span>
-          <span class="control-pair"><kbd>SPACE</kbd><span>JUMP</span></span>
-          <span class="control-separator"></span>
-          <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
-          <span class="control-separator"></span>
-          <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>DRAG TO LOOK</span></span>
+        <div class="controls-hint" id="controls-hint" role="group" aria-label="Keyboard controls">
+          <span class="hint-set" id="walking-controls">
+            <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SPACE</kbd><span>JUMP</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>DRAG TO LOOK</span></span>
+          </span>
+          <span class="hint-set" id="vehicle-controls" hidden>
+            <span class="control-pair"><kbd>W</kbd><kbd>S</kbd><span>DRIVE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>A</kbd><kbd>D</kbd><span>STEER</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SPACE</kbd><span>BRAKE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>E</kbd><span>EXIT</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
+          </span>
         </div>
       </main>
 
@@ -270,7 +283,7 @@
         <span class="toast-message" id="toast-message">A little light found its way home.</span>
       </div>
 
-      <div class="home-interaction" id="home-interaction" role="group" aria-label="Home controls" hidden>
+      <div class="home-interaction" id="home-interaction" role="group" aria-label="Nearby interaction controls" hidden>
         <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message" aria-live="polite" aria-atomic="true">Enter your home at Meadow Court</strong></div>
         <button id="home-interaction-button" type="button" aria-label="Enter your Meadow Court home"><kbd>E</kbd><span id="home-interaction-action">ENTER HOME</span></button>
         <button class="home-lights-button" id="home-lights-button" type="button" aria-label="Turn home lights off" hidden><kbd>L</kbd><span id="home-lights-action">LIGHTS OFF</span></button>
@@ -281,8 +294,8 @@
           <span class="joystick-ring"></span>
           <span class="joystick-stick" id="joystick-stick"></span>
         </div>
-        <button class="jump-button" id="jump-button" type="button" aria-label="Jump"><span>↑</span><small>JUMP</small></button>
-        <div class="touch-label">MOVE</div>
+        <button class="jump-button" id="jump-button" type="button" aria-label="Jump"><span id="jump-button-icon">↑</span><small id="jump-button-label">JUMP</small></button>
+        <div class="touch-label" id="touch-label">MOVE</div>
       </div>
 
       <div class="loading-screen" id="loading-screen" role="status" aria-live="polite" aria-atomic="true">
