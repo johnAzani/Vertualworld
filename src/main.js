@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
 import {
   createTransportNetwork,
+  getBusWaitSeconds,
+  getNearestBusTerminal,
   getNearestTransitStation,
+  getNextBusTerminal,
   getNextTransitStation,
   getTransportSurfaceHeight,
   getTransitWaitSeconds,
+  isBusAtTerminal,
   isReservedTransportSpot,
   isTrainAtStation,
   updateTransitLighting,
@@ -205,7 +209,8 @@ let transitNetwork = null;
 let isDriving = false;
 let isRidingTransit = false;
 let transitStopRequested = false;
-let transitBoardedStationId = null;
+let transitRideMode = null;
+let transitBoardedStopId = null;
 let vehicleInteractionCooldown = 0;
 let vehicleAccelerateTapTimer = 0;
 const vehicleTouchInput = { accelerate: false, brake: false };
@@ -1453,6 +1458,7 @@ const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
 transitNetwork = createTransportNetwork(scene, terrainHeight);
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 3.25, height: 2.55 });
+worldObstacleColliders.push({ vehicleGroup: transitNetwork.bus.group, radius: 2.9, height: 2.55 });
 
 const treeLocations = [];
 const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
@@ -1940,7 +1946,7 @@ function updateVehicleControlUi() {
   walkingControlsHint.hidden = isDriving || isRidingTransit;
   vehicleControlsHint.hidden = !isDriving;
   transitControlsHint.hidden = !isRidingTransit;
-  controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : isRidingTransit ? 'Island Line controls' : 'Keyboard controls');
+  controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : isRidingTransit ? 'Rail and bus riding controls' : 'Keyboard controls');
   viewToggleButton.disabled = isRidingTransit || isWatchingMatch;
   jumpButtonLabel.textContent = isDriving ? 'BRAKE' : isRidingTransit ? 'ON BOARD' : 'JUMP';
   jumpButtonIcon.textContent = isDriving ? '■' : '↑';
@@ -2446,15 +2452,33 @@ function beginHomeTransition(destination) {
   }, transitionDuration);
 }
 
-function boardIslandLine(station) {
-  if (!transitNetwork || !station || isDriving || isRidingTransit || !isTrainAtStation(transitNetwork, station)) return false;
+function getNextActiveTransitStop() {
+  return transitRideMode === 'bus'
+    ? getNextBusTerminal(transitNetwork)
+    : getNextTransitStation(transitNetwork);
+}
+
+function getCurrentActiveTransitStop() {
+  if (transitRideMode === 'bus') return transitNetwork.busTerminals[transitNetwork.busService.currentTerminalIndex];
+  return transitNetwork.stations[transitNetwork.currentStationIndex];
+}
+
+function getActiveTransitVehicle() {
+  return transitRideMode === 'bus' ? transitNetwork.bus.group : transitNetwork.train.group;
+}
+
+function boardTransitVehicle(mode, stop) {
+  if (!transitNetwork || !stop || isDriving || isRidingTransit) return false;
+  const ready = mode === 'bus' ? isBusAtTerminal(transitNetwork, stop) : isTrainAtStation(transitNetwork, stop);
+  if (!ready) return false;
   isRidingTransit = true;
+  transitRideMode = mode;
   transitStopRequested = false;
-  transitBoardedStationId = station.id;
-  const train = transitNetwork.train.group;
-  player.position.set(train.position.x, train.position.y + 0.55, train.position.z);
-  player.rotation.y = train.rotation.y;
-  cameraYaw = isFirstPerson ? -train.rotation.y : train.rotation.y;
+  transitBoardedStopId = stop.id;
+  const vehicle = mode === 'bus' ? transitNetwork.bus.group : transitNetwork.train.group;
+  player.position.set(vehicle.position.x, vehicle.position.y + 0.55, vehicle.position.z);
+  player.rotation.y = vehicle.rotation.y;
+  cameraYaw = isFirstPerson ? -vehicle.rotation.y : vehicle.rotation.y;
   cameraPitch = 0;
   velocity.set(0, 0, 0);
   jumpHeight = 0;
@@ -2470,18 +2494,20 @@ function boardIslandLine(station) {
   resetVehicleTouchInputs();
   updateVehicleControlUi();
   updateLocationAndMap();
-  showToast(`Boarded at ${station.name}. Press E at any time to request the next stop.`, 3600);
+  const serviceName = mode === 'bus' ? 'Island Bus' : 'Island Line';
+  showToast(`Boarded the ${serviceName} at ${stop.name}. Press E to request the next stop.`, 3600);
   return true;
 }
 
-function leaveIslandLine(station) {
-  if (!isRidingTransit || !station) return;
+function leaveTransitVehicle(stop) {
+  if (!isRidingTransit || !stop) return;
   isRidingTransit = false;
+  transitRideMode = null;
   transitStopRequested = false;
-  transitBoardedStationId = null;
-  player.position.set(station.x, groundHeightAt(station.x, station.z), station.z);
-  player.rotation.y = station.yaw;
-  cameraYaw = station.yaw;
+  transitBoardedStopId = null;
+  player.position.set(stop.x, groundHeightAt(stop.x, stop.z), stop.z);
+  player.rotation.y = stop.yaw;
+  cameraYaw = stop.yaw;
   cameraPitch = 0;
   velocity.set(0, 0, 0);
   jumpHeight = 0;
@@ -2497,31 +2523,39 @@ function leaveIslandLine(station) {
   resetVehicleTouchInputs();
   updateVehicleControlUi();
   updateLocationAndMap();
-  showToast(`Arrived at ${station.name}. Step off and explore.`, 3000);
+  showToast(`Arrived at ${stop.name}. Step off and explore.`, 3000);
 }
 
-function requestIslandLineStop() {
+function requestTransitStop() {
   if (!isRidingTransit || !transitNetwork) return;
-  const currentStation = transitNetwork.stations[transitNetwork.currentStationIndex];
-  if (transitNetwork.dwellRemaining > 0.05 && currentStation?.id !== transitBoardedStationId) {
-    leaveIslandLine(currentStation);
+  const currentStop = getCurrentActiveTransitStop();
+  const dwellRemaining = transitRideMode === 'bus'
+    ? transitNetwork.busService.dwellRemaining
+    : transitNetwork.dwellRemaining;
+  if (dwellRemaining > 0.05 && currentStop?.id !== transitBoardedStopId) {
+    leaveTransitVehicle(currentStop);
     return;
   }
+  const nextStop = getNextActiveTransitStop();
   if (transitStopRequested) {
-    showToast(`Stop requested · next station: ${getNextTransitStation(transitNetwork).name}.`, 2500);
+    showToast(`Stop requested · ${nextStop.name} is next.`, 2500);
     return;
   }
   transitStopRequested = true;
-  showToast(`Stop requested · ${getNextTransitStation(transitNetwork).name} is next.`, 2800);
+  showToast(`Stop requested · ${nextStop.name} is next.`, 2800);
   updateLocationAndMap();
 }
 
-function getNearbyTransitStation() {
+function getNearbyRailStation() {
   return getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6)?.station ?? null;
 }
 
+function getNearbyBusTerminal() {
+  return getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6)?.terminal ?? null;
+}
+
 function getNearbyInteractionTarget() {
-  if (isRidingTransit) return 'request-train-stop';
+  if (isRidingTransit) return 'request-transit-stop';
   if (isDriving) return 'exit-car';
 
   if (isInsideHome) {
@@ -2540,8 +2574,12 @@ function getNearbyInteractionTarget() {
   if (vehicleInteractionCooldown <= 0 && carDistance <= CAR_INTERACTION_RADIUS) return 'enter-car';
   if (homeDistance <= 4.2) return 'enter-home';
 
-  const station = getNearbyTransitStation();
-  if (station) return isTrainAtStation(transitNetwork, station) ? 'board-train' : 'wait-train';
+  const railStop = getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6);
+  const busStop = getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6);
+  if (railStop && (!busStop || railStop.distance <= busStop.distance)) {
+    return isTrainAtStation(transitNetwork, railStop.station) ? 'board-train' : 'wait-train';
+  }
+  if (busStop) return isBusAtTerminal(transitNetwork, busStop.terminal) ? 'board-bus' : 'wait-bus';
   const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
   if (stadiumDistance <= 21) return 'watch-match';
   return null;
@@ -2620,19 +2658,30 @@ function handleNearbyInteraction() {
     enterMatchView();
     return true;
   }
-  if (target === 'request-train-stop') {
-    requestIslandLineStop();
+  if (target === 'request-transit-stop') {
+    requestTransitStop();
     return true;
   }
   if (target === 'board-train') {
-    const station = getNearbyTransitStation();
-    if (!boardIslandLine(station)) showToast('The Island Line is pulling out. Wait for its next stop.');
+    const station = getNearbyRailStation();
+    if (!boardTransitVehicle('rail', station)) showToast('The Island Line is pulling out. Wait for its next stop.');
     return true;
   }
   if (target === 'wait-train') {
-    const station = getNearbyTransitStation();
+    const station = getNearbyRailStation();
     const waitSeconds = getTransitWaitSeconds(transitNetwork, station);
-    showToast(`${station.name} · next tram in about ${waitSeconds} seconds.`, 3200);
+    showToast(`${station.name} · next train in about ${waitSeconds} seconds.`, 3200);
+    return true;
+  }
+  if (target === 'board-bus') {
+    const terminal = getNearbyBusTerminal();
+    if (!boardTransitVehicle('bus', terminal)) showToast('The Island Bus is pulling out. Wait for its next terminal stop.');
+    return true;
+  }
+  if (target === 'wait-bus') {
+    const terminal = getNearbyBusTerminal();
+    const waitSeconds = getBusWaitSeconds(transitNetwork, terminal);
+    showToast(`${terminal.name} · next bus in about ${waitSeconds} seconds.`, 3200);
     return true;
   }
   if (target === 'enter-car') {
@@ -3068,11 +3117,11 @@ function updateLocationAndMap() {
   const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
   const hasStadiumPrompt = interactionTarget === 'watch-match';
-  const hasTransitPrompt = ['board-train', 'wait-train', 'request-train-stop'].includes(interactionTarget);
+  const hasTransitPrompt = ['board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
   homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'request-train-stop'].includes(interactionTarget);
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Island Line station controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -3095,28 +3144,36 @@ function updateLocationAndMap() {
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isInsideHome ? 'LEAVE HOME' : 'ENTER HOME');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
-  } else if (hasTransitPrompt && interactionTarget === 'request-train-stop') {
-    const nextStation = getNextTransitStation(transitNetwork);
-    setTextIfChanged(homeInteractionEyebrow, 'ISLAND LINE · ON BOARD');
+  } else if (hasTransitPrompt && interactionTarget === 'request-transit-stop') {
+    const nextStop = getNextActiveTransitStop();
+    const serviceName = transitRideMode === 'bus' ? 'ISLAND BUS' : 'ISLAND LINE';
+    setTextIfChanged(homeInteractionEyebrow, `${serviceName} · ON BOARD`);
     setTextIfChanged(homeInteractionMessage, transitStopRequested
-      ? `Stop requested · ${nextStation.name} is next`
-      : `Next station · ${nextStation.name}`);
+      ? `Stop requested · ${nextStop.name} is next`
+      : `Next stop · ${nextStop.name}`);
     setTextIfChanged(homeInteractionAction, transitStopRequested ? 'STOP REQUESTED' : 'REQUEST STOP');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', transitStopRequested
-      ? `Stop requested at ${nextStation.name}`
-      : `Request a stop at ${nextStation.name}`);
+      ? `Stop requested at ${nextStop.name}`
+      : `Request a stop at ${nextStop.name}`);
   } else if (hasTransitPrompt) {
-    const station = getNearbyTransitStation();
-    const trainWaiting = isTrainAtStation(transitNetwork, station);
-    const waitSeconds = getTransitWaitSeconds(transitNetwork, station);
-    setTextIfChanged(homeInteractionEyebrow, `${station.name.toUpperCase()} · ISLAND LINE`);
-    setTextIfChanged(homeInteractionMessage, trainWaiting
-      ? 'The Island Line is ready to board'
-      : `Next tram in about ${waitSeconds} seconds`);
-    setTextIfChanged(homeInteractionAction, trainWaiting ? 'BOARD TRAIN' : 'WAIT');
-    setAttributeIfChanged(homeInteractionButton, 'aria-label', trainWaiting
-      ? `Board the Island Line at ${station.name}`
-      : `Wait for the Island Line at ${station.name}`);
+    const isBusPrompt = interactionTarget === 'board-bus' || interactionTarget === 'wait-bus';
+    const stop = isBusPrompt ? getNearbyBusTerminal() : getNearbyRailStation();
+    const vehicleReady = isBusPrompt
+      ? isBusAtTerminal(transitNetwork, stop)
+      : isTrainAtStation(transitNetwork, stop);
+    const waitSeconds = isBusPrompt
+      ? getBusWaitSeconds(transitNetwork, stop)
+      : getTransitWaitSeconds(transitNetwork, stop);
+    const vehicleName = isBusPrompt ? 'Island Bus' : 'Island Line';
+    const vehicleType = isBusPrompt ? 'BUS TERMINAL' : 'RAIL TERMINAL';
+    setTextIfChanged(homeInteractionEyebrow, `${stop.name.toUpperCase()} · ${vehicleType}`);
+    setTextIfChanged(homeInteractionMessage, vehicleReady
+      ? `${vehicleName} is ready to board`
+      : `Next ${isBusPrompt ? 'bus' : 'train'} in about ${waitSeconds} seconds`);
+    setTextIfChanged(homeInteractionAction, vehicleReady ? (isBusPrompt ? 'BOARD BUS' : 'BOARD TRAIN') : 'WAIT');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', vehicleReady
+      ? `Board the ${vehicleName} at ${stop.name}`
+      : `Wait for the ${vehicleName} at ${stop.name}`);
   } else if (hasStadiumPrompt) {
     setTextIfChanged(homeInteractionEyebrow, 'MATCHDAY · MEADOW PARK');
     setTextIfChanged(homeInteractionMessage, 'Fern Foxes vs River Blues · LIVE');
@@ -3204,6 +3261,17 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.stroke();
 
     ctx.beginPath();
+    transitNetwork.busMapPoints.forEach(([x, z], index) => {
+      if (index === 0) ctx.moveTo(mapX(x), mapY(z));
+      else ctx.lineTo(mapX(x), mapY(z));
+    });
+    ctx.setLineDash([Math.max(2, radius * 0.024), Math.max(1.5, radius * 0.018)]);
+    ctx.strokeStyle = 'rgba(237, 184, 110, .96)';
+    ctx.lineWidth = Math.max(1.5, radius * 0.02);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
     transitNetwork.railMapPoints.forEach(([x, z], index) => {
       if (index === 0) ctx.moveTo(mapX(x), mapY(z));
       else ctx.lineTo(mapX(x), mapY(z));
@@ -3247,6 +3315,25 @@ function drawMapCanvas(targetCanvas, ctx) {
       ctx.strokeText(stationMapNames[station.id] || station.name, stationX + labelOffsetX, stationY + labelOffsetY);
       ctx.fillStyle = '#315b4a';
       ctx.fillText(stationMapNames[station.id] || station.name, stationX + labelOffsetX, stationY + labelOffsetY);
+    }
+    for (const terminal of transitNetwork.busTerminals) {
+      const terminalX = mapX(terminal.x);
+      const terminalY = mapY(terminal.z);
+      const iconSize = Math.max(2.6, radius * 0.025);
+      ctx.save();
+      ctx.translate(terminalX, terminalY);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#d9895c';
+      ctx.strokeStyle = '#fff7e7';
+      ctx.lineWidth = 1.1;
+      ctx.fillRect(-iconSize, -iconSize, iconSize * 2, iconSize * 2);
+      ctx.strokeRect(-iconSize, -iconSize, iconSize * 2, iconSize * 2);
+      ctx.restore();
+      ctx.fillStyle = '#fff7e7';
+      ctx.font = `700 ${Math.max(4.5, radius * 0.05)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('B', terminalX, terminalY + 0.2);
     }
     ctx.restore();
   }
@@ -3366,14 +3453,16 @@ function animate() {
   if (!prefersReducedMotion) updateDaylight();
   updateStadiumMatch(stadium, delta, prefersReducedMotion);
   const transitUpdate = updateTransportNetwork(transitNetwork, delta);
-  if (isRidingTransit && transitStopRequested && transitUpdate.arrivedStation
-    && transitUpdate.arrivedStation.id !== transitBoardedStationId) {
-    leaveIslandLine(transitUpdate.arrivedStation);
+  const arrivedRideStop = transitRideMode === 'bus' ? transitUpdate.arrivedBusTerminal : transitUpdate.arrivedStation;
+  if (isRidingTransit && transitStopRequested && arrivedRideStop
+    && arrivedRideStop.id !== transitBoardedStopId) {
+    leaveTransitVehicle(arrivedRideStop);
   }
   if (isRidingTransit) {
-    const train = transitNetwork.train.group;
-    player.position.set(train.position.x, train.position.y + 0.55, train.position.z);
-    player.rotation.y = train.rotation.y;
+    const vehicle = getActiveTransitVehicle();
+    player.position.set(vehicle.position.x, vehicle.position.y + 0.55, vehicle.position.z);
+    player.rotation.y = vehicle.rotation.y;
+    if (!isFirstPerson && !pointerDragging) cameraYaw = vehicle.rotation.y;
   }
   if (homeDoorPivot) {
     if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;

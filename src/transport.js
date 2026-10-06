@@ -38,13 +38,22 @@ const STATION_LAYOUT = [
   },
 ];
 
+const BUS_TERMINAL_LAYOUT = [
+  { id: 'meadow-court-bus', name: 'Meadow Court', roadPoint: [44, 8], terminalPoint: [48, 0] },
+  { id: 'beacon-circle-bus', name: 'Beacon Circle', roadPoint: [7, -29], terminalPoint: [12, -34] },
+  { id: 'meadow-park-bus', name: 'Meadow Park', roadPoint: [-53.5, 18], terminalPoint: [-57, 27] },
+];
+
 const ROAD_HALF_WIDTH = 2.35;
 const ROAD_SURFACE_OFFSET = 0.115;
 const TRACK_HALF_WIDTH = 1.25;
 const RAIL_GAUGE_HALF_WIDTH = 0.68;
 const TRAIN_SPEED = 7.2;
+const BUS_SPEED = 8.8;
 const STATION_DWELL_SECONDS = 6.5;
+const BUS_TERMINAL_DWELL_SECONDS = 7.5;
 const TRAIN_LENGTH = 6.3;
+const BUS_LENGTH = 5.7;
 const TRAIN_WHEEL_RADIUS = 0.29;
 
 function addBox(parent, width, height, depth, material, x, y, z, castShadow = true, receiveShadow = true) {
@@ -179,7 +188,7 @@ function createOffsetRailCurve(centerCurve, terrainHeight, lateralOffset, sample
   return new THREE.CatmullRomCurve3(points, true, 'centripetal');
 }
 
-function findCurveFraction(curve, x, z, samples = 800) {
+function findCurveFraction(curve, x, z, samples = 800, wrapAtEnd = true) {
   let bestFraction = 0;
   let bestDistanceSquared = Infinity;
   for (let index = 0; index <= samples; index += 1) {
@@ -191,7 +200,7 @@ function findCurveFraction(curve, x, z, samples = 800) {
       bestFraction = fraction;
     }
   }
-  return bestFraction > 0.98 ? 0 : bestFraction;
+  return wrapAtEnd && bestFraction > 0.98 ? 0 : bestFraction;
 }
 
 function makeStationSignTexture(title, subtitle) {
@@ -330,7 +339,7 @@ function addTrain(scene) {
 
 function addStation(scene, station, terrainHeight) {
   const root = new THREE.Group();
-  root.name = `${station.name} Island Line station`;
+  root.name = `${station.name} Rail Terminal`;
   root.position.set(station.x, terrainHeight(station.x, station.z) + 0.025, station.z);
   root.rotation.y = station.yaw;
 
@@ -338,9 +347,12 @@ function addStation(scene, station, terrainHeight) {
   const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xe3bd66, roughness: 0.72, emissive: 0x453514, emissiveIntensity: 0.12 });
   const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x50645a, roughness: 0.67, metalness: 0.2 });
   const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x3a6254, roughness: 0.76, metalness: 0.08 });
+  const terminalWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd5d0b9, roughness: 0.84 });
+  const terminalTrimMaterial = new THREE.MeshStandardMaterial({ color: 0x6e8b73, roughness: 0.62, metalness: 0.08 });
+  const terminalGlassMaterial = new THREE.MeshStandardMaterial({ color: 0x79aeb0, emissive: 0x183c3a, emissiveIntensity: 0.14, roughness: 0.24, metalness: 0.08, side: THREE.DoubleSide });
   const benchMaterial = new THREE.MeshStandardMaterial({ color: 0x587e69, roughness: 0.72 });
   const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffe6aa, emissive: 0xe8aa51, emissiveIntensity: 0.12, roughness: 0.28 });
-  const stationCanvas = makeStationSignTexture(station.name, 'ISLAND LINE  ·  ALL STOPS');
+  const stationCanvas = makeStationSignTexture(station.name, 'RAIL TERMINAL  ·  ISLAND LINE');
   const stationSignMaterial = new THREE.MeshBasicMaterial({ map: stationCanvas, toneMapped: false, side: THREE.DoubleSide });
 
   addBox(root, station.length, 0.34, station.width, platformMaterial, 0, 0.17, 0, false, true);
@@ -366,6 +378,37 @@ function addStation(scene, station, terrainHeight) {
   sign.rotation.y = shelterSide > 0 ? Math.PI : 0;
   root.add(sign);
 
+  const terminalCenterZ = station.platformSide * 3.78;
+  addBox(root, 1.45, 0.14, 0.78, platformMaterial, 0, 0.26, station.platformSide * 1.48, false, true);
+  addBox(root, 6.65, 0.2, 4.55, platformMaterial, 0, 0.25, terminalCenterZ, false, true);
+  addBox(root, 6.1, 2.05, 4.0, terminalWallMaterial, 0, 1.35, terminalCenterZ, true, true);
+  addBox(root, 6.38, 0.2, 4.3, roofMaterial, 0, 2.49, terminalCenterZ, true, false);
+  addBox(root, 6.55, 0.075, 4.42, edgeMaterial, 0, 2.36, terminalCenterZ, false, false);
+  for (const side of [-1, 1]) {
+    const window = new THREE.Mesh(new THREE.PlaneGeometry(4.95, 0.82), terminalGlassMaterial);
+    window.position.set(0, 1.53, terminalCenterZ + side * 2.015);
+    window.rotation.y = side < 0 ? Math.PI : 0;
+    window.castShadow = false;
+    root.add(window);
+  }
+  const terminalFrontZ = terminalCenterZ - station.platformSide * 2.025;
+  const entranceDoor = new THREE.Mesh(new THREE.PlaneGeometry(1.18, 1.7), terminalGlassMaterial);
+  entranceDoor.position.set(0, 1.18, terminalFrontZ);
+  entranceDoor.rotation.y = station.platformSide > 0 ? Math.PI : 0;
+  root.add(entranceDoor);
+  addBox(root, 4.95, 0.72, 0.12, supportMaterial, 0, 2.05, terminalCenterZ - station.platformSide * 2.08, false, false);
+  const terminalSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.7, 0.58),
+    new THREE.MeshBasicMaterial({ map: makeStationSignTexture(station.name, 'RAIL TERMINAL  ·  PLATFORM 01'), toneMapped: false, side: THREE.DoubleSide }),
+  );
+  terminalSign.position.set(0, 2.05, terminalCenterZ - station.platformSide * 2.15);
+  terminalSign.rotation.y = station.platformSide > 0 ? Math.PI : 0;
+  root.add(terminalSign);
+  for (const x of [-2.4, 2.4]) {
+    addBox(root, 0.1, 0.45, 0.1, terminalTrimMaterial, x, 0.58, terminalCenterZ - station.platformSide * 2.35, false, false);
+  }
+  addBox(root, 1.65, 0.12, 0.55, benchMaterial, 0, 0.53, terminalCenterZ + station.platformSide * 0.8, false, false);
+
   const bulbs = [];
   for (const x of [-1.75, 1.75]) {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), lampMaterial);
@@ -377,10 +420,183 @@ function addStation(scene, station, terrainHeight) {
     bulbs.push({ light, material: lampMaterial });
   }
 
+  for (const x of [-2.0, 2.0]) {
+    const terminalBulb = new THREE.Mesh(new THREE.SphereGeometry(0.095, 8, 6), lampMaterial);
+    terminalBulb.position.set(x, 2.28, terminalCenterZ - station.platformSide * 1.92);
+    root.add(terminalBulb);
+    const light = new THREE.PointLight(0xffd792, 0, 9, 2);
+    light.position.set(x, 2.12, terminalCenterZ - station.platformSide * 1.7);
+    root.add(light);
+    bulbs.push({ light, material: lampMaterial });
+  }
+
   scene.add(root);
   station.group = root;
   station.platformTop = root.position.y + 0.34;
+  station.terminalBounds = { centerZ: terminalCenterZ, halfX: 3.33, halfZ: 2.28, top: root.position.y + 0.35 };
+  station.connectorBounds = { centerZ: station.platformSide * 1.43, halfX: 0.72, halfZ: 0.42, top: root.position.y + 0.34 };
   station.lights = bulbs;
+}
+
+function addBusTerminal(scene, terminal, terrainHeight) {
+  const root = new THREE.Group();
+  root.name = `${terminal.name} Bus Terminal`;
+  root.position.set(terminal.x, terrainHeight(terminal.x, terminal.z) + 0.025, terminal.z);
+  root.rotation.y = terminal.yaw;
+
+  const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xb9b5a3, roughness: 0.91 });
+  const curbMaterial = new THREE.MeshStandardMaterial({ color: 0xe1bf70, roughness: 0.68, emissive: 0x493612, emissiveIntensity: 0.1 });
+  const structureMaterial = new THREE.MeshStandardMaterial({ color: 0x416b59, roughness: 0.72, metalness: 0.08 });
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d1b8, roughness: 0.82 });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x77aeb1, emissive: 0x163e3d, emissiveIntensity: 0.14, roughness: 0.23, metalness: 0.08, side: THREE.DoubleSide });
+  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffe4a8, emissive: 0xe1a751, emissiveIntensity: 0.12, roughness: 0.28 });
+  const signMaterial = new THREE.MeshBasicMaterial({ map: makeStationSignTexture(terminal.name, 'BUS TERMINAL  ·  ISLAND SHUTTLE'), toneMapped: false, side: THREE.DoubleSide });
+  const roadSide = terminal.roadSide;
+  const hallZ = -roadSide * 0.72;
+
+  addBox(root, 8.25, 0.34, 4.5, platformMaterial, 0, 0.17, 0, false, true);
+  addBox(root, 7.9, 0.035, 0.16, curbMaterial, 0, 0.36, roadSide * 1.98, false, false);
+  addBox(root, 5.15, 1.88, 2.5, wallMaterial, 0, 1.31, hallZ, true, true);
+  addBox(root, 5.42, 0.16, 2.78, structureMaterial, 0, 2.32, hallZ, true, false);
+  for (const side of [-1, 1]) {
+    const window = new THREE.Mesh(new THREE.PlaneGeometry(4.15, 0.82), glassMaterial);
+    window.position.set(0, 1.48, hallZ + side * 1.258);
+    window.rotation.y = side < 0 ? Math.PI : 0;
+    root.add(window);
+  }
+  const terminalDoor = new THREE.Mesh(new THREE.PlaneGeometry(1.02, 1.62), glassMaterial);
+  terminalDoor.position.set(0, 1.15, hallZ + roadSide * 1.267);
+  terminalDoor.rotation.y = roadSide < 0 ? Math.PI : 0;
+  root.add(terminalDoor);
+  for (const x of [-3.15, 3.15]) addBox(root, 0.12, 2.1, 0.12, structureMaterial, x, 1.35, roadSide * 0.74, true, false);
+  addBox(root, 7.0, 0.18, 3.35, structureMaterial, 0, 2.46, roadSide * 0.74, true, false);
+  addBox(root, 6.8, 0.1, 0.12, curbMaterial, 0, 2.34, roadSide * 2.36, false, false);
+  addBox(root, 3.2, 0.52, 0.14, structureMaterial, 0, 2.75, roadSide * 0.79, false, false);
+  const terminalSign = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.4), signMaterial);
+  terminalSign.position.set(0, 2.75, roadSide * 0.87);
+  terminalSign.rotation.y = roadSide < 0 ? Math.PI : 0;
+  root.add(terminalSign);
+  addBox(root, 1.2, 0.82, 0.72, structureMaterial, -1.45, 0.75, hallZ - roadSide * 0.35, false, false);
+  for (const x of [-2.2, 2.2]) {
+    addBox(root, 1.55, 0.12, 0.46, structureMaterial, x, 0.55, roadSide * 1.06, false, false);
+    addBox(root, 1.55, 0.42, 0.1, structureMaterial, x, 0.8, roadSide * 1.22, false, false);
+  }
+
+  const lights = [];
+  for (const x of [-2.4, 2.4]) {
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), lampMaterial);
+    bulb.position.set(x, 2.31, roadSide * 0.88);
+    root.add(bulb);
+    const light = new THREE.PointLight(0xffd792, 0, 10, 2);
+    light.position.set(x, 2.14, roadSide * 0.75);
+    root.add(light);
+    lights.push({ light, material: lampMaterial });
+  }
+
+  scene.add(root);
+  terminal.group = root;
+  terminal.platformTop = root.position.y + 0.34;
+  terminal.bounds = { halfX: 4.13, halfZ: 2.26, top: terminal.platformTop };
+  terminal.lights = lights;
+  return root;
+}
+
+function makeBusSignTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 768;
+  canvas.height = 160;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#214f45';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#e3c47c';
+  context.fillRect(0, 0, 12, canvas.height);
+  context.fillRect(canvas.width - 12, 0, 12, canvas.height);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#fff4d8';
+  context.font = '700 46px Arial, sans-serif';
+  context.fillText('ISLAND BUS', canvas.width / 2, 60);
+  context.fillStyle = '#b8d7c3';
+  context.font = '700 19px Arial, sans-serif';
+  context.fillText('ISLAND SHUTTLE  ·  ALL STOPS', canvas.width / 2, 119);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 2;
+  return texture;
+}
+
+function addBus(scene) {
+  const group = new THREE.Group();
+  group.name = 'Island Bus circular shuttle';
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x527e62, roughness: 0.5, metalness: 0.1 });
+  const lowerBodyMaterial = new THREE.MeshStandardMaterial({ color: 0x294b41, roughness: 0.72, metalness: 0.12 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e1cd, roughness: 0.56, metalness: 0.05 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xe0c47e, roughness: 0.4, metalness: 0.25 });
+  const windowMaterial = new THREE.MeshStandardMaterial({ color: 0x76b4b4, emissive: 0x19403f, emissiveIntensity: 0.2, roughness: 0.22, metalness: 0.08, side: THREE.DoubleSide });
+  const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x27342f, roughness: 0.86, metalness: 0.08 });
+  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffe4a7, emissive: 0xffc95d, emissiveIntensity: 0.32, roughness: 0.28 });
+  const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xe27f68, emissive: 0x8a3028, emissiveIntensity: 0.22, roughness: 0.34 });
+  addBox(group, 1.88, 0.3, 5.25, lowerBodyMaterial, 0, 0.6, 0);
+  addBox(group, 2.05, 1.28, BUS_LENGTH, bodyMaterial, 0, 1.34, 0);
+  addBox(group, 2.1, 0.16, 5.94, roofMaterial, 0, 2.06, 0.02);
+  addBox(group, 2.09, 0.1, 5.8, trimMaterial, 0, 0.92, 0);
+  for (const side of [-1, 1]) {
+    for (const z of [-1.85, -0.55, 0.83, 1.92]) {
+      const window = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.57), windowMaterial);
+      window.position.set(side * 1.036, 1.53, z);
+      window.rotation.y = side * Math.PI / 2;
+      group.add(window);
+    }
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.96), windowMaterial);
+    door.position.set(side * 1.04, 1.27, 0.15);
+    door.rotation.y = side * Math.PI / 2;
+    group.add(door);
+    const routeSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.25, 0.45),
+      new THREE.MeshBasicMaterial({ map: makeBusSignTexture(), toneMapped: false, side: THREE.DoubleSide }),
+    );
+    routeSign.position.set(side * 1.045, 1.02, 0.05);
+    routeSign.rotation.y = side * Math.PI / 2;
+    group.add(routeSign);
+  }
+  const windshield = new THREE.Mesh(new THREE.PlaneGeometry(1.32, 0.56), windowMaterial);
+  windshield.position.set(0, 1.54, -BUS_LENGTH / 2 - 0.012);
+  windshield.rotation.y = Math.PI;
+  group.add(windshield);
+  addBox(group, 1.96, 0.13, 0.12, trimMaterial, 0, 0.94, -BUS_LENGTH / 2 - 0.04);
+  addBox(group, 1.96, 0.13, 0.12, lowerBodyMaterial, 0, 0.88, BUS_LENGTH / 2 + 0.035);
+
+  const wheelGeometry = new THREE.CylinderGeometry(0.31, 0.31, 0.2, 14);
+  wheelGeometry.rotateZ(Math.PI / 2);
+  const wheels = [];
+  for (const side of [-1, 1]) {
+    for (const z of [-1.78, 1.78]) {
+      const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+      wheel.position.set(side * 0.88, 0.34, z);
+      wheel.castShadow = true;
+      group.add(wheel);
+      wheels.push(wheel);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.21, 12), trimMaterial);
+      hub.rotation.z = Math.PI / 2;
+      hub.position.set(side * 0.89, 0.34, z);
+      group.add(hub);
+    }
+  }
+  const headlights = [];
+  for (const side of [-1, 1]) {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 9, 7), lampMaterial);
+    lamp.position.set(side * 0.65, 1.0, -BUS_LENGTH / 2 - 0.07);
+    group.add(lamp);
+    const light = new THREE.PointLight(0xffdfa0, 0, 13, 2);
+    light.position.copy(lamp.position);
+    group.add(light);
+    headlights.push(light);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.11, 0.06), tailMaterial);
+    tail.position.set(side * 0.67, 0.96, BUS_LENGTH / 2 + 0.04);
+    group.add(tail);
+  }
+  scene.add(group);
+  return { group, wheels, headlightMaterial: lampMaterial, tailLightMaterial: tailMaterial, headlights };
 }
 
 export function createTransportNetwork(scene, terrainHeight) {
@@ -480,7 +696,43 @@ export function createTransportNetwork(scene, terrainHeight) {
   }).sort((a, b) => a.distance - b.distance);
   stations.forEach((station, index) => { station.index = index; });
 
+  const busTerminals = BUS_TERMINAL_LAYOUT.map((layout) => {
+    const [roadX, roadZ] = layout.roadPoint;
+    const fraction = findCurveFraction(roadCurve, roadX, roadZ, 800, false);
+    const point = roadCurve.getPointAt(fraction);
+    const tangent = roadCurve.getTangentAt(fraction);
+    tangent.y = 0;
+    tangent.normalize();
+    const [x, z] = layout.terminalPoint;
+    const yaw = Math.atan2(-tangent.z, tangent.x);
+    const dx = point.x - x;
+    const dz = point.z - z;
+    const roadSide = Math.sign(dx * Math.sin(yaw) + dz * Math.cos(yaw)) || 1;
+    const terminal = {
+      ...layout,
+      x,
+      z,
+      roadX: point.x,
+      roadZ: point.z,
+      fraction,
+      distance: fraction * roadCurve.getLength(),
+      yaw,
+      roadSide,
+      length: 8.25,
+      width: 4.5,
+    };
+    addBusTerminal(scene, terminal, terrainHeight);
+    const pathCurve = createPlanarCurve([[terminal.x, terminal.z], [point.x, point.z]], false);
+    const path = new THREE.Mesh(createRibbonGeometry(pathCurve, terrainHeight, 48, 0.92, 0.075), walkwayMaterial);
+    path.receiveShadow = true;
+    scene.add(path);
+    terminal.walkwaySegments = createSurfaceSegments(pathCurve, terrainHeight, 48, 0.92, 0.075);
+    return terminal;
+  }).sort((a, b) => a.distance - b.distance);
+  busTerminals.forEach((terminal, index) => { terminal.index = index; });
+
   const train = addTrain(scene);
+  const bus = addBus(scene);
   const network = {
     roadCurve,
     railCurve,
@@ -488,18 +740,30 @@ export function createTransportNetwork(scene, terrainHeight) {
     roadPoints: ROAD_ROUTE_XZ,
     roadMapPoints,
     railMapPoints,
+    busMapPoints: roadMapPoints,
     roadSegments,
     railSegments,
     stations,
+    busTerminals,
     train,
+    bus,
     length: railCurve.getLength(),
     distanceTravelled: stations[0].distance,
     currentStationIndex: 0,
     dwellRemaining: STATION_DWELL_SECONDS,
     speed: TRAIN_SPEED,
     dwellDuration: STATION_DWELL_SECONDS,
+    busService: {
+      distanceTravelled: busTerminals[0].distance,
+      direction: 1,
+      currentTerminalIndex: 0,
+      dwellRemaining: BUS_TERMINAL_DWELL_SECONDS,
+      speed: BUS_SPEED,
+      dwellDuration: BUS_TERMINAL_DWELL_SECONDS,
+    },
   };
   updateTrainPosition(network, 0);
+  updateBusPosition(network, 0);
   return network;
 }
 
@@ -515,6 +779,51 @@ function updateTrainPosition(network, distanceDelta) {
     const rotationDelta = distanceDelta / TRAIN_WHEEL_RADIUS;
     for (const wheel of train.wheels) wheel.rotation.x -= rotationDelta;
   }
+}
+
+function updateBusPosition(network, distanceDelta) {
+  const service = network.busService;
+  const length = network.roadCurve.getLength();
+  const fraction = THREE.MathUtils.clamp(service.distanceTravelled / length, 0, 1);
+  const point = network.roadCurve.getPointAt(fraction);
+  const tangent = network.roadCurve.getTangentAt(fraction).multiplyScalar(service.direction);
+  const bus = network.bus;
+  bus.group.position.set(point.x, network.terrainHeight(point.x, point.z) + 0.24, point.z);
+  bus.group.rotation.y = Math.atan2(-tangent.x, -tangent.z);
+  if (distanceDelta !== 0) {
+    const rotationDelta = distanceDelta / 0.31;
+    for (const wheel of bus.wheels) wheel.rotation.x -= rotationDelta;
+  }
+}
+
+function updateBusNetwork(network, delta) {
+  const service = network.busService;
+  const previousDistance = service.distanceTravelled;
+  let arrivedTerminal = null;
+  if (service.dwellRemaining > 0) {
+    service.dwellRemaining = Math.max(0, service.dwellRemaining - delta);
+  } else {
+    let nextIndex = service.currentTerminalIndex + service.direction;
+    if (nextIndex < 0 || nextIndex >= network.busTerminals.length) {
+      service.direction *= -1;
+      nextIndex = service.currentTerminalIndex + service.direction;
+    }
+    const nextTerminal = network.busTerminals[nextIndex];
+    const proposedDistance = service.distanceTravelled + service.speed * service.direction * delta;
+    const hasReachedTerminal = service.direction > 0
+      ? proposedDistance >= nextTerminal.distance
+      : proposedDistance <= nextTerminal.distance;
+    if (hasReachedTerminal) {
+      service.distanceTravelled = nextTerminal.distance;
+      service.currentTerminalIndex = nextIndex;
+      service.dwellRemaining = service.dwellDuration;
+      arrivedTerminal = nextTerminal;
+    } else {
+      service.distanceTravelled = proposedDistance;
+    }
+  }
+  updateBusPosition(network, service.distanceTravelled - previousDistance);
+  return { arrivedTerminal };
 }
 
 export function updateTransportNetwork(network, delta) {
@@ -539,7 +848,8 @@ export function updateTransportNetwork(network, delta) {
     }
   }
   updateTrainPosition(network, network.distanceTravelled - previousDistance);
-  return { arrivedStation };
+  const busUpdate = updateBusNetwork(network, delta);
+  return { arrivedStation, arrivedBusTerminal: busUpdate.arrivedTerminal };
 }
 
 export function getNearestTransitStation(network, x, z, maxDistance = 4.6) {
@@ -584,6 +894,57 @@ export function getTransitWaitSeconds(network, station) {
   return Math.ceil((targetDistance - currentDistance) / network.speed + intermediateStops * network.dwellDuration + currentDwell);
 }
 
+export function getNearestBusTerminal(network, x, z, maxDistance = 4.6) {
+  if (!network) return null;
+  let closestTerminal = null;
+  let closestDistance = maxDistance;
+  for (const terminal of network.busTerminals) {
+    const distance = Math.hypot(x - terminal.x, z - terminal.z);
+    if (distance < closestDistance) {
+      closestTerminal = terminal;
+      closestDistance = distance;
+    }
+  }
+  return closestTerminal ? { terminal: closestTerminal, distance: closestDistance } : null;
+}
+
+export function isBusAtTerminal(network, terminal) {
+  return Boolean(network && terminal
+    && network.busTerminals[network.busService.currentTerminalIndex]?.id === terminal.id
+    && network.busService.dwellRemaining > 0.05);
+}
+
+export function getNextBusTerminal(network) {
+  if (!network) return null;
+  const service = network.busService;
+  let nextIndex = service.currentTerminalIndex + service.direction;
+  if (nextIndex < 0 || nextIndex >= network.busTerminals.length) nextIndex = service.currentTerminalIndex - service.direction;
+  return network.busTerminals[nextIndex];
+}
+
+export function getBusWaitSeconds(network, terminal) {
+  if (!network || !terminal || isBusAtTerminal(network, terminal)) return 0;
+  const service = network.busService;
+  let distance = service.distanceTravelled;
+  let index = service.currentTerminalIndex;
+  let direction = service.direction;
+  let seconds = service.dwellRemaining > 0 ? service.dwellRemaining : 0;
+  for (let step = 0; step < network.busTerminals.length * 3; step += 1) {
+    let nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= network.busTerminals.length) {
+      direction *= -1;
+      nextIndex = index + direction;
+    }
+    const nextTerminal = network.busTerminals[nextIndex];
+    seconds += Math.abs(nextTerminal.distance - distance) / service.speed;
+    if (nextTerminal.id === terminal.id) return Math.ceil(seconds);
+    seconds += service.dwellDuration;
+    distance = nextTerminal.distance;
+    index = nextIndex;
+  }
+  return Math.ceil(seconds);
+}
+
 export function getTransportSurfaceHeight(network, x, z) {
   if (!network) return null;
   let height = null;
@@ -611,6 +972,29 @@ export function getTransportSurfaceHeight(network, x, z) {
     const localZ = dx * sine + dz * cosine;
     const withinPlatform = Math.abs(localX) <= station.length / 2 && Math.abs(localZ) <= station.width / 2;
     if (withinPlatform) height = Math.max(height ?? -Infinity, station.platformTop);
+    for (const bounds of [station.terminalBounds, station.connectorBounds]) {
+      if (bounds && Math.abs(localX) <= bounds.halfX && Math.abs(localZ - bounds.centerZ) <= bounds.halfZ) {
+        height = Math.max(height ?? -Infinity, bounds.top);
+      }
+    }
+  }
+  for (const terminal of network.busTerminals) {
+    for (const segment of terminal.walkwaySegments) {
+      const result = distanceSquaredToSegment(x, z, segment);
+      if (result.distanceSquared <= segment.halfWidth * segment.halfWidth && result.distanceSquared < nearestDistanceSquared) {
+        height = result.height;
+        nearestDistanceSquared = result.distanceSquared;
+      }
+    }
+    const dx = x - terminal.x;
+    const dz = z - terminal.z;
+    const cosine = Math.cos(terminal.yaw);
+    const sine = Math.sin(terminal.yaw);
+    const localX = dx * cosine - dz * sine;
+    const localZ = dx * sine + dz * cosine;
+    if (Math.abs(localX) <= terminal.length / 2 && Math.abs(localZ) <= terminal.width / 2) {
+      height = Math.max(height ?? -Infinity, terminal.platformTop);
+    }
   }
   return height;
 }
@@ -632,6 +1016,28 @@ export function isReservedTransportSpot(network, x, z, padding = 0) {
       if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
     }
     if (Math.hypot(x - station.x, z - station.z) < 5.4 + margin) return true;
+    const dx = x - station.x;
+    const dz = z - station.z;
+    const cosine = Math.cos(station.yaw);
+    const sine = Math.sin(station.yaw);
+    const localX = dx * cosine - dz * sine;
+    const localZ = dx * sine + dz * cosine;
+    for (const bounds of [station.terminalBounds, station.connectorBounds]) {
+      if (bounds && Math.abs(localX) < bounds.halfX + margin && Math.abs(localZ - bounds.centerZ) < bounds.halfZ + margin) return true;
+    }
+  }
+  for (const terminal of network.busTerminals) {
+    for (const segment of terminal.walkwaySegments) {
+      const reserveWidth = segment.halfWidth + 1.8 + margin;
+      if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
+    }
+    const dx = x - terminal.x;
+    const dz = z - terminal.z;
+    const cosine = Math.cos(terminal.yaw);
+    const sine = Math.sin(terminal.yaw);
+    const localX = dx * cosine - dz * sine;
+    const localZ = dx * sine + dz * cosine;
+    if (Math.abs(localX) < terminal.length / 2 + margin && Math.abs(localZ) < terminal.width / 2 + margin) return true;
   }
   return false;
 }
@@ -644,7 +1050,16 @@ export function updateTransitLighting(network, night) {
       fixture.material.emissiveIntensity = THREE.MathUtils.lerp(0.12, 1.35, night);
     }
   }
+  for (const terminal of network.busTerminals) {
+    for (const fixture of terminal.lights) {
+      fixture.light.intensity = THREE.MathUtils.lerp(0, 12, night);
+      fixture.material.emissiveIntensity = THREE.MathUtils.lerp(0.12, 1.25, night);
+    }
+  }
   for (const light of network.train.headlights) light.intensity = THREE.MathUtils.lerp(0, 18, night);
   network.train.headlightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.3, 2.2, night);
   network.train.tailLightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.22, 0.9, night);
+  for (const light of network.bus.headlights) light.intensity = THREE.MathUtils.lerp(0, 16, night);
+  network.bus.headlightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.32, 2.0, night);
+  network.bus.tailLightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.22, 0.92, night);
 }
