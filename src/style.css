@@ -465,6 +465,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .app-icon-home { color: #3f785d; background: linear-gradient(145deg,#d9efd5,#a8cfaf); }
 .app-icon-cafe { color: #8f6042; background: linear-gradient(145deg,#f6dcc0,#e7b789); }
 .app-icon-market { color: #508063; background: linear-gradient(145deg,#e4f1cf,#bad39d); }
+.app-icon-bank { color: #58774d; background: linear-gradient(145deg,#f5ecc9,#dfd296); }
 .phone-app-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border: 1.5px solid #f7f7ed; border-radius: 50%; background: #e97861; }
 .phone-message-preview { width: 100%; min-height: 63px; display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(66,100,76,.1); border-radius: 15px; color: #4f6859; background: rgba(255,255,255,.62); text-align: left; cursor: pointer; transition: background .18s, transform .18s; }
 .phone-message-preview:hover { background: #fff; transform: translateY(-1px); }
@@ -830,3 +831,70 @@ kbd { font-size: 9px; }
   .touch-controls .accelerate-button small { font-size: 7px; letter-spacing: .04em; white-space: nowrap; }
   .accelerate-button[hidden] { display: none !important; }
 }
+
+.bank-account-card { display: flex; flex-direction: column; gap: 5px; overflow: hidden; margin-top: 2px; padding: 13px; border: 1px solid rgba(255,255,255,.22); border-radius: 17px; color: #f8f5e4; background: radial-gradient(circle at 100% 0%, rgba(194,211,143,.23), transparent 46%), linear-gradient(145deg,#315d4b,#264940 78%); box-shadow: 0 7px 18px rgba(38,79,59,.13); }
+.bank-account-topline { display: flex; align-items: center; justify-content: space-between; color: #e3e6cb; font-size: 8px; font-weight: 700; letter-spacing: .15em; }
+.bank-account-chip { padding: 4px 6px; border: 1px solid rgba(240,240,207,.24); border-radius: 99px; color: #e7d79c; font-size: 6px; letter-spacing: .1em; }
+.bank-account-label { margin-top: 6px; color: #d6e0ca; font-size: 7px; font-weight: 700; letter-spacing: .1em; }
+.bank-account-id { color: #fffbee; font: 400 17px/1.2 'DM Serif Display',Georgia,serif; letter-spacing: .08em; }
+.bank-balance-label { margin-top: 6px; color: #d5dfca; font-size: 7px; font-weight: 700; letter-spacing: .12em; }
+.bank-balance { color: #f8e4a8; font-size: 19px; font-variant-numeric: tabular-nums; }
+.bank-account-card > small { color: #dae2d0; font-size: 8px; }
+.bank-provider-status { min-height: 46px; display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 7px 9px; border: 1px solid rgba(81,117,77,.13); border-radius: 12px; background: rgba(255,255,255,.62); }
+.bank-provider-icon { width: 27px; height: 27px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; color: #fff6df; background: #e29d55; font: 17px/1 'DM Serif Display',Georgia,serif; }
+.bank-provider-status > span:nth-child(2) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.bank-provider-status strong { color: #4d6852; font-size: 8px; letter-spacing: .04em; }
+.bank-provider-status small { color: #768a79; font-size: 7px; }
+.bank-provider-status > i { padding: 4px 5px; border-radius: 99px; color: #806d42; background: #f1e7c6; font-size: 6px; font-style: normal; font-weight: 700; letter-spacing: .07em; white-space: nowrap; }
+.bank-topup-card, .bank-activity-card { margin-top: 9px; padding: 10px; border: 1px solid rgba(66,105,77,.11); border-radius: 14px; background: rgba(255,255,255,.64); }
+.bank-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.bank-section-heading strong { color: #49664e; font-size: 10px; }
+.bank-section-heading span { color: #829283; font-size: 6px; font-weight: 700; letter-spacing: .08em; text-align: right; }
+.bank-topup-card > p { margin: 6px 0 9px; color: #657a68; font-size: 9px; line-height: 1.45; }
+.bank-amount-label { display: flex; align-items: center; justify-content: space-between; margin: 3px 2px 5px; color: #617763; font-size: 7px; font-weight: 700; letter-spacing: .1em; }
+.bank-amount-label span { color: #917b4e; }
+.bank-amount-input { min-height: 37px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid rgba(68,112,79,.2); border-radius: 10px; background: #fffef7; }
+.bank-amount-input > span { color: #658364; font-size: 12px; font-weight: 700; }
+.bank-amount-input input { min-width: 0; flex: 1; border: 0; outline: 0; color: #3f624b; background: transparent; font: 600 12px/1 'DM Sans',sans-serif; }
+.bank-amount-input:focus-within { border-color: rgba(71,142,99,.55); box-shadow: 0 0 0 3px rgba(79,156,123,.1); }
+.bank-rate-note { margin: 5px 2px 0 !important; color: #806b43 !important; font-size: 8px !important; }
+.bank-topup-button { min-height: 34px; margin-top: 8px; }
+.bank-input-feedback { min-height: 0; margin: 0; color: #856e42; font-size: 8px; line-height: 1.4; }
+.bank-input-feedback:not(:empty) { margin-top: 6px; }
+.bank-checkout-preview { margin-top: 9px; padding: 10px; border: 1px solid rgba(200,155,71,.27); border-radius: 14px; background: linear-gradient(140deg,#fff8e4,#f8efd7); }
+.bank-preview-header { display: flex; align-items: center; justify-content: space-between; color: #88733f; font-size: 7px; font-weight: 700; letter-spacing: .11em; }
+.bank-preview-header button { width: 25px; height: 25px; border: 1px solid rgba(109,112,72,.15); border-radius: 8px; color: #6f765a; background: rgba(255,255,255,.7); cursor: pointer; font-size: 15px; }
+.bank-preview-title { display: block; margin-top: 5px; color: #49664e; font-size: 10px; }
+.bank-preview-amount { margin: 3px 0 8px; color: #315c49; font: 400 20px/1.1 'DM Serif Display',Georgia,serif; }
+.bank-preview-row { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-top: 1px solid rgba(123,111,72,.11); }
+.bank-preview-row span { color: #7b806b; font-size: 7px; }
+.bank-preview-row strong { color: #52684e; font-size: 8px; overflow-wrap: anywhere; }
+.bank-preview-warning { margin: 7px 0 0; padding: 7px; border-radius: 9px; color: #765f35; background: rgba(255,255,255,.68); font-size: 8px; line-height: 1.45; }
+.bank-ledger-empty { margin: 8px 0 2px; color: #657a68; font-size: 9px; line-height: 1.45; }
+.bank-ledger { display: flex; flex-direction: column; margin-top: 4px; }
+.bank-ledger-row { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 6px 1px; border-top: 1px solid rgba(66,105,77,.1); }
+.bank-ledger-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.bank-ledger-copy strong { overflow: hidden; color: #4d6953; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.bank-ledger-copy small { color: #819080; font-size: 7px; }
+.bank-ledger-amount { flex: 0 0 auto; color: #a15e4d; font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bank-ledger-amount.is-credit { color: #4d8661; }
+.bank-demo-disclaimer { margin: 9px 2px 3px; color: #5c725e; font-size: 8px; line-height: 1.5; }
+.shop-item-actions { display: flex; flex-direction: column; gap: 4px; }
+.shop-flutterwave-button { min-width: 76px; min-height: 29px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; border: 1px solid rgba(195,146,69,.24); border-radius: 9px; color: #715f37; background: #f5edcf; cursor: pointer; font-size: 6px; font-weight: 700; line-height: 1.1; }
+.shop-flutterwave-button:hover:not(:disabled) { background: #eee2b6; }
+.shop-flutterwave-button:disabled { opacity: .46; cursor: not-allowed; }
+.shop-flutterwave-button strong { color: #546a4c; font-size: 8px; }
+.rental-flutterwave-button { width: 100%; min-height: 29px; margin-top: 6px; padding: 5px 8px; border: 1px solid rgba(195,146,69,.24); border-radius: 9px; color: #715f37; background: #f5edcf; cursor: pointer; font-size: 7px; font-weight: 700; }
+.rental-flutterwave-button:hover { background: #eee2b6; }
+.phone-page[data-phone-page="bank"] { padding-bottom: 2px; }
+
+.bank-account-topline, .bank-account-label, .bank-balance-label { font-size: 9px; }
+.bank-account-chip, .bank-provider-status > i, .bank-section-heading span,
+.bank-amount-label, .bank-preview-header { font-size: 8px; }
+.bank-account-id { font-size: 19px; }
+.bank-account-card > small, .bank-provider-status small, .bank-topup-card > p,
+.bank-rate-note, .bank-input-feedback, .bank-preview-row span, .bank-preview-row strong,
+.bank-preview-warning, .bank-ledger-empty, .bank-ledger-copy small, .bank-demo-disclaimer { font-size: 9px; }
+.bank-section-heading strong, .bank-ledger-copy strong { font-size: 10px; }
+.bank-ledger-amount { font-size: 10px; }
+.shop-flutterwave-button, .rental-flutterwave-button { font-size: 8px; }

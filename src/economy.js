@@ -1,6 +1,7 @@
 export const ECONOMY_STORAGE_KEY = 'vertualworld-economy-v1';
 export const STARTING_CREDITS = 1200;
 export const RENTAL_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+export const BANK_LEDGER_LIMIT = 20;
 
 export const RENTAL_LISTINGS = Object.freeze([
   Object.freeze({ houseNumber: 2, landlord: 'Mariam Bello', monthlyRent: 180, deposit: 180 }),
@@ -26,8 +27,47 @@ export const SHOP_CATALOG = Object.freeze({
 const rentalListingByHouse = new Map(RENTAL_LISTINGS.map((listing) => [listing.houseNumber, listing]));
 const productsById = new Map(Object.values(SHOP_CATALOG).flat().map((product) => [product.id, product]));
 
+function createGameAccountId() {
+  const bytes = new Uint8Array(4);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  }
+  return `VW-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function normalizeLedger(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, BANK_LEDGER_LIMIT).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const amount = Number(entry.amount);
+    const occurredAt = Number(entry.occurredAt);
+    const description = typeof entry.description === 'string' ? entry.description.trim().slice(0, 100) : '';
+    if (!description || !Number.isSafeInteger(amount) || amount === 0) return [];
+    return [{
+      id: typeof entry.id === 'string' && entry.id.length <= 64 ? entry.id : `${occurredAt}-${description}`,
+      description,
+      amount,
+      occurredAt: Number.isFinite(occurredAt) && occurredAt >= 0 ? occurredAt : 0,
+    }];
+  });
+}
+
+function recordWalletTransaction(economy, description, amount, now = Date.now()) {
+  if (!Number.isSafeInteger(amount) || amount === 0) return;
+  if (!Array.isArray(economy.ledger)) economy.ledger = [];
+  economy.ledger.unshift({
+    id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+    description: String(description).slice(0, 100),
+    amount,
+    occurredAt: now,
+  });
+  economy.ledger.length = Math.min(economy.ledger.length, BANK_LEDGER_LIMIT);
+}
+
 export function createDefaultEconomy() {
-  return { wallet: STARTING_CREDITS, inventory: {}, lease: null };
+  return { wallet: STARTING_CREDITS, inventory: {}, lease: null, accountId: createGameAccountId(), ledger: [] };
 }
 
 function safeCount(value, fallback = 0) {
@@ -64,6 +104,8 @@ export function loadEconomy(storage, now = Date.now()) {
       }
     }
     economy.lease = normalizeLease(saved.lease, now);
+    if (typeof saved.accountId === 'string' && /^VW-[0-9A-F]{8}$/.test(saved.accountId)) economy.accountId = saved.accountId;
+    economy.ledger = normalizeLedger(saved.ledger);
   } catch {
     // Keep the game playable if local storage is unavailable or contains stale data.
   }
@@ -103,6 +145,7 @@ export function signRentalLease(economy, houseNumber, now = Date.now()) {
     rentDue: 0,
     nextDueAt: now + RENTAL_MONTH_MS,
   };
+  recordWalletTransaction(economy, `House ${String(listing.houseNumber).padStart(2, '0')} · move-in rent + deposit`, -moveInCost, now);
   return { ok: true, listing, moveInCost };
 }
 
@@ -116,6 +159,7 @@ export function payRentalRent(economy, now = Date.now()) {
   const paid = economy.lease.rentDue;
   economy.wallet -= paid;
   economy.lease.rentDue = 0;
+  recordWalletTransaction(economy, `House ${String(economy.lease.houseNumber).padStart(2, '0')} · rent paid`, -paid, now);
   return { ok: true, paid };
 }
 
@@ -128,15 +172,17 @@ export function endRentalLease(economy, now = Date.now()) {
   const unpaidAfterDeposit = lease.rentDue - depositUsed;
   economy.wallet += refund;
   economy.lease = null;
+  if (refund > 0) recordWalletTransaction(economy, `House ${String(lease.houseNumber).padStart(2, '0')} · deposit returned`, refund, now);
   return { ok: true, refund, depositUsed, unpaidAfterDeposit };
 }
 
-export function purchaseProduct(economy, productId) {
+export function purchaseProduct(economy, productId, now = Date.now()) {
   const product = productsById.get(productId);
   if (!product) return { ok: false, reason: 'item-not-found' };
   if (economy.wallet < product.price) return { ok: false, reason: 'insufficient-funds', price: product.price };
   economy.wallet -= product.price;
   economy.inventory[product.id] = (economy.inventory[product.id] || 0) + 1;
+  recordWalletTransaction(economy, product.name, -product.price, now);
   return { ok: true, product, count: economy.inventory[product.id] };
 }
 

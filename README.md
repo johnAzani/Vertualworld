@@ -26,11 +26,17 @@ Open the local URL Vite prints. Run the economy checks with `npm test`, and buil
 - **Island Bus** shuttles use the connected road grid between matching **bus terminals** at all three hubs. Board the arriving bus with **E** or the prompt; request your next stop onboard. The live phone map shows the full street network, bus route, rail terminals, and bus terminals
 - Follow the western path branch to **Meadow Park Stadium**. At the entrance, press **E** or tap **Watch Match** for a pitch-following broadcast view with a live score and clock; press **E** or tap **Return to World** to keep exploring. The teams chase and kick the ball, and the floodlights come on after dark
 - Meadow Park now has home-and-away dugouts, pitch-side matchday boards that brighten after dark, fuller stands, detailed goal nets and penalty markings, waving corner flags, running players with moving arms, and a crowd that celebrates goals
-- Open the in-world field phone with the phone button or **P**: check your live map, message Nia, track glow seeds, manage rentals and rent payments, browse the café and market menus, and save a private field note on this device
+- Open the in-world field phone with the phone button or **P**: check your live map, message Nia, track glow seeds, manage rentals, browse the café and market, view your local game-bank balance and activity, preview Flutterwave top-ups and direct-payment flows (demo only), and save a private field note on this device
 - On touch screens, use the joystick and jump button; tap the eye button in the top bar to change view
 - Find the three glowing seeds hidden around the island
 
 The island, trees, path, beacon, avatar, Meadow Court estate, Meadow Park, and maps are generated in Three.js—no external art assets required. The sky, moon, stars, estate lighting, and Meadow Park’s floodlights follow the in-world clock.
+
+## Bank app and Flutterwave status
+
+The phone’s Bank app shows a **local game account reference**, island-credit balance, and recent in-game wallet activity. It is not a real bank account. Top-up, rent, and shop buttons currently open **demo-only previews**: they do not call Flutterwave, generate a transfer account, charge money, add credits, or settle purchases. The displayed 1 NGN = 1 IC rate is only a placeholder for the preview and is not production pricing.
+
+Before test or live Flutterwave payments can be enabled, this static GitHub Pages app needs the selected **Cloudflare Worker** backend with secrets configured outside the browser, server-side transaction verification, and validated webhooks. The UI intentionally contains no Flutterwave secret and does not collect customer bank or identity details. See Flutterwave’s [API security guidance](https://developer.flutterwave.com/docs/best-practices), [webhook verification](https://developer.flutterwave.com/docs/webhooks), and [NGN virtual account documentation](https://developer.flutterwave.com/docs/ngn-virtual-accounts).
 
 ## Preview on your phone
 

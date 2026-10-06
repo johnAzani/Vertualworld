@@ -173,7 +173,7 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">07</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">08</span></div>
                 <div class="phone-app-grid">
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
@@ -203,6 +203,10 @@
                     <span class="phone-app-icon app-icon-market"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9h16l-1.4 11H5.4L4 9ZM3 9l2.2-5h13.6L21 9M8 9V4M16 9V4M9 20v-6h6v6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                     <span>Market</span>
                   </button>
+                  <button class="phone-app-button" type="button" data-phone-app="bank" aria-label="Open your local game bank account">
+                    <span class="phone-app-icon app-icon-bank"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 8 9-4.5L21 8v1H3V8Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/><path d="M5 10v7m4-7v7m6-7v7m4-7v7M3 19h18M2 21h20" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Bank</span>
+                  </button>
                 </div>
 
                 <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
@@ -224,7 +228,7 @@
                 <div class="estate-roster" id="estate-roster" aria-live="polite"></div>
                 <div id="lease-management" aria-live="polite"></div>
                 <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
-                <p class="property-help">Rent from a local NPC landlord with in-game credits. Move-in requires the first month’s rent and a refundable deposit; rent comes due every 30 real-world days and is paid manually in this app. Your lease and credits stay on this device. Press E at your current home’s front door to enter, and use L for the lights.</p>
+                <p class="property-help">Rent from a local NPC landlord with in-game credits. Move-in requires the first month’s rent and a refundable deposit; rent comes due every 30 real-world days. Island-credit rent is paid here; a Flutterwave rent option is demo-only. Your lease and credits stay on this device. Press E at your current home’s front door to enter, and use L for the lights.</p>
                 <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Meadow Court on the map <span aria-hidden="true">↗</span></button>
               </section>
 
@@ -234,7 +238,7 @@
                 <p class="shop-proximity" id="cafe-proximity" aria-live="polite">Visit the café to shop.</p>
                 <div class="shop-items" id="cafe-shop-items"></div>
                 <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="cafe-inventory">Nothing yet</strong></div>
-                <p class="phone-help shop-help">Tap an item to buy one. Purchases use in-game credits and stay saved on this device.</p>
+                <p class="phone-help shop-help">Buy with island credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
               </section>
 
               <section class="phone-page" data-phone-page="market" aria-label="Meadow Market groceries" hidden>
@@ -243,7 +247,42 @@
                 <p class="shop-proximity" id="market-proximity" aria-live="polite">Visit the market to shop.</p>
                 <div class="shop-items" id="market-shop-items"></div>
                 <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
-                <p class="phone-help shop-help">Tap an item to buy one. Purchases use in-game credits and stay saved on this device.</p>
+                <p class="phone-help shop-help">Buy with island credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
+              </section>
+
+              <section class="phone-page bank-page" data-phone-page="bank" aria-label="In-game bank account and Flutterwave demo" hidden>
+                <div class="bank-account-card">
+                  <div class="bank-account-topline"><span>ISLAND BANK</span><span class="bank-account-chip">GAME ONLY</span></div>
+                  <span class="bank-account-label">LOCAL GAME ACCOUNT · NOT A REAL BANK ACCOUNT</span>
+                  <strong class="bank-account-id" id="bank-account-id">VW-00000000</strong>
+                  <span class="bank-balance-label">ISLAND CREDIT BALANCE</span>
+                  <strong class="bank-balance" id="bank-wallet-balance">1,200 IC</strong>
+                  <small>Saved on this device · spend credits in the island</small>
+                </div>
+                <div class="bank-provider-status"><span class="bank-provider-icon" aria-hidden="true">F</span><span><strong>FLUTTERWAVE · DEMO UI</strong><small>Cloudflare Worker not connected</small></span><i>NO CHARGES</i></div>
+                <div class="bank-topup-card">
+                  <div class="bank-section-heading"><strong>Top up island credits</strong><span>ONE-TIME TRANSFER</span></div>
+                  <p>Preview a one-time bank-transfer checkout. Temporary Flutterwave account details appear only after a secure payment backend is connected.</p>
+                  <label class="bank-amount-label" for="bank-topup-amount">TOP-UP AMOUNT <span>NGN</span></label>
+                  <div class="bank-amount-input"><span aria-hidden="true">₦</span><input id="bank-topup-amount" type="number" min="100" max="100000" step="100" value="500" inputmode="numeric" autocomplete="off" aria-describedby="bank-rate-note"></div>
+                  <p class="bank-rate-note" id="bank-rate-note">Demo quote only: 1 NGN = 1 IC (placeholder rate, not live pricing).</p>
+                  <button class="phone-primary-button bank-topup-button" type="button" data-bank-topup>Preview one-time transfer <span aria-hidden="true">↗</span></button>
+                  <p class="bank-input-feedback" id="bank-input-feedback" aria-live="polite"></p>
+                </div>
+                <div class="bank-checkout-preview" id="bank-checkout-preview" aria-live="polite" hidden>
+                  <div class="bank-preview-header"><span>DEMO CHECKOUT PREVIEW</span><button type="button" data-bank-action="clear-preview" aria-label="Close payment preview">×</button></div>
+                  <strong class="bank-preview-title" id="bank-intent-title">Top-up preview</strong>
+                  <div class="bank-preview-amount" id="bank-intent-amount">₦500</div>
+                  <div class="bank-preview-row"><span>Preview reference</span><strong id="bank-intent-reference">VW-DEMO-000000</strong></div>
+                  <div class="bank-preview-row"><span>One-time transfer account</span><strong id="bank-intent-account">Not generated in demo mode</strong></div>
+                  <p class="bank-preview-warning" id="bank-intent-message">No Flutterwave request was sent. No money was charged and no credits were added.</p>
+                </div>
+                <div class="bank-activity-card">
+                  <div class="bank-section-heading"><strong>Recent account activity</strong><span>LOCAL GAME LEDGER</span></div>
+                  <p class="bank-ledger-empty" id="bank-ledger-empty">No account activity yet. Rent and island-credit purchases will appear here.</p>
+                  <div class="bank-ledger" id="bank-ledger" aria-live="polite"></div>
+                </div>
+                <p class="bank-demo-disclaimer">Demo only. This app does not contact Flutterwave or create real bank-account details. A Cloudflare Worker with server-side secrets and verified payment notifications is required before test or live payments can be enabled.</p>
               </section>
 
               <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>

@@ -79,5 +79,32 @@ test('economy state round-trips through storage and ignores unknown inventory en
   assert.equal(values.has(ECONOMY_STORAGE_KEY), true);
   assert.deepEqual(loaded, economy);
   values.set(ECONOMY_STORAGE_KEY, JSON.stringify({ wallet: 7, inventory: { 'not-a-product': 90 }, lease: { houseNumber: 999 } }));
-  assert.deepEqual(loadEconomy(storage, 99), { wallet: 7, inventory: {}, lease: null });
+  const normalized = loadEconomy(storage, 99);
+  assert.equal(normalized.wallet, 7);
+  assert.deepEqual(normalized.inventory, {});
+  assert.equal(normalized.lease, null);
+  assert.match(normalized.accountId, /^VW-[0-9A-F]{8}$/);
+  assert.deepEqual(normalized.ledger, []);
+});
+
+test('local bank account reference and recent wallet activity persist safely', () => {
+  const economy = createDefaultEconomy();
+  assert.match(economy.accountId, /^VW-[0-9A-F]{8}$/);
+  signRentalLease(economy, 2, 10_000);
+  purchaseProduct(economy, 'cafe-bun', 20_000);
+
+  assert.deepEqual(economy.ledger.map(({ description, amount, occurredAt }) => ({ description, amount, occurredAt })), [
+    { description: 'Coconut bun', amount: -8, occurredAt: 20_000 },
+    { description: 'House 02 · move-in rent + deposit', amount: -360, occurredAt: 10_000 },
+  ]);
+
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+  };
+  saveEconomy(storage, economy);
+  const loaded = loadEconomy(storage, 30_000);
+  assert.equal(loaded.accountId, economy.accountId);
+  assert.deepEqual(loaded.ledger, economy.ledger);
 });

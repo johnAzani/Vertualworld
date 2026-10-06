@@ -88,6 +88,18 @@ const worldPeriodElement = document.querySelector('#world-period');
 const walletBalanceElement = document.querySelector('#wallet-balance');
 const cafeWalletBalanceElement = document.querySelector('#cafe-wallet-balance');
 const marketWalletBalanceElement = document.querySelector('#market-wallet-balance');
+const bankAccountIdElement = document.querySelector('#bank-account-id');
+const bankWalletBalanceElement = document.querySelector('#bank-wallet-balance');
+const bankTopupAmountInput = document.querySelector('#bank-topup-amount');
+const bankInputFeedbackElement = document.querySelector('#bank-input-feedback');
+const bankCheckoutPreviewElement = document.querySelector('#bank-checkout-preview');
+const bankIntentTitleElement = document.querySelector('#bank-intent-title');
+const bankIntentAmountElement = document.querySelector('#bank-intent-amount');
+const bankIntentReferenceElement = document.querySelector('#bank-intent-reference');
+const bankIntentAccountElement = document.querySelector('#bank-intent-account');
+const bankIntentMessageElement = document.querySelector('#bank-intent-message');
+const bankLedgerEmptyElement = document.querySelector('#bank-ledger-empty');
+const bankLedgerElement = document.querySelector('#bank-ledger');
 const estateRosterElement = document.querySelector('#estate-roster');
 const leaseManagementElement = document.querySelector('#lease-management');
 const propertyHouseNumberElement = document.querySelector('#property-house-number');
@@ -2211,6 +2223,9 @@ const economyStorage = {
   setItem(key, value) { window.localStorage.setItem(key, value); },
 };
 const economy = loadEconomy(economyStorage);
+// Persist the local game-account reference even before the first wallet transaction.
+saveEconomy(economyStorage, economy);
+let bankCheckoutIntent = null;
 if (activeResidence && activeResidence !== homeHouse) placePlayerOutsideResidence(activeResidence);
 
 function toggleCameraMode() {
@@ -3100,6 +3115,10 @@ function formatCredits(amount) {
   return `IC ${Math.max(0, Math.floor(amount)).toLocaleString()}`;
 }
 
+function formatNaira(amount) {
+  return `₦${Math.max(0, Math.floor(amount)).toLocaleString('en-NG')}`;
+}
+
 function persistEconomy() {
   if (!saveEconomy(economyStorage, economy)) {
     showToast('This browser could not save your credits and purchases locally.', 3600);
@@ -3119,6 +3138,8 @@ function updateWalletBalances() {
   setTextIfChanged(walletBalanceElement, balance);
   setTextIfChanged(cafeWalletBalanceElement, balance);
   setTextIfChanged(marketWalletBalanceElement, balance);
+  setTextIfChanged(bankAccountIdElement, economy.accountId);
+  setTextIfChanged(bankWalletBalanceElement, balance);
 }
 
 function getHouseLane(house) {
@@ -3172,6 +3193,7 @@ function renderLeaseManagement() {
       <button class="rental-action-button" type="button" data-rental-action="pay" ${lease.rentDue === 0 ? 'disabled' : ''}>${payLabel}</button>
       <button class="rental-action-button rental-action-button--quiet" type="button" data-rental-action="end" ${isInsideRentedHome ? 'disabled' : ''}>END LEASE</button>
     </div>
+    ${lease.rentDue > 0 ? `<button class="rental-flutterwave-button" type="button" data-bank-rent>PREVIEW FLUTTERWAVE PAYMENT · ${formatNaira(lease.rentDue)}</button>` : ''}
   </div>`;
 }
 
@@ -3219,8 +3241,8 @@ function renderCommercePage(venueId) {
   const inventoryElement = venueId === 'cafe' ? cafeInventoryElement : marketInventoryElement;
   const itemsElement = venueId === 'cafe' ? cafeShopItemsElement : marketShopItemsElement;
   proximityElement.textContent = isNearby
-    ? `Welcome to ${venue.name}. Your purchases use island credits.`
-    : `Visit ${venue.name} in person to buy. This menu can be browsed from anywhere.`;
+    ? `Welcome to ${venue.name}. Buy with island credits or preview Flutterwave checkout.`
+    : `Visit ${venue.name} to buy or preview checkout. This menu can be browsed from anywhere.`;
   proximityElement.classList.toggle('is-near', isNearby);
   proximityElement.classList.toggle('is-away', !isNearby);
   inventoryElement.textContent = getInventorySummary();
@@ -3229,9 +3251,120 @@ function renderCommercePage(venueId) {
     const cannotAfford = economy.wallet < product.price;
     return `<div class="shop-item">
       <span class="shop-item-copy"><strong>${product.name}</strong><small>${product.description}</small><em>${product.category}${count > 0 ? ` · IN BAG ×${count}` : ''}</em></span>
-      <button class="shop-buy-button" type="button" data-shop-buy="${product.id}" ${!isNearby || cannotAfford ? 'disabled' : ''}><span>BUY ONE</span><strong>${formatCredits(product.price)}</strong></button>
+      <span class="shop-item-actions">
+        <button class="shop-buy-button" type="button" data-shop-buy="${product.id}" ${!isNearby || cannotAfford ? 'disabled' : ''}><span>BUY · ISLAND</span><strong>${formatCredits(product.price)}</strong></button>
+        <button class="shop-flutterwave-button" type="button" data-bank-shop="${product.id}" aria-label="Preview demo Flutterwave payment for ${product.name}" ${!isNearby ? 'disabled' : ''}><span>PAY · DEMO</span><strong>${formatNaira(product.price)}</strong></button>
+      </span>
     </div>`;
   }).join('');
+}
+
+function renderBankPage() {
+  updateWalletBalances();
+  bankLedgerElement.replaceChildren();
+  const ledger = Array.isArray(economy.ledger) ? economy.ledger : [];
+  bankLedgerEmptyElement.hidden = ledger.length > 0;
+  for (const entry of ledger) {
+    const row = document.createElement('div');
+    row.className = 'bank-ledger-row';
+    const copy = document.createElement('span');
+    copy.className = 'bank-ledger-copy';
+    const title = document.createElement('strong');
+    title.textContent = entry.description;
+    const date = document.createElement('small');
+    date.textContent = Number.isFinite(entry.occurredAt) && entry.occurredAt > 0
+      ? new Date(entry.occurredAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      : 'Island account activity';
+    copy.append(title, date);
+    const amount = document.createElement('span');
+    amount.className = `bank-ledger-amount${entry.amount > 0 ? ' is-credit' : ''}`;
+    amount.textContent = `${entry.amount > 0 ? '+' : '−'} ${formatCredits(Math.abs(entry.amount))}`;
+    row.append(copy, amount);
+    bankLedgerElement.append(row);
+  }
+  bankCheckoutPreviewElement.hidden = !bankCheckoutIntent;
+  if (bankCheckoutIntent) {
+    bankIntentTitleElement.textContent = bankCheckoutIntent.title;
+    bankIntentAmountElement.textContent = formatNaira(bankCheckoutIntent.amountNgn);
+    bankIntentReferenceElement.textContent = bankCheckoutIntent.reference;
+    bankIntentAccountElement.textContent = 'Not generated in demo mode';
+    bankIntentMessageElement.textContent = bankCheckoutIntent.kind === 'topup'
+      ? `No Flutterwave request was sent. No money was charged and no credits were added. Demo quote only: ${formatNaira(bankCheckoutIntent.amountNgn)} would represent ${formatCredits(bankCheckoutIntent.credits)} at the temporary 1:1 demo rate.`
+      : 'No Flutterwave request was sent. No money was charged, and the rent or shop purchase remains unpaid. This is a preview only.';
+  }
+}
+
+function makeDemoPaymentReference(now = Date.now()) {
+  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase().padEnd(5, '0');
+  return `VW-DEMO-${now.toString(36).toUpperCase()}-${suffix}`;
+}
+
+function startFlutterwaveDemoCheckout({ kind, title, amountNgn, credits = 0 }) {
+  if (!Number.isSafeInteger(amountNgn) || amountNgn < 1 || amountNgn > 100000) {
+    const message = 'Enter a whole-number amount from ₦100 to ₦100,000.';
+    if (activePhonePage === 'bank') bankInputFeedbackElement.textContent = message;
+    else showToast(message);
+    return;
+  }
+  bankCheckoutIntent = {
+    kind,
+    title,
+    amountNgn,
+    credits,
+    reference: makeDemoPaymentReference(),
+  };
+  bankInputFeedbackElement.textContent = '';
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('bank');
+  showToast('Demo preview only · no Flutterwave request or charge was made.', 3600);
+}
+
+function previewBankTopup() {
+  const rawAmount = bankTopupAmountInput.value.trim();
+  const amountNgn = Number(rawAmount);
+  if (!/^\d+$/.test(rawAmount) || !Number.isSafeInteger(amountNgn) || amountNgn < 100 || amountNgn > 100000) {
+    bankInputFeedbackElement.textContent = 'Choose a whole-number amount from ₦100 to ₦100,000.';
+    bankTopupAmountInput.focus();
+    return;
+  }
+  startFlutterwaveDemoCheckout({
+    kind: 'topup',
+    title: `Island credit top-up · ${formatCredits(amountNgn)}`,
+    amountNgn,
+    credits: amountNgn,
+  });
+}
+
+function previewShopPayment(productId) {
+  const product = getProduct(productId);
+  if (!product) return;
+  const venueId = Object.keys(SHOP_CATALOG).find((key) => SHOP_CATALOG[key].some((item) => item.id === productId));
+  const venue = commerceVenues.find((candidate) => candidate.id === venueId);
+  if (!venueId || !venue || !isPlayerAtCommerceVenue(venueId)) {
+    showToast('Visit the café or market in person before starting checkout.');
+    return;
+  }
+  startFlutterwaveDemoCheckout({
+    kind: 'direct',
+    title: `${venue.name} · ${product.name}`,
+    amountNgn: product.price,
+    credits: product.price,
+  });
+}
+
+function previewRentPayment() {
+  refreshRentalBilling();
+  const lease = economy.lease;
+  if (!lease || lease.rentDue < 1) {
+    showToast('There is no rent due to preview right now.');
+    return;
+  }
+  startFlutterwaveDemoCheckout({
+    kind: 'direct',
+    title: `House ${String(lease.houseNumber).padStart(2, '0')} rent · ${formatCredits(lease.rentDue)}`,
+    amountNgn: lease.rentDue,
+    credits: lease.rentDue,
+  });
 }
 
 function openCommercePage(venueId) {
@@ -3327,6 +3460,7 @@ const phonePageCopy = {
   property: { eyebrow: 'MEADOW COURT · HOMES', title: 'Homes & rentals', subtitle: 'Meet local landlords and manage your lease.' },
   cafe: { eyebrow: 'FERN & CUP · CAFÉ', title: 'A little something', subtitle: 'Fresh food and a warm drink for the road.' },
   market: { eyebrow: 'MEADOW MARKET · GROCERIES', title: 'Good things for home', subtitle: 'Stock up with your island credits.' },
+  bank: { eyebrow: 'ISLAND BANK · GAME ACCOUNT', title: 'Your island bank', subtitle: 'Check your credits and preview payment flows.' },
 };
 
 function updatePhoneBadge() {
@@ -3350,6 +3484,7 @@ function setPhonePage(pageName) {
   phoneContent.scrollTop = 0;
   if (page === 'property') renderPropertyPage();
   else if (page === 'cafe' || page === 'market') renderCommercePage(page);
+  else if (page === 'bank') renderBankPage();
   if (page === 'messages') {
     phoneUnread = false;
     updatePhoneBadge();
@@ -3494,6 +3629,24 @@ phoneContent.addEventListener('click', (event) => {
   const shopButton = event.target.closest('[data-shop-buy]');
   if (shopButton) {
     buyShopItem(shopButton.dataset.shopBuy);
+    return;
+  }
+  const bankShopButton = event.target.closest('[data-bank-shop]');
+  if (bankShopButton) {
+    previewShopPayment(bankShopButton.dataset.bankShop);
+    return;
+  }
+  if (event.target.closest('[data-bank-topup]')) {
+    previewBankTopup();
+    return;
+  }
+  if (event.target.closest('[data-bank-rent]')) {
+    previewRentPayment();
+    return;
+  }
+  if (event.target.closest('[data-bank-action="clear-preview"]')) {
+    bankCheckoutIntent = null;
+    renderBankPage();
     return;
   }
   const rentButton = event.target.closest('[data-rent-house]');
