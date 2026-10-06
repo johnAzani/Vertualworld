@@ -116,6 +116,7 @@ const marketProximityElement = document.querySelector('#market-proximity');
 const cafeInventoryElement = document.querySelector('#cafe-inventory');
 const marketInventoryElement = document.querySelector('#market-inventory');
 const reducedMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+const showPerformanceHud = new URLSearchParams(window.location.search).get('perf') === '1';
 let prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
 reducedMotionQuery?.addEventListener?.('change', (event) => {
   prefersReducedMotion = event.matches;
@@ -142,13 +143,17 @@ try {
   throw error;
 }
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
+const RENDER_PIXEL_RATIO_CAP = window.matchMedia?.('(pointer: coarse)').matches ? 1.4 : 1.5;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RENDER_PIXEL_RATIO_CAP));
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.info.autoReset = !showPerformanceHud;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb5dce0);
@@ -163,7 +168,7 @@ scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xffedcf, 3.1);
 sunLight.position.set(-36, 54, 22);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(1536, 1536);
+sunLight.shadow.mapSize.set(1024, 1024);
 sunLight.shadow.camera.left = -78;
 sunLight.shadow.camera.right = 78;
 sunLight.shadow.camera.top = 78;
@@ -371,15 +376,13 @@ scene.add(cliffBand);
 
 const oceanGeometry = new THREE.PlaneGeometry(1200, 1200, 1, 1);
 oceanGeometry.rotateX(-Math.PI / 2);
-const ocean = new THREE.Mesh(oceanGeometry, new THREE.MeshPhysicalMaterial({
+const ocean = new THREE.Mesh(oceanGeometry, new THREE.MeshStandardMaterial({
   color: 0x3c99b7,
   roughness: 0.31,
   metalness: 0.08,
-  clearcoat: 0.48,
-  clearcoatRoughness: 0.35,
 }));
 ocean.position.y = -8.4;
-ocean.receiveShadow = true;
+ocean.receiveShadow = false;
 scene.add(ocean);
 
 // A slow sun arc, moon, and faint stars let the island move gently from day into night.
@@ -477,19 +480,25 @@ function updateDaylight() {
 }
 
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
+const cloudGeometry = new THREE.SphereGeometry(1, 12, 9);
 const clouds = [];
+const cloudTransform = new THREE.Object3D();
 for (let i = 0; i < 7; i += 1) {
-  const cloud = new THREE.Group();
   const count = 3 + (i % 3);
+  const cloud = new THREE.InstancedMesh(cloudGeometry, cloudMaterial, count);
   for (let part = 0; part < count; part += 1) {
     const size = 1.7 + ((part + i) % 3) * 0.55;
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(size, 12, 9), cloudMaterial);
-    puff.position.set((part - (count - 1) / 2) * 2.25, (part % 2) * 0.45, Math.sin(part * 2 + i) * 0.5);
-    puff.scale.set(1.35, 0.62 + (part % 2) * 0.08, 0.76);
-    cloud.add(puff);
+    cloudTransform.position.set((part - (count - 1) / 2) * 2.25, (part % 2) * 0.45, Math.sin(part * 2 + i) * 0.5);
+    cloudTransform.scale.set(size * 1.35, size * (0.62 + (part % 2) * 0.08), size * 0.76);
+    cloudTransform.updateMatrix();
+    cloud.setMatrixAt(part, cloudTransform.matrix);
   }
+  cloud.instanceMatrix.needsUpdate = true;
+  cloud.computeBoundingSphere();
   cloud.position.set(-90 + i * 30, 33 + (i % 3) * 5, -92 + (i % 4) * 42);
   cloud.userData.speed = 0.22 + (i % 4) * 0.06;
+  cloud.castShadow = false;
+  cloud.receiveShadow = false;
   clouds.push(cloud);
   scene.add(cloud);
 }
@@ -1757,59 +1766,71 @@ worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.bus.group, radius: 2.9, height: 2.55 });
 
 const treeLocations = [];
-const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
-const pineMats = [
-  new THREE.MeshStandardMaterial({ color: 0x34785f, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x438763, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x5a9566, roughness: 1, flatShading: true }),
-];
-const broadleafMats = [
-  new THREE.MeshStandardMaterial({ color: 0x4b8d65, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x70a666, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x3b785e, roughness: 1, flatShading: true }),
-];
+const treePartInstances = {
+  trunks: [],
+  pineLow: [],
+  pineHigh: [],
+  broadleafCenters: [],
+  broadleafPuffs: [],
+};
+const PINE_COLORS = [0x34785f, 0x438763, 0x5a9566];
+const BROADLEAF_COLORS = [0x4b8d65, 0x70a666, 0x3b785e];
+const TREE_TRUNK_COLOR = 0x805940;
 const trunkGeometry = new THREE.CylinderGeometry(0.19, 0.31, 2.25, 7, 1);
 const pineLowGeometry = new THREE.ConeGeometry(1.28, 2.55, 7, 1);
 const pineHighGeometry = new THREE.ConeGeometry(0.96, 2.05, 7, 1);
 const canopyGeometry = new THREE.IcosahedronGeometry(1.12, 0);
 const canopySmallGeometry = new THREE.IcosahedronGeometry(0.84, 0);
 
-function createTree(x, z, scale, type) {
-  const group = new THREE.Group();
-  const trunk = new THREE.Mesh(trunkGeometry, treeWood);
-  trunk.position.y = 1.11;
-  trunk.castShadow = true;
-  trunk.receiveShadow = true;
-  group.add(trunk);
+function recordTreePart(kind, x, y, z, rotation, scale, color, partScale = [1, 1, 1]) {
+  treePartInstances[kind].push({
+    x,
+    y,
+    z,
+    rotation,
+    scaleX: scale * partScale[0],
+    scaleY: scale * partScale[1],
+    scaleZ: scale * partScale[2],
+    color,
+  });
+}
 
+function createTree(x, z, scale, type) {
+  const groundY = terrainHeight(x, z) - 0.02;
+  let lowerColor;
+  let upperColor;
+  let centerColor;
+  const puffColors = [];
   if (type === 0) {
-    const lower = new THREE.Mesh(pineLowGeometry, pineMats[Math.floor(random() * pineMats.length)]);
-    lower.position.y = 2.35;
-    lower.castShadow = true;
-    group.add(lower);
-    const upper = new THREE.Mesh(pineHighGeometry, pineMats[Math.floor(random() * pineMats.length)]);
-    upper.position.y = 3.68;
-    upper.castShadow = true;
-    group.add(upper);
+    lowerColor = PINE_COLORS[Math.floor(random() * PINE_COLORS.length)];
+    upperColor = PINE_COLORS[Math.floor(random() * PINE_COLORS.length)];
   } else {
-    const center = new THREE.Mesh(canopyGeometry, broadleafMats[Math.floor(random() * broadleafMats.length)]);
-    center.position.y = 2.88;
-    center.scale.set(1.05, 1.12, 0.96);
-    center.castShadow = true;
-    group.add(center);
-    for (let i = 0; i < 3; i += 1) {
-      const puff = new THREE.Mesh(canopySmallGeometry, broadleafMats[Math.floor(random() * broadleafMats.length)]);
-      const angle = (i / 3) * Math.PI * 2 + 0.5;
-      puff.position.set(Math.cos(angle) * 0.73, 2.45 + (i % 2) * 0.52, Math.sin(angle) * 0.62);
-      puff.scale.set(0.76, 0.8, 0.75);
-      puff.castShadow = true;
-      group.add(puff);
+    centerColor = BROADLEAF_COLORS[Math.floor(random() * BROADLEAF_COLORS.length)];
+    for (let index = 0; index < 3; index += 1) {
+      puffColors.push(BROADLEAF_COLORS[Math.floor(random() * BROADLEAF_COLORS.length)]);
     }
   }
-  group.position.set(x, terrainHeight(x, z) - 0.02, z);
-  group.scale.setScalar(scale);
-  group.rotation.y = random() * Math.PI * 2;
-  scene.add(group);
+  const rotation = random() * Math.PI * 2;
+  recordTreePart('trunks', x, groundY + 1.11 * scale, z, rotation, scale, TREE_TRUNK_COLOR);
+
+  if (type === 0) {
+    recordTreePart('pineLow', x, groundY + 2.35 * scale, z, rotation, scale, lowerColor);
+    recordTreePart('pineHigh', x, groundY + 3.68 * scale, z, rotation, scale, upperColor);
+  } else {
+    recordTreePart('broadleafCenters', x, groundY + 2.88 * scale, z, rotation, scale, centerColor, [1.05, 1.12, 0.96]);
+    const cosine = Math.cos(rotation);
+    const sine = Math.sin(rotation);
+    for (let index = 0; index < 3; index += 1) {
+      const angle = (index / 3) * Math.PI * 2 + 0.5;
+      const localX = Math.cos(angle) * 0.73;
+      const localY = 2.45 + (index % 2) * 0.52;
+      const localZ = Math.sin(angle) * 0.62;
+      const worldX = x + (localX * cosine + localZ * sine) * scale;
+      const worldZ = z + (-localX * sine + localZ * cosine) * scale;
+      recordTreePart('broadleafPuffs', worldX, groundY + localY * scale, worldZ, rotation, scale, puffColors[index], [0.76, 0.8, 0.75]);
+    }
+  }
+
   worldObstacleColliders.push({ x, z, radius: 0.3 * scale, height: 2.25 * scale });
   treeLocations.push({ x, z });
 }
@@ -1825,35 +1846,100 @@ while (treeLocations.length < 38 && treeAttempts < 1000) {
   createTree(x, z, 0.78 + random() * 0.53, Math.floor(random() * 2));
 }
 
+function addTreeInstanceBatch(name, geometry, material, instances, receiveShadow = false) {
+  if (!instances.length) return null;
+  const mesh = new THREE.InstancedMesh(geometry, material, instances.length);
+  const transform = new THREE.Object3D();
+  const color = new THREE.Color();
+  for (let index = 0; index < instances.length; index += 1) {
+    const instance = instances[index];
+    transform.position.set(instance.x, instance.y, instance.z);
+    transform.rotation.set(0, instance.rotation, 0);
+    transform.scale.set(instance.scaleX, instance.scaleY, instance.scaleZ);
+    transform.updateMatrix();
+    mesh.setMatrixAt(index, transform.matrix);
+    mesh.setColorAt(index, color.setHex(instance.color));
+  }
+  mesh.name = name;
+  mesh.castShadow = true;
+  mesh.receiveShadow = receiveShadow;
+  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  scene.add(mesh);
+  return mesh;
+}
+
+const treeTrunkMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+const treeFoliageMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+addTreeInstanceBatch('Tree trunks', trunkGeometry, treeTrunkMaterial, treePartInstances.trunks, true);
+addTreeInstanceBatch('Pine lower canopies', pineLowGeometry, treeFoliageMaterial, treePartInstances.pineLow);
+addTreeInstanceBatch('Pine upper canopies', pineHighGeometry, treeFoliageMaterial, treePartInstances.pineHigh);
+addTreeInstanceBatch('Broadleaf canopies', canopyGeometry, treeFoliageMaterial, treePartInstances.broadleafCenters);
+addTreeInstanceBatch('Broadleaf canopy clusters', canopySmallGeometry, treeFoliageMaterial, treePartInstances.broadleafPuffs);
+for (const instances of Object.values(treePartInstances)) instances.length = 0;
+
 // Weathered rocks are scattered around clearings and the island's slope.
 const rockGeometry = new THREE.DodecahedronGeometry(0.75, 0);
-const rockMaterials = [
-  new THREE.MeshStandardMaterial({ color: 0x879487, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0xa59d7e, roughness: 1, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x74847b, roughness: 1, flatShading: true }),
-];
+const ROCK_COLORS = [0x879487, 0xa59d7e, 0x74847b];
+const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+const rockInstances = [];
 for (let i = 0; i < 30; i += 1) {
   const angle = random() * Math.PI * 2;
   const radius = 14 + random() * 51;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
   if (radius > 65 || isReservedSpot(x, z, 1.3)) continue;
-  const rock = new THREE.Mesh(rockGeometry, rockMaterials[Math.floor(random() * rockMaterials.length)]);
+  const color = ROCK_COLORS[Math.floor(random() * ROCK_COLORS.length)];
   const scaleX = 0.7 + random() * 0.9;
   const scaleY = 0.42 + random() * 0.5;
   const scaleZ = 0.55 + random() * 0.8;
-  rock.position.set(x, terrainHeight(x, z) + 0.22, z);
-  rock.scale.set(scaleX, scaleY, scaleZ);
-  rock.rotation.set(random() * 0.2, random() * Math.PI, random() * 0.2);
-  rock.castShadow = true;
-  rock.receiveShadow = true;
-  scene.add(rock);
+  const y = terrainHeight(x, z) + 0.22;
+  const rotationX = random() * 0.2;
+  const rotationY = random() * Math.PI;
+  const rotationZ = random() * 0.2;
+  rockInstances.push({
+    x,
+    y,
+    z,
+    scaleX,
+    scaleY,
+    scaleZ,
+    rotationX,
+    rotationY,
+    rotationZ,
+    color,
+  });
   worldObstacleColliders.push({
     x,
     z,
     radius: 0.75 * Math.max(scaleX, scaleZ),
     height: 0.22 + 0.75 * scaleY,
   });
+}
+if (rockInstances.length) {
+  const rocks = new THREE.InstancedMesh(rockGeometry, rockMaterial, rockInstances.length);
+  const rockTransform = new THREE.Object3D();
+  const rockColor = new THREE.Color();
+  for (let index = 0; index < rockInstances.length; index += 1) {
+    const rock = rockInstances[index];
+    rockTransform.position.set(rock.x, rock.y, rock.z);
+    rockTransform.rotation.set(rock.rotationX, rock.rotationY, rock.rotationZ);
+    rockTransform.scale.set(rock.scaleX, rock.scaleY, rock.scaleZ);
+    rockTransform.updateMatrix();
+    rocks.setMatrixAt(index, rockTransform.matrix);
+    rocks.setColorAt(index, rockColor.setHex(rock.color));
+  }
+  rocks.name = 'Island rocks';
+  rocks.castShadow = true;
+  rocks.receiveShadow = true;
+  rocks.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+  rocks.instanceMatrix.needsUpdate = true;
+  if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;
+  rocks.computeBoundingSphere();
+  scene.add(rocks);
+  rockInstances.length = 0;
 }
 
 // Tiny wildflowers use instancing so the open meadows stay light to render.
@@ -1924,16 +2010,32 @@ for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   seeds.push({ index: i + 1, group: seedGroup, orb, hoop, halo, x: position.x, z: position.y, phase: random() * Math.PI * 2, collected: false });
 }
 
-// A few slow sparks circle the beacon like fireflies.
+// A few slow sparks circle the beacon like fireflies. One dynamic batch avoids
+// a separate draw submission for every tiny particle.
 const motes = [];
 const moteGeometry = new THREE.SphereGeometry(0.055, 7, 5);
 const moteMaterial = new THREE.MeshBasicMaterial({ color: 0xc8f3bb, transparent: true, opacity: 0.82, depthWrite: false });
+const moteInstances = new THREE.InstancedMesh(moteGeometry, moteMaterial, 19);
+const moteTransform = new THREE.Object3D();
 for (let i = 0; i < 19; i += 1) {
-  const mote = new THREE.Mesh(moteGeometry, moteMaterial);
-  mote.userData = { phase: random() * Math.PI * 2, radius: 3.1 + random() * 2.3, speed: 0.25 + random() * 0.45, height: 1.1 + random() * 4.7 };
-  motes.push(mote);
-  beacon.add(mote);
+  const data = { phase: random() * Math.PI * 2, radius: 3.1 + random() * 2.3, speed: 0.25 + random() * 0.45, height: 1.1 + random() * 4.7 };
+  motes.push(data);
+  const angle = data.phase;
+  moteTransform.position.set(
+    Math.cos(angle) * data.radius,
+    data.height + Math.sin(angle * 1.6) * 0.45,
+    Math.sin(angle) * data.radius,
+  );
+  moteTransform.updateMatrix();
+  moteInstances.setMatrixAt(i, moteTransform.matrix);
 }
+moteInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+moteInstances.instanceMatrix.needsUpdate = true;
+moteInstances.computeBoundingSphere();
+moteInstances.castShadow = false;
+moteInstances.receiveShadow = false;
+beacon.add(moteInstances);
+let lastMoteReducedMotion = null;
 
 // A more natural, softly shaded wanderer with human proportions, layered clothes,
 // facial features, articulated limbs, and a stitched travel pack.
@@ -3939,9 +4041,33 @@ function updateLocationAndMap() {
   drawMap();
 }
 
+const mapCanvasDrawState = new WeakMap();
+const MAP_REDRAW_DISTANCE_SQUARED = 0.12 * 0.12;
+const MAP_REDRAW_ANGLE_RADIANS = 0.035;
+
 function drawMap() {
-  drawMapCanvas(mapCanvas, mapContext);
-  if (isPhoneOpen() && activePhonePage === 'map') drawMapCanvas(phoneMapCanvas, phoneMapContext);
+  drawMapCanvasIfNeeded(mapCanvas, mapContext);
+  if (isPhoneOpen() && activePhonePage === 'map') drawMapCanvasIfNeeded(phoneMapCanvas, phoneMapContext);
+}
+
+function drawMapCanvasIfNeeded(targetCanvas, ctx) {
+  const previous = mapCanvasDrawState.get(targetCanvas);
+  const x = player.position.x;
+  const z = player.position.z;
+  const yaw = player.rotation.y;
+  const width = targetCanvas.width;
+  const height = targetCanvas.height;
+  if (previous
+    && previous.seedCount === seedCount
+    && previous.width === width
+    && previous.height === height) {
+    const dx = x - previous.x;
+    const dz = z - previous.z;
+    const angle = Math.atan2(Math.sin(yaw - previous.yaw), Math.cos(yaw - previous.yaw));
+    if (dx * dx + dz * dz < MAP_REDRAW_DISTANCE_SQUARED && Math.abs(angle) < MAP_REDRAW_ANGLE_RADIANS) return;
+  }
+  drawMapCanvas(targetCanvas, ctx);
+  mapCanvasDrawState.set(targetCanvas, { x, z, yaw, seedCount, width, height });
 }
 
 function drawMapCanvas(targetCanvas, ctx) {
@@ -4217,16 +4343,96 @@ function drawMapCanvas(targetCanvas, ctx) {
 }
 
 const clock = new THREE.Clock();
+const animationScratch = {
+  desiredDirection: new THREE.Vector3(),
+  forward: new THREE.Vector3(),
+  right: new THREE.Vector3(),
+  desiredVelocity: new THREE.Vector3(),
+  desiredCameraPosition: new THREE.Vector3(),
+  lookAtPosition: new THREE.Vector3(),
+  eyePosition: new THREE.Vector3(),
+  seatOffset: new THREE.Vector3(),
+  viewDirection: new THREE.Vector3(),
+  yawAxis: new THREE.Vector3(0, 1, 0),
+};
+const FRAME_INTERVAL_MS = 1000 / 60;
+const SHADOW_UPDATE_INTERVAL_MS = 1000 / 30;
+let animationFrameHandle = null;
+let lastAnimationTimestamp = null;
+let lastShadowUpdateTimestamp = null;
+let frameIntervalAccumulator = 0;
 let uiAccumulator = 0;
-function animate() {
-  requestAnimationFrame(animate);
+const performanceHud = showPerformanceHud ? document.createElement('output') : null;
+let performanceFrames = 0;
+let performanceTotalCalls = 0;
+let performanceTotalTriangles = 0;
+let performanceTotalCpuMs = 0;
+let performanceWindowStart = null;
+if (performanceHud) {
+  performanceHud.style.cssText = 'position:fixed;z-index:1000;top:8px;left:8px;padding:6px 8px;border:1px solid rgba(255,255,255,.35);border-radius:7px;color:#fff;background:rgba(20,35,30,.78);font:11px/1.45 ui-monospace,monospace;pointer-events:none;white-space:pre;';
+  performanceHud.setAttribute('aria-live', 'off');
+  performanceHud.textContent = 'Measuring render performance…';
+  document.body.append(performanceHud);
+}
+
+function resetPerformanceHudWindow() {
+  performanceFrames = 0;
+  performanceTotalCalls = 0;
+  performanceTotalTriangles = 0;
+  performanceTotalCpuMs = 0;
+  performanceWindowStart = null;
+}
+
+function updatePerformanceHud(timestamp, frameCpuMs) {
+  if (!performanceHud) return;
+  if (performanceWindowStart === null) performanceWindowStart = timestamp;
+  const { calls, triangles } = renderer.info.render;
+  performanceFrames += 1;
+  performanceTotalCalls += calls;
+  performanceTotalTriangles += triangles;
+  performanceTotalCpuMs += frameCpuMs;
+  const elapsedSeconds = (timestamp - performanceWindowStart) / 1000;
+  if (elapsedSeconds < 0.5) return;
+  performanceHud.textContent = `${Math.round(performanceFrames / elapsedSeconds)} FPS  ·  ${Math.round(performanceTotalCalls / performanceFrames)} draw calls/frame  ·  ${Math.round(performanceTotalTriangles / performanceFrames).toLocaleString()} triangles/frame\nCPU ${(performanceTotalCpuMs / performanceFrames).toFixed(1)} ms/frame  ·  DPR ${renderer.getPixelRatio().toFixed(2)}`;
+  resetPerformanceHudWindow();
+  performanceWindowStart = timestamp;
+}
+
+function scheduleAnimationFrame() {
+  if (document.hidden || animationFrameHandle !== null) return;
+  animationFrameHandle = requestAnimationFrame(animate);
+}
+
+function animate(timestamp) {
+  animationFrameHandle = null;
+  if (document.hidden) return;
+  if (lastAnimationTimestamp === null) {
+    lastAnimationTimestamp = timestamp;
+    frameIntervalAccumulator = FRAME_INTERVAL_MS;
+  } else {
+    frameIntervalAccumulator += Math.min(timestamp - lastAnimationTimestamp, 100);
+    lastAnimationTimestamp = timestamp;
+  }
+  if (frameIntervalAccumulator < FRAME_INTERVAL_MS) {
+    scheduleAnimationFrame();
+    return;
+  }
+  frameIntervalAccumulator %= FRAME_INTERVAL_MS;
+  scheduleAnimationFrame();
+  const performanceFrameStart = performanceHud ? performance.now() : 0;
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
   vehicleInteractionCooldown = Math.max(0, vehicleInteractionCooldown - delta);
   vehicleAccelerateTapTimer = Math.max(0, vehicleAccelerateTapTimer - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
-  updateStadiumMatch(stadium, delta, prefersReducedMotion);
+  const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
+  const crowdUpdateInterval = isWatchingMatch || stadiumDistance < 28
+    ? 0
+    : stadiumDistance < 48
+      ? 1 / 30
+      : 1 / 15;
+  updateStadiumMatch(stadium, delta, prefersReducedMotion, crowdUpdateInterval);
   const transitUpdate = updateTransportNetwork(transitNetwork, delta);
   const arrivedRideStop = transitRideMode === 'bus' ? transitUpdate.arrivedBusTerminal : transitUpdate.arrivedStation;
   if (isRidingTransit && transitStopRequested && arrivedRideStop
@@ -4286,7 +4492,7 @@ function animate() {
   const inputMagnitude = Math.hypot(forwardInput, sideInput);
   const hasMovementInput = inputMagnitude > 0.08;
   const isRunning = !isDriving && pressedKeys.has('shift');
-  const desiredDirection = new THREE.Vector3();
+  const desiredDirection = animationScratch.desiredDirection.set(0, 0, 0);
   let isMoving = false;
   if (isRidingTransit) {
     isMoving = false;
@@ -4294,11 +4500,11 @@ function animate() {
     updateVehicleMovement(delta, forwardInput, sideInput);
     isMoving = Math.abs(playerCar?.speed || 0) > 0.15;
   } else {
-    const forward = new THREE.Vector3(Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-    const right = new THREE.Vector3(Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
-    desiredDirection.copy(forward.multiplyScalar(forwardInput).add(right.multiplyScalar(sideInput)));
+    const forward = animationScratch.forward.set(Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+    const right = animationScratch.right.set(Math.cos(cameraYaw), 0, Math.sin(cameraYaw));
+    desiredDirection.copy(forward).multiplyScalar(forwardInput).addScaledVector(right, sideInput);
     const speed = isRunning ? 9.0 : 5.1;
-    const desiredVelocity = desiredDirection.clone().multiplyScalar(speed);
+    const desiredVelocity = animationScratch.desiredVelocity.copy(desiredDirection).multiplyScalar(speed);
     const acceleration = isGrounded ? (hasMovementInput ? 12 : 17) : (hasMovementInput ? 4.8 : 1.5);
     const response = 1 - Math.exp(-acceleration * delta);
     velocity.x += (desiredVelocity.x - velocity.x) * response;
@@ -4425,12 +4631,24 @@ function animate() {
     }
   }
 
-  for (const mote of motes) {
-    const data = mote.userData;
-    const angle = prefersReducedMotion ? data.phase : elapsedWorldTime * data.speed + data.phase;
-    const verticalFloat = prefersReducedMotion ? 0 : Math.sin(angle * 1.6) * 0.45;
-    mote.position.set(Math.cos(angle) * data.radius, data.height + verticalFloat, Math.sin(angle) * data.radius);
-    mote.material.opacity = prefersReducedMotion ? 0.7 : 0.55 + Math.sin(elapsedWorldTime * 3 + data.phase) * 0.35;
+  if (!prefersReducedMotion || lastMoteReducedMotion !== prefersReducedMotion) {
+    let moteOpacity = 0.7;
+    for (let index = 0; index < motes.length; index += 1) {
+      const data = motes[index];
+      const angle = prefersReducedMotion ? data.phase : elapsedWorldTime * data.speed + data.phase;
+      const verticalFloat = prefersReducedMotion ? 0 : Math.sin(angle * 1.6) * 0.45;
+      moteTransform.position.set(
+        Math.cos(angle) * data.radius,
+        data.height + verticalFloat,
+        Math.sin(angle) * data.radius,
+      );
+      moteTransform.updateMatrix();
+      moteInstances.setMatrixAt(index, moteTransform.matrix);
+      if (!prefersReducedMotion) moteOpacity = 0.55 + Math.sin(elapsedWorldTime * 3 + data.phase) * 0.35;
+    }
+    moteInstances.instanceMatrix.needsUpdate = true;
+    moteMaterial.opacity = moteOpacity;
+    lastMoteReducedMotion = prefersReducedMotion;
   }
   portalRing.rotation.z = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.55) * 0.035;
   portalGlow.material.opacity = prefersReducedMotion ? 0.17 : 0.17 + Math.sin(elapsedWorldTime * 1.25) * 0.045;
@@ -4441,13 +4659,13 @@ function animate() {
     const portraitView = aspectRatio < 0.82;
     const cameraDistance = portraitView ? 51 : 25;
     const cameraHeight = portraitView ? 20.5 : 10.2;
-    const desiredCameraPosition = new THREE.Vector3(
+    const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
       STADIUM.x + cameraDistance,
       stadium.group.position.y + cameraHeight,
       STADIUM.z + 0.6,
     );
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-3.4 * delta));
-    const lookAt = new THREE.Vector3(
+    const lookAt = animationScratch.lookAtPosition.set(
       STADIUM.x + stadium.ball.position.x * 0.14,
       stadium.group.position.y + 1.15 + (stadium.ball.position.y - STADIUM.pitchOffset) * 0.1,
       STADIUM.z + stadium.ball.position.z * 0.14,
@@ -4455,23 +4673,24 @@ function animate() {
     camera.lookAt(lookAt);
     updateStadiumBroadcast();
   } else if (isFirstPerson) {
-    const seatOffset = isDriving && playerCar
-      ? new THREE.Vector3(-0.23, 0, -0.36).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerCar.group.rotation.y)
-      : new THREE.Vector3();
-    const eyePosition = new THREE.Vector3(
+    const seatOffset = animationScratch.seatOffset.set(0, 0, 0);
+    if (isDriving && playerCar) {
+      seatOffset.set(-0.23, 0, -0.36).applyAxisAngle(animationScratch.yawAxis, playerCar.group.rotation.y);
+    }
+    const eyePosition = animationScratch.eyePosition.set(
       player.position.x + seatOffset.x,
       player.position.y + (isDriving ? 1.31 : isRidingTransit ? 1.2 : avatarModel.position.y + 1.73),
       player.position.z + seatOffset.z,
     );
     const pitchCos = Math.cos(cameraPitch);
     const viewYaw = isDriving && playerCar ? -playerCar.group.rotation.y + drivingViewYawOffset : cameraYaw;
-    const viewDirection = new THREE.Vector3(
+    const viewDirection = animationScratch.viewDirection.set(
       Math.sin(viewYaw) * pitchCos,
       Math.sin(cameraPitch),
       -Math.cos(viewYaw) * pitchCos,
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
-    camera.lookAt(eyePosition.clone().addScaledVector(viewDirection, 18));
+    camera.lookAt(animationScratch.lookAtPosition.copy(eyePosition).addScaledVector(viewDirection, 18));
   } else if (isInsideHome && getCurrentResidence()) {
     const residence = getCurrentResidence();
     const local = homeWorldToLocal(player.position.x, player.position.z);
@@ -4480,7 +4699,7 @@ function animate() {
       local.x + Math.sin(orbitYaw) * 4.15,
       local.z + Math.cos(orbitYaw) * 4.15,
     );
-    const desiredCameraPosition = new THREE.Vector3(
+    const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
       cameraLocal.x,
       player.position.y + 2.35 + jumpHeight * 0.12,
       cameraLocal.z,
@@ -4492,7 +4711,7 @@ function animate() {
     const cameraDistance = isDriving ? 12.6 : 10.8;
     const cameraHeight = isDriving ? 4.8 : 6.2;
     const lookHeight = isDriving ? 0.98 : 1.24;
-    const desiredCameraPosition = new THREE.Vector3(
+    const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
       player.position.x + Math.sin(cameraYaw) * cameraDistance,
       player.position.y + cameraHeight + jumpHeight * 0.16,
       player.position.z + Math.cos(cameraYaw) * cameraDistance,
@@ -4507,7 +4726,14 @@ function animate() {
     uiAccumulator = 0;
   }
 
+  if (lastShadowUpdateTimestamp === null
+    || timestamp - lastShadowUpdateTimestamp >= SHADOW_UPDATE_INTERVAL_MS) {
+    renderer.shadowMap.needsUpdate = true;
+    lastShadowUpdateTimestamp = timestamp;
+  }
+  if (performanceHud) renderer.info.reset();
   renderer.render(scene, camera);
+  if (performanceHud) updatePerformanceHud(timestamp, performance.now() - performanceFrameStart);
 }
 
 function resize() {
@@ -4515,13 +4741,30 @@ function resize() {
   const height = window.innerHeight;
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RENDER_PIXEL_RATIO_CAP));
   renderer.setSize(width, height, false);
 }
 window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (animationFrameHandle !== null) cancelAnimationFrame(animationFrameHandle);
+    animationFrameHandle = null;
+    lastAnimationTimestamp = null;
+    lastShadowUpdateTimestamp = null;
+    frameIntervalAccumulator = 0;
+    resetPerformanceHudWindow();
+    clock.stop();
+    return;
+  }
+  lastAnimationTimestamp = null;
+  lastShadowUpdateTimestamp = null;
+  frameIntervalAccumulator = 0;
+  clock.start();
+  scheduleAnimationFrame();
+});
 
 updateLocationAndMap();
 updateClock();
 updateDaylight();
 requestAnimationFrame(() => loadingScreen.classList.add('is-ready'));
-animate();
+scheduleAnimationFrame();

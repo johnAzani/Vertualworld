@@ -20,6 +20,15 @@ const TEAM_NAMES = ['FERN FOXES', 'RIVER BLUES'];
 const TEAM_COLORS = [0xe87955, 0x477bc0];
 const CROWD_COLORS = [0xf0c46f, 0xe77e61, 0x6a9e86, 0x85a9cd, 0xd3b3d8, 0xe9e2cb];
 const BALL_RADIUS = 0.3;
+const CROWD_ANIMATION_SCRATCH = {
+  up: new THREE.Vector3(0, 1, 0),
+  localShoulder: new THREE.Vector3(),
+  shoulder: new THREE.Vector3(),
+  restDirection: new THREE.Vector3(),
+  raisedDirection: new THREE.Vector3(),
+  armDirection: new THREE.Vector3(),
+  armRotation: new THREE.Quaternion(),
+};
 const PLAYER_SLEEVE_GEOMETRY = new THREE.CapsuleGeometry(0.071, 0.2, 2, 6);
 const PLAYER_FOREARM_GEOMETRY = new THREE.CapsuleGeometry(0.052, 0.16, 2, 6);
 const PLAYER_HAND_GEOMETRY = new THREE.SphereGeometry(0.055, 7, 5);
@@ -695,19 +704,16 @@ function addStandSeats(group, config, random) {
     arms: spectatorArms,
     motions: crowdMotions,
     transform: new THREE.Object3D(),
+    reducedMotionPoseReady: false,
+    updateAccumulator: 0,
   };
 }
 
 function updateCrowd(stadium, reducedMotion = false) {
   const crowd = stadium.crowd;
-  if (!crowd.motions.length) return;
-  const up = new THREE.Vector3(0, 1, 0);
-  const localShoulder = new THREE.Vector3();
-  const shoulder = new THREE.Vector3();
-  const restDirection = new THREE.Vector3();
-  const raisedDirection = new THREE.Vector3();
-  const armDirection = new THREE.Vector3();
-  const armRotation = new THREE.Quaternion();
+  if (!crowd.motions.length || (reducedMotion && crowd.reducedMotionPoseReady)) return;
+  crowd.reducedMotionPoseReady = reducedMotion;
+  const { up, localShoulder, shoulder, restDirection, raisedDirection, armDirection, armRotation } = CROWD_ANIMATION_SCRATCH;
   const transform = crowd.transform;
   const cheerLevel = reducedMotion ? 0 : THREE.MathUtils.clamp(stadium.goalFlash / 1.15, 0, 1);
 
@@ -981,7 +987,7 @@ function kickBall(stadium, kicker) {
   kicker.kickPulse = 0.34;
 }
 
-export function updateStadiumMatch(stadium, delta, reducedMotion = false) {
+export function updateStadiumMatch(stadium, delta, reducedMotion = false, crowdUpdateInterval = 0) {
   const { config, ball, ballVelocity } = stadium;
   stadium.elapsed += delta;
   stadium.kickCooldown = Math.max(0, stadium.kickCooldown - delta);
@@ -1090,7 +1096,17 @@ export function updateStadiumMatch(stadium, delta, reducedMotion = false) {
   }
 
   if (stadium.kickCooldown <= 0 && chaser && closestDistanceSq < 1.55 * 1.55) kickBall(stadium, chaser);
-  updateCrowd(stadium, reducedMotion);
+  const crowd = stadium.crowd;
+  if (reducedMotion || !Number.isFinite(crowdUpdateInterval) || crowdUpdateInterval <= 0) {
+    crowd.updateAccumulator = 0;
+    updateCrowd(stadium, reducedMotion);
+  } else {
+    crowd.updateAccumulator += delta;
+    if (crowd.updateAccumulator >= crowdUpdateInterval) {
+      crowd.updateAccumulator %= crowdUpdateInterval;
+      updateCrowd(stadium, reducedMotion);
+    }
+  }
   stadium.scoreboardAccumulator += delta;
   if (stadium.scoreboardAccumulator >= 0.24) {
     stadium.scoreboardAccumulator = 0;

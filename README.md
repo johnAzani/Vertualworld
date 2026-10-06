@@ -32,6 +32,10 @@ Open the local URL Vite prints. Run the economy checks with `npm test`, and buil
 
 The island, trees, path, beacon, avatar, Meadow Court estate, Meadow Park, and maps are generated in Three.js—no external art assets required. The sky, moon, stars, estate lighting, and Meadow Park’s floodlights follow the in-world clock.
 
+## Rendering performance
+
+Repeated tree parts, rocks, and cloud puffs use instanced batches instead of one mesh per piece; beacon motes share one dynamic batch. The minimap skips redraws while its player marker and collectibles are unchanged. The render loop is capped at 60 FPS and sleeps while the tab is hidden. High-density touch screens are capped at 1.4 device-pixel ratio (1.5 elsewhere). The directional shadow map is 1024² and refreshes at up to 30 Hz while the scene renders at up to 60 FPS; this reduces shadow-pass work, with a small temporal lag on moving shadows. Stadium crowd animation uses distance-based update rates (15–30 Hz in the background, full rate nearby or during the match view), while match/gameplay simulation remains active. The broad ocean plane uses a standard material without an extra clearcoat layer and does not receive the shadow map, trading some water sheen and shoreline shadowing for less per-pixel GPU work. These settings trade some image sharpness/shadow detail for lower GPU work. Append `?perf=1` to the page URL to show averaged FPS, draw calls, triangles, main-thread update/render-submission time, and render pixel ratio. The CPU timing is not a GPU timer; results vary by device and should be checked on target phones.
+
 ## Bank app and Flutterwave status
 
 The phone’s Bank app shows a **local game account reference**, island-credit balance, and recent in-game wallet activity. It is not a real bank account. Top-up, rent, and shop buttons currently open **demo-only previews**: they do not call Flutterwave, generate a transfer account, charge money, add credits, or settle purchases. The displayed 1 NGN = 1 IC rate is only a placeholder for the preview and is not production pricing.
