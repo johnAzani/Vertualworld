@@ -23,6 +23,10 @@ const BALL_RADIUS = 0.3;
 const PLAYER_SLEEVE_GEOMETRY = new THREE.CapsuleGeometry(0.071, 0.2, 2, 6);
 const PLAYER_FOREARM_GEOMETRY = new THREE.CapsuleGeometry(0.052, 0.16, 2, 6);
 const PLAYER_HAND_GEOMETRY = new THREE.SphereGeometry(0.055, 7, 5);
+const DUGOUT_SUPPORT_GEOMETRY = new THREE.BoxGeometry(0.09, 1.98, 0.09);
+const DUGOUT_SIDE_GLASS_GEOMETRY = new THREE.BoxGeometry(0.045, 1.22, 0.78);
+const DUGOUT_SEAT_BASE_GEOMETRY = new THREE.BoxGeometry(0.66, 0.13, 0.54);
+const DUGOUT_SEAT_BACK_GEOMETRY = new THREE.BoxGeometry(0.66, 0.46, 0.1);
 
 function makeRandom(seed) {
   let state = seed >>> 0;
@@ -109,6 +113,60 @@ function makeBoardTexture(isScoreboard = false) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 2;
   return { canvas, context, texture };
+}
+
+function makeMatchdaySignTexture(title, subtitle, backgroundColor, accentColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  context.fillStyle = backgroundColor;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = accentColor;
+  context.fillRect(0, 0, 16, canvas.height);
+  context.fillRect(canvas.width - 16, 0, 16, canvas.height);
+  context.strokeStyle = '#e1d3a6';
+  context.lineWidth = 5;
+  context.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#fff7e4';
+  context.font = '700 48px Arial, sans-serif';
+  context.fillText(title, canvas.width / 2, 48);
+  context.fillStyle = '#c7d8c8';
+  context.font = '700 20px Arial, sans-serif';
+  context.fillText(subtitle, canvas.width / 2, 99);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 2;
+  return texture;
+}
+
+function makeTeamDugoutSignTexture(title, accentColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 60;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#17382f';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = accentColor;
+  context.fillRect(0, 0, 12, canvas.height);
+  context.fillRect(canvas.width - 12, 0, 12, canvas.height);
+  context.strokeStyle = '#e1d3a6';
+  context.lineWidth = 3;
+  context.strokeRect(5, 5, canvas.width - 10, canvas.height - 10);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#fff7e4';
+  context.font = '700 28px Arial, sans-serif';
+  context.fillText(title, canvas.width / 2, 25);
+  context.fillStyle = '#c7d8c8';
+  context.font = '700 11px Arial, sans-serif';
+  context.fillText('TECHNICAL AREA', canvas.width / 2, 47);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 2;
+  return texture;
 }
 
 function drawScoreboard(stadium) {
@@ -380,6 +438,138 @@ function addCornerFlags(group, config) {
   return flags;
 }
 
+function addPitchsideBoards(group, config) {
+  const signDesigns = [
+    {
+      title: 'MEADOW PARK',
+      subtitle: 'MATCHDAY  ·  COMMUNITY FOOTBALL',
+      background: '#173c32',
+      accent: '#e1c889',
+    },
+    {
+      title: 'PLAY AS ONE',
+      subtitle: 'THE ISLAND CUP',
+      background: '#223c50',
+      accent: '#7eadd3',
+    },
+  ];
+  const darkFrame = new THREE.MeshStandardMaterial({ color: 0x32433b, roughness: 0.76, metalness: 0.16 });
+  const materials = signDesigns.map((design) => {
+    const texture = makeMatchdaySignTexture(design.title, design.subtitle, design.background, design.accent);
+    return new THREE.MeshStandardMaterial({
+      map: texture,
+      emissive: 0xffffff,
+      emissiveMap: texture,
+      emissiveIntensity: 0.16,
+      roughness: 0.72,
+      side: THREE.DoubleSide,
+    });
+  });
+  const boards = [];
+  for (const side of [-1, 1]) {
+    for (const z of [-8.65, 8.65]) {
+      const x = side * (config.fieldHalfX + 0.24);
+      const frame = addBox(group, 0.18, 0.78, 4.28, darkFrame, x, 0.43, z, false, true);
+      const baseRail = addBox(group, 0.24, 0.08, 4.38, darkFrame, x, 0.08, z, false, true);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.08, 0.54), materials[z < 0 ? 0 : 1]);
+      sign.position.set(x - side * 0.095, 0.46, z);
+      sign.rotation.y = -side * Math.PI / 2;
+      sign.castShadow = false;
+      group.add(sign);
+      boards.push({ frame, baseRail, sign });
+    }
+  }
+  return { boards, materials };
+}
+
+function addTeamDugouts(group, config) {
+  const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x40584c, roughness: 0.72, metalness: 0.14 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x355247, roughness: 0.74, metalness: 0.16 });
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd1e1d9,
+    roughness: 0.18,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const dugouts = [];
+
+  for (let teamIndex = 0; teamIndex < TEAM_NAMES.length; teamIndex += 1) {
+    const side = teamIndex === 0 ? 1 : -1;
+    const teamColor = TEAM_COLORS[teamIndex];
+    const teamMaterial = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.68, metalness: 0.06 });
+    const seatsMaterial = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.6 });
+    const dugout = new THREE.Group();
+    dugout.name = `${TEAM_NAMES[teamIndex]} dugout`;
+    dugout.position.set(side * (config.fieldHalfX + 0.45), 0.005, 0);
+    dugout.rotation.y = side * Math.PI / 2;
+
+    addBox(dugout, 4.82, 0.12, 0.9, frameMaterial, 0, 0.1, 0, false, true);
+    addBox(dugout, 5.08, 0.16, 1.05, roofMaterial, 0, 2.12, 0.06, true, false);
+    const supports = new THREE.InstancedMesh(DUGOUT_SUPPORT_GEOMETRY, frameMaterial, 4);
+    const supportTransform = new THREE.Object3D();
+    let supportIndex = 0;
+    for (const x of [-2.42, 2.42]) {
+      for (const z of [-0.43, 0.43]) {
+        supportTransform.position.set(x, 1.1, z);
+        supportTransform.updateMatrix();
+        supports.setMatrixAt(supportIndex, supportTransform.matrix);
+        supportIndex += 1;
+      }
+    }
+    supports.instanceMatrix.needsUpdate = true;
+    supports.castShadow = false;
+    dugout.add(supports);
+
+    const rearGlazing = new THREE.Mesh(new THREE.BoxGeometry(4.65, 1.23, 0.045), glassMaterial);
+    rearGlazing.position.set(0, 1.26, 0.39);
+    dugout.add(rearGlazing);
+    const sideGlazing = new THREE.InstancedMesh(DUGOUT_SIDE_GLASS_GEOMETRY, glassMaterial, 2);
+    const glazingTransform = new THREE.Object3D();
+    for (let index = 0; index < 2; index += 1) {
+      glazingTransform.position.set(index === 0 ? -2.36 : 2.36, 1.23, 0);
+      glazingTransform.updateMatrix();
+      sideGlazing.setMatrixAt(index, glazingTransform.matrix);
+    }
+    sideGlazing.instanceMatrix.needsUpdate = true;
+    dugout.add(sideGlazing);
+
+    addBox(dugout, 5.08, 0.36, 0.1, teamMaterial, 0, 1.82, -0.49, false, false);
+    const nameTexture = makeTeamDugoutSignTexture(TEAM_NAMES[teamIndex], `#${teamColor.toString(16).padStart(6, '0')}`);
+    const namePlate = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.72, 0.28),
+      new THREE.MeshBasicMaterial({ map: nameTexture, toneMapped: false, side: THREE.DoubleSide }),
+    );
+    namePlate.position.set(0, 1.82, -0.545);
+    namePlate.rotation.y = Math.PI;
+    dugout.add(namePlate);
+
+    const seatBases = new THREE.InstancedMesh(DUGOUT_SEAT_BASE_GEOMETRY, seatsMaterial, 5);
+    const seatBacks = new THREE.InstancedMesh(DUGOUT_SEAT_BACK_GEOMETRY, seatsMaterial, 5);
+    const seatTransform = new THREE.Object3D();
+    for (let seatIndex = 0; seatIndex < 5; seatIndex += 1) {
+      const x = (seatIndex - 2) * 0.86;
+      seatTransform.position.set(x, 0.54, -0.04);
+      seatTransform.updateMatrix();
+      seatBases.setMatrixAt(seatIndex, seatTransform.matrix);
+      seatTransform.position.set(x, 0.82, 0.19);
+      seatTransform.updateMatrix();
+      seatBacks.setMatrixAt(seatIndex, seatTransform.matrix);
+    }
+    seatBases.instanceMatrix.needsUpdate = true;
+    seatBacks.instanceMatrix.needsUpdate = true;
+    seatBases.castShadow = false;
+    seatBacks.castShadow = false;
+    dugout.add(seatBases, seatBacks);
+
+    group.add(dugout);
+    dugouts.push({ teamIndex, teamName: TEAM_NAMES[teamIndex], group: dugout });
+  }
+  return dugouts;
+}
+
 function addStandSeats(group, config, random) {
   const seats = [];
   const rows = 5;
@@ -390,7 +580,7 @@ function addStandSeats(group, config, random) {
       for (let seatIndex = 0; seatIndex <= 24; seatIndex += 1) {
         const z = -15 + seatIndex * 1.25;
         if (side === 1 && Math.abs(z) < 1.8) continue;
-        seats.push({ x, z, y: tierY + 0.21, rotation: Math.PI / 2, backX: x + side * 0.24, backZ: z, side, row, end: false });
+        seats.push({ x, z, y: tierY + 0.21, rotation: side * Math.PI / 2, backX: x + side * 0.24, backZ: z, side, row, end: false });
       }
     }
   }
@@ -400,7 +590,7 @@ function addStandSeats(group, config, random) {
       const tierY = 0.2 + row * 0.34;
       for (let seatIndex = 0; seatIndex <= 17; seatIndex += 1) {
         const x = -10.6 + seatIndex * 1.25;
-        seats.push({ x, z, y: tierY + 0.2, rotation: 0, backX: x, backZ: z + side * 0.24, side, row, end: true });
+        seats.push({ x, z, y: tierY + 0.2, rotation: side > 0 ? 0 : Math.PI, backX: x, backZ: z + side * 0.24, side, row, end: true });
       }
     }
   }
@@ -431,8 +621,13 @@ function addStandSeats(group, config, random) {
     transform.updateMatrix();
     seatBacks.setMatrixAt(index, transform.matrix);
     seatBacks.setColorAt(index, color.clone().multiplyScalar(0.82));
-    if (!seat.end && index % 9 === 0 && !(seat.side === 1 && Math.abs(seat.z) < 2.2)) {
-      crowdSlots.push({ x: seat.x, z: seat.z, y: seat.y, rotation: seat.side > 0 ? Math.PI / 2 : -Math.PI / 2, side: seat.side, end: seat.end });
+    const isEntranceGap = !seat.end && seat.side === 1 && Math.abs(seat.z) < 2.2;
+    const isGoalNetRow = seat.end && seat.row === 0;
+    if (!isEntranceGap && !isGoalNetRow && random() < 0.3) {
+      const rotation = seat.end
+        ? (seat.side > 0 ? 0 : Math.PI)
+        : seat.side * Math.PI / 2;
+      crowdSlots.push({ x: seat.x, z: seat.z, y: seat.y, rotation, side: seat.side, end: seat.end });
     }
   }
   seatBases.instanceMatrix.needsUpdate = true;
@@ -441,7 +636,7 @@ function addStandSeats(group, config, random) {
   if (seatBacks.instanceColor) seatBacks.instanceColor.needsUpdate = true;
   group.add(seatBases, seatBacks);
 
-  const spectators = crowdSlots.slice(0, 62);
+  const spectators = crowdSlots.slice(0, 120);
   const spectatorBody = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.13, 0.16, 0.4, 7),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }),
@@ -639,6 +834,8 @@ export function createStadium(terrainHeight) {
   addBox(group, 0.2, 0.05, config.fieldHalfZ * 2 + 3.25, trimMaterial, config.fieldHalfX + 1.5, 0.035, 0, false, true);
   createPitch(group, config);
   const cornerFlags = addCornerFlags(group, config);
+  const pitchside = addPitchsideBoards(group, config);
+  const dugouts = addTeamDugouts(group, config);
 
   const tierMaterials = [
     new THREE.MeshStandardMaterial({ color: 0x99a496, roughness: 0.97, flatShading: true }),
@@ -733,6 +930,9 @@ export function createStadium(terrainHeight) {
     crowd,
     floodlights: floodlightRig.lights,
     floodlightMaterial: floodlightRig.material,
+    pitchsideMaterials: pitchside.materials,
+    pitchsideBoards: pitchside.boards,
+    dugouts,
     cornerFlags,
     ball,
     ballShadow,

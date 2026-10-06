@@ -366,6 +366,7 @@ function updateDaylight() {
   }
   for (const floodlight of stadium.floodlights) floodlight.intensity = THREE.MathUtils.lerp(0, 210, night);
   stadium.floodlightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.08, 1.55, night);
+  for (const material of stadium.pitchsideMaterials) material.emissiveIntensity = THREE.MathUtils.lerp(0.16, 0.9, night);
 }
 
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
