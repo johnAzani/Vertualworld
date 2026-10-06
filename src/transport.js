@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const ROAD_ROUTE_XZ = [
-  [44, 8], [36, 8], [28, 8], [20, 8], [13, 8],
-  [8, 5], [7, -2], [7, -10], [7, -18], [7, -25], [7, -29],
+const BUS_ROUTE_XZ = [
+  [44, 8], [44, 26], [50, 26], [50, 40], [34, 40], [34, 26], [24, 26], [14, 26], [5, 26], [5, 8], [8, 5],
+  [7, -2], [7, -10], [7, -18], [7, -25], [7, -29],
   [-4, -32], [-17, -34], [-30, -31], [-42, -24], [-50, -15],
   [-53, -5], [-54, 6], [-53.5, 18],
 ];
@@ -56,6 +56,18 @@ const BUS_TERMINAL_DWELL_SECONDS = 7.5;
 const TRAIN_LENGTH = 6.3;
 const BUS_LENGTH = 5.7;
 const TRAIN_WHEEL_RADIUS = 0.29;
+
+const ROAD_NETWORK_LAYOUT = [
+  { points: BUS_ROUTE_XZ, halfWidth: ROAD_HALF_WIDTH, centerline: true },
+  {
+    points: [[44, 8], [36, 8], [28, 8], [20, 8], [13, 8], [8, 5]],
+    halfWidth: ROAD_HALF_WIDTH,
+    centerline: true,
+  },
+  { points: [[34, 26], [44, 26]], halfWidth: 1.78 },
+  { points: [[44, 26], [44, 40]], halfWidth: 1.78 },
+  { points: [[34, 33], [50, 33]], halfWidth: 1.78 },
+];
 
 function addBox(parent, width, height, depth, material, x, y, z, castShadow = true, receiveShadow = true) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
@@ -647,7 +659,7 @@ function addBus(scene) {
 }
 
 export function createTransportNetwork(scene, terrainHeight) {
-  const roadCurve = createPlanarCurve(ROAD_ROUTE_XZ, false);
+  const roadCurve = createPlanarCurve(BUS_ROUTE_XZ, false);
   const railCurve = createPlanarCurve(RAIL_ROUTE_XZ, true);
   const asphalt = new THREE.MeshStandardMaterial({ color: 0x59615d, roughness: 0.94, metalness: 0.01 });
   const roadEdge = new THREE.MeshStandardMaterial({ color: 0xd2c7a2, roughness: 0.88 });
@@ -657,18 +669,61 @@ export function createTransportNetwork(scene, terrainHeight) {
   const railMaterial = new THREE.MeshStandardMaterial({ color: 0xb6b5a4, roughness: 0.3, metalness: 0.72 });
   const walkwayMaterial = new THREE.MeshStandardMaterial({ color: 0xc6bd9e, roughness: 0.96 });
 
-  const road = new THREE.Mesh(createRibbonGeometry(roadCurve, terrainHeight, 360, ROAD_HALF_WIDTH, ROAD_SURFACE_OFFSET), asphalt);
+  const roadPathCurves = ROAD_NETWORK_LAYOUT.map((layout, index) => ({
+    ...layout,
+    curve: index === 0 ? roadCurve : createPlanarCurve(layout.points, false),
+  }));
+  const roadGeometryParts = [];
+  const roadEdgeGeometryParts = [];
+  const roadMarkingGeometryParts = [];
+  const roadSegments = [];
+  const roadMapLines = [];
+  for (const roadPath of roadPathCurves) {
+    const segmentCount = Math.max(24, Math.ceil(roadPath.curve.getLength() * 1.5));
+    roadGeometryParts.push(createRibbonGeometry(
+      roadPath.curve,
+      terrainHeight,
+      segmentCount,
+      roadPath.halfWidth,
+      ROAD_SURFACE_OFFSET,
+    ));
+    for (const side of [-1, 1]) {
+      roadEdgeGeometryParts.push(createRibbonGeometry(
+        roadPath.curve,
+        terrainHeight,
+        segmentCount,
+        0.055,
+        ROAD_SURFACE_OFFSET + 0.012,
+        side * (roadPath.halfWidth - 0.14),
+      ));
+    }
+    if (roadPath.centerline) {
+      roadMarkingGeometryParts.push(createDashedLineGeometry(roadPath.curve, terrainHeight));
+    }
+    roadSegments.push(...createSurfaceSegments(
+      roadPath.curve,
+      terrainHeight,
+      segmentCount,
+      roadPath.halfWidth,
+      ROAD_SURFACE_OFFSET,
+    ));
+    const mapSampleCount = Math.max(2, Math.ceil(roadPath.curve.getLength() / 2.4) + 1);
+    roadMapLines.push(Array.from({ length: mapSampleCount }, (_, index) => {
+      const point = roadPath.curve.getPointAt(index / (mapSampleCount - 1));
+      return [point.x, point.z];
+    }));
+  }
+
+  const road = new THREE.Mesh(mergeGeometries(roadGeometryParts, false), asphalt);
+  road.geometry.computeBoundingSphere();
   road.receiveShadow = true;
   scene.add(road);
-  for (const side of [-1, 1]) {
-    const edge = new THREE.Mesh(
-      createRibbonGeometry(roadCurve, terrainHeight, 360, 0.055, ROAD_SURFACE_OFFSET + 0.012, side * (ROAD_HALF_WIDTH - 0.14)),
-      roadEdge,
-    );
-    edge.receiveShadow = true;
-    scene.add(edge);
-  }
-  const dashedCenterline = new THREE.Mesh(createDashedLineGeometry(roadCurve, terrainHeight), centerPaint);
+  const roadEdges = new THREE.Mesh(mergeGeometries(roadEdgeGeometryParts, false), roadEdge);
+  roadEdges.geometry.computeBoundingSphere();
+  roadEdges.receiveShadow = true;
+  scene.add(roadEdges);
+  const dashedCenterline = new THREE.Mesh(mergeGeometries(roadMarkingGeometryParts, false), centerPaint);
+  dashedCenterline.geometry.computeBoundingSphere();
   dashedCenterline.receiveShadow = false;
   scene.add(dashedCenterline);
 
@@ -700,10 +755,9 @@ export function createTransportNetwork(scene, terrainHeight) {
     scene.add(rail);
   }
 
-  const roadSegments = createSurfaceSegments(roadCurve, terrainHeight, 360, ROAD_HALF_WIDTH, ROAD_SURFACE_OFFSET);
   const railSegments = createSurfaceSegments(railCurve, terrainHeight, 520, TRACK_HALF_WIDTH, 0.16);
-  const roadMapPoints = Array.from({ length: 120 }, (_, index) => {
-    const point = roadCurve.getPointAt(index / 119);
+  const roadMapPoints = Array.from({ length: 160 }, (_, index) => {
+    const point = roadCurve.getPointAt(index / 159);
     return [point.x, point.z];
   });
   const railMapPoints = Array.from({ length: 240 }, (_, index) => {
@@ -784,8 +838,9 @@ export function createTransportNetwork(scene, terrainHeight) {
     roadCurve,
     railCurve,
     terrainHeight,
-    roadPoints: ROAD_ROUTE_XZ,
+    roadPoints: BUS_ROUTE_XZ,
     roadMapPoints,
+    roadMapLines,
     railMapPoints,
     busMapPoints: roadMapPoints,
     roadSegments,

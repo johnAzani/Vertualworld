@@ -3247,10 +3247,12 @@ function drawMapCanvas(targetCanvas, ctx) {
   if (transitNetwork) {
     ctx.save();
     ctx.beginPath();
-    transitNetwork.roadMapPoints.forEach(([x, z], index) => {
-      if (index === 0) ctx.moveTo(mapX(x), mapY(z));
-      else ctx.lineTo(mapX(x), mapY(z));
-    });
+    for (const roadLine of transitNetwork.roadMapLines) {
+      roadLine.forEach(([x, z], index) => {
+        if (index === 0) ctx.moveTo(mapX(x), mapY(z));
+        else ctx.lineTo(mapX(x), mapY(z));
+      });
+    }
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(244, 238, 216, .92)';

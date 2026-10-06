@@ -78,7 +78,7 @@
 
         <aside class="map-card" aria-label="Island map">
           <div class="map-art-wrap">
-            <canvas id="map-canvas" width="176" height="176" role="img" aria-label="Map showing your position, the paved road, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, the stadium, glow seeds, and beacon">Map showing your position, the paved road, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, the stadium, glow seeds, and beacon.</canvas>
+            <canvas id="map-canvas" width="176" height="176" role="img" aria-label="Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, the stadium, glow seeds, and beacon">Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, the stadium, glow seeds, and beacon.</canvas>
             <span class="map-north">N</span>
           </div>
           <div class="map-copy">
@@ -226,14 +226,14 @@
 
               <section class="phone-page" data-phone-page="map" aria-label="Island map" hidden>
                 <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
-                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map showing your position, the paved road, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon">Map showing your position, the paved road, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon.</canvas></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon">Map showing your position, the connected street grid and bus route, rail and bus terminals at Meadow Court, Beacon Circle, and Meadow Park, homes, stadium, glow seeds, and beacon.</canvas></div>
                 <div class="phone-map-details">
                   <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Meadow Rise</strong></div>
                   <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
                 </div>
-                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road</span><span><i class="legend-rail"></i>Island Line</span><span><i class="legend-bus"></i>Bus terminal</span></div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Island Line</span><span><i class="legend-bus"></i>Bus terminal</span></div>
                 <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
-                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">Gold circles mark rail terminals; orange squares mark bus terminals. Both services connect Meadow Court, Beacon Circle, and Meadow Park.</p>
+                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">The map shows the connected street grid and bus route. Gold circles mark rail terminals; orange squares mark bus terminals at all three hubs.</p>
               </section>
 
               <section class="phone-page" data-phone-page="messages" aria-label="Messages with Nia" hidden>
