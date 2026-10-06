@@ -1276,7 +1276,8 @@ function createParkedCar(x, z, heading) {
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8069, roughness: 0.58, metalness: 0.08 });
   const bodyShadowMaterial = new THREE.MeshStandardMaterial({ color: 0x345a4b, roughness: 0.72, metalness: 0.06 });
   const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xe2d5b7, roughness: 0.72 });
-  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x8fc2bd, roughness: 0.2, metalness: 0.08, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x9acdc6, roughness: 0.24, metalness: 0.04, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
+  const windshieldMaterial = new THREE.MeshStandardMaterial({ color: 0xb1d8d0, roughness: 0.16, metalness: 0.02, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
   const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x293330, roughness: 0.9 });
   const hubMaterial = new THREE.MeshStandardMaterial({ color: 0xd1be8b, roughness: 0.42, metalness: 0.42 });
   const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xe8dfca, roughness: 0.5, metalness: 0.2 });
@@ -1304,7 +1305,7 @@ function createParkedCar(x, z, heading) {
   addCarMesh(new THREE.BoxGeometry(1.78, 0.28, 0.72), bodyMaterial, [0, 0.81, 1.22]);
   addCarMesh(new THREE.BoxGeometry(1.48, 0.63, 1.8), bodyMaterial, [0, 1.17, 0.04]);
   addCarMesh(new THREE.BoxGeometry(1.43, 0.12, 1.35), roofMaterial, [0, 1.54, 0.06]);
-  addCarMesh(new THREE.BoxGeometry(1.31, 0.42, 0.045), glassMaterial, [0, 1.23, -0.91], [-0.32, 0, 0]);
+  addCarMesh(new THREE.BoxGeometry(1.31, 0.42, 0.045), windshieldMaterial, [0, 1.23, -0.91], [-0.32, 0, 0]);
   addCarMesh(new THREE.BoxGeometry(1.26, 0.4, 0.045), glassMaterial, [0, 1.21, 0.98], [0.32, 0, 0]);
 
   for (const side of [-1, 1]) {
@@ -1886,6 +1887,8 @@ function toggleCameraMode() {
   viewToggleButton.title = `Switch to ${nextMode} view (V)`;
   if (isFirstPerson) {
     showToast(isDriving ? 'Driver view · looking through the windscreen.' : 'First-person view · drag to look up, down, and around.', 2600);
+  } else if (isDriving) {
+    showToast('Follow view · the camera stays behind your car as you turn.', 2600);
   } else showToast('Third-person view · drag to orbit around you.', 2200);
 }
 
@@ -2139,7 +2142,7 @@ function resolveWorldObstacleCollisions() {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
-  if (pointerDragging || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if (pointerDragging || (event.pointerType === 'mouse' && event.button !== 0) || (isDriving && !isFirstPerson)) return;
   pointerDragging = true;
   activeCameraPointer = event.pointerId;
   canvas.classList.add('is-dragging');
@@ -2153,8 +2156,9 @@ canvas.addEventListener('pointermove', (event) => {
   const deltaY = event.clientY - previousPointerY;
   previousPointerX = event.clientX;
   previousPointerY = event.clientY;
-  if (isFirstPerson && isDriving) drivingViewYawOffset -= deltaX * 0.0065;
-  else cameraYaw -= deltaX * 0.0065;
+  if (isDriving) {
+    if (isFirstPerson) drivingViewYawOffset -= deltaX * 0.0065;
+  } else cameraYaw -= deltaX * 0.0065;
   if (isFirstPerson) cameraPitch = clamp(cameraPitch - deltaY * 0.004, -0.7, 0.58);
 });
 function releasePointer(event) {
@@ -2454,7 +2458,7 @@ function updateVehicleMovement(delta, forwardInput, steeringInput) {
   const turnDelta = -clamp(steeringInput, -1, 1) * 1.05 * speedFactor * directionSign * delta;
   playerCar.group.rotation.y += turnDelta;
   playerCar.steering = -clamp(steeringInput, -1, 1) * directionSign * 0.42;
-  if (!pointerDragging) cameraYaw += turnDelta;
+  cameraYaw = playerCar.group.rotation.y;
 
   const forwardX = -Math.sin(playerCar.group.rotation.y);
   const forwardZ = -Math.cos(playerCar.group.rotation.y);

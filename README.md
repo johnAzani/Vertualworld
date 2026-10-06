@@ -15,7 +15,7 @@ Open the local URL Vite prints. Build a production bundle with `npm run build`.
 
 - **W / A / S / D** or **arrow keys** to walk
 - **Shift** to run, **Space** to jump
-- **Drag** on the world to look around; press **V** or tap the eye button to switch between third-person and first-person. In first-person, drag up/down to look vertically
+- **Drag** on the world to look around; press **V** or tap the eye button to switch between third-person and first-person. In first-person, drag up/down to look vertically; while driving, first-person looks through the windscreen and third-person follows behind the car as it turns
 - House walls, tree trunks, and rocks are solid, with collisions that let you slide along them; jumps have a short input buffer, forgiving coyote time, and lighter air steering
 - House 01 has an enterable, furnished interior with a living room, kitchen, and bedroom
 - Visit **Meadow Court**, the four-home estate east of the trail. At your front door, press **E** or tap the home prompt to enter; use **E** or the prompt by the inside doorway to head back outside, and press **L** or tap the light control to toggle the lamps while indoors
