@@ -1,5 +1,16 @@
 import * as THREE from 'three';
 import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
+import {
+  createTransportNetwork,
+  getNearestTransitStation,
+  getNextTransitStation,
+  getTransportSurfaceHeight,
+  getTransitWaitSeconds,
+  isReservedTransportSpot,
+  isTrainAtStation,
+  updateTransitLighting,
+  updateTransportNetwork,
+} from './transport.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -23,6 +34,7 @@ const homeLightsAction = document.querySelector('#home-lights-action');
 const controlsHint = document.querySelector('#controls-hint');
 const walkingControlsHint = document.querySelector('#walking-controls');
 const vehicleControlsHint = document.querySelector('#vehicle-controls');
+const transitControlsHint = document.querySelector('#transit-controls');
 const jumpButtonLabel = document.querySelector('#jump-button-label');
 const jumpButtonIcon = document.querySelector('#jump-button-icon');
 const touchLabel = document.querySelector('#touch-label');
@@ -189,7 +201,11 @@ const estateRoadSurfaces = [];
 const exteriorNightLights = [];
 const worldObstacleColliders = [];
 let playerCar = null;
+let transitNetwork = null;
 let isDriving = false;
+let isRidingTransit = false;
+let transitStopRequested = false;
+let transitBoardedStationId = null;
 let vehicleInteractionCooldown = 0;
 let vehicleAccelerateTapTimer = 0;
 const vehicleTouchInput = { accelerate: false, brake: false };
@@ -220,6 +236,7 @@ function isReservedSpot(x, z, extra = 0) {
   if (isInsideEstate(x, z, extra)) return true;
   if (Math.abs(x - STADIUM.x) < STADIUM.standHalfX + 2 + extra
     && Math.abs(z - STADIUM.z) < STADIUM.standHalfZ + 2 + extra) return true;
+  if (transitNetwork && isReservedTransportSpot(transitNetwork, x, z, extra)) return true;
   return SEED_POSITIONS.some((point) => Math.hypot(x - point.x, z - point.y) < 5.5 + extra);
 }
 
@@ -367,6 +384,7 @@ function updateDaylight() {
   for (const floodlight of stadium.floodlights) floodlight.intensity = THREE.MathUtils.lerp(0, 210, night);
   stadium.floodlightMaterial.emissiveIntensity = THREE.MathUtils.lerp(0.08, 1.55, night);
   for (const material of stadium.pitchsideMaterials) material.emissiveIntensity = THREE.MathUtils.lerp(0.16, 0.9, night);
+  updateTransitLighting(transitNetwork, night);
 }
 
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
@@ -454,6 +472,8 @@ function groundHeightAt(x, z) {
       ground = Math.max(ground, surface.top);
     }
   }
+  const transportSurface = getTransportSurfaceHeight(transitNetwork, x, z);
+  if (transportSurface !== null) ground = Math.max(ground, transportSurface);
 
   if (homeHouse && !isInsideHome) {
     const local = homeWorldToLocal(x, z);
@@ -1431,6 +1451,8 @@ addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
 playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
 const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
+transitNetwork = createTransportNetwork(scene, terrainHeight);
+worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 3.25, height: 2.55 });
 
 const treeLocations = [];
 const treeWood = new THREE.MeshStandardMaterial({ color: 0x805940, roughness: 1, flatShading: true });
@@ -1896,10 +1918,10 @@ let previousPhoneFocus = null;
 let phoneNoteSaveTimer = 0;
 
 function toggleCameraMode() {
-  if (isWatchingMatch) return;
+  if (isWatchingMatch || isRidingTransit) return;
   isFirstPerson = !isFirstPerson;
-  avatarModel.visible = !isFirstPerson && !isDriving;
-  playerShadow.visible = !isFirstPerson && !isDriving;
+  avatarModel.visible = !isFirstPerson && !isDriving && !isRidingTransit;
+  playerShadow.visible = !isFirstPerson && !isDriving && !isRidingTransit;
   camera.fov = isFirstPerson ? 68 : 49;
   camera.updateProjectionMatrix();
   viewToggleButton.classList.toggle('is-active', isFirstPerson);
@@ -1915,17 +1937,20 @@ function toggleCameraMode() {
 }
 
 function updateVehicleControlUi() {
-  walkingControlsHint.hidden = isDriving;
+  walkingControlsHint.hidden = isDriving || isRidingTransit;
   vehicleControlsHint.hidden = !isDriving;
-  controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : 'Keyboard controls');
-  jumpButtonLabel.textContent = isDriving ? 'BRAKE' : 'JUMP';
+  transitControlsHint.hidden = !isRidingTransit;
+  controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : isRidingTransit ? 'Island Line controls' : 'Keyboard controls');
+  viewToggleButton.disabled = isRidingTransit || isWatchingMatch;
+  jumpButtonLabel.textContent = isDriving ? 'BRAKE' : isRidingTransit ? 'ON BOARD' : 'JUMP';
   jumpButtonIcon.textContent = isDriving ? '■' : '↑';
-  jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : 'Jump');
+  jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : isRidingTransit ? 'On the Island Line tram' : 'Jump');
   accelerateButton.hidden = !isDriving;
+  app.classList.toggle('is-riding-transit', isRidingTransit);
   setAttributeIfChanged(joystick, 'aria-label', isDriving
     ? 'Steering joystick. Drag left or right to steer the car.'
     : 'Movement joystick. Drag to move; keyboard movement is also available.');
-  touchLabel.textContent = isDriving ? 'STEER' : 'MOVE';
+  touchLabel.textContent = isDriving ? 'STEER' : isRidingTransit ? 'TRANSIT' : 'MOVE';
 }
 
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
@@ -2421,7 +2446,82 @@ function beginHomeTransition(destination) {
   }, transitionDuration);
 }
 
+function boardIslandLine(station) {
+  if (!transitNetwork || !station || isDriving || isRidingTransit || !isTrainAtStation(transitNetwork, station)) return false;
+  isRidingTransit = true;
+  transitStopRequested = false;
+  transitBoardedStationId = station.id;
+  const train = transitNetwork.train.group;
+  player.position.set(train.position.x, train.position.y + 0.55, train.position.z);
+  player.rotation.y = train.rotation.y;
+  cameraYaw = isFirstPerson ? -train.rotation.y : train.rotation.y;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  isGrounded = true;
+  avatarModel.visible = false;
+  playerShadow.visible = false;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  showToast(`Boarded at ${station.name}. Press E at any time to request the next stop.`, 3600);
+  return true;
+}
+
+function leaveIslandLine(station) {
+  if (!isRidingTransit || !station) return;
+  isRidingTransit = false;
+  transitStopRequested = false;
+  transitBoardedStationId = null;
+  player.position.set(station.x, groundHeightAt(station.x, station.z), station.z);
+  player.rotation.y = station.yaw;
+  cameraYaw = station.yaw;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  isGrounded = true;
+  avatarModel.visible = !isFirstPerson;
+  playerShadow.visible = !isFirstPerson;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  showToast(`Arrived at ${station.name}. Step off and explore.`, 3000);
+}
+
+function requestIslandLineStop() {
+  if (!isRidingTransit || !transitNetwork) return;
+  const currentStation = transitNetwork.stations[transitNetwork.currentStationIndex];
+  if (transitNetwork.dwellRemaining > 0.05 && currentStation?.id !== transitBoardedStationId) {
+    leaveIslandLine(currentStation);
+    return;
+  }
+  if (transitStopRequested) {
+    showToast(`Stop requested · next station: ${getNextTransitStation(transitNetwork).name}.`, 2500);
+    return;
+  }
+  transitStopRequested = true;
+  showToast(`Stop requested · ${getNextTransitStation(transitNetwork).name} is next.`, 2800);
+  updateLocationAndMap();
+}
+
+function getNearbyTransitStation() {
+  return getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6)?.station ?? null;
+}
+
 function getNearbyInteractionTarget() {
+  if (isRidingTransit) return 'request-train-stop';
   if (isDriving) return 'exit-car';
 
   if (isInsideHome) {
@@ -2430,17 +2530,20 @@ function getNearbyInteractionTarget() {
     return Math.hypot(local.x, local.z + 3.35) <= 2.1 ? 'exit-home' : null;
   }
 
-  const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
-  if (stadiumDistance <= 21) return 'watch-match';
-  if (!homeHouse) return null;
-
-  const homeDistance = Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ);
+  const homeDistance = homeHouse
+    ? Math.hypot(player.position.x - homeHouse.doorX, player.position.z - homeHouse.doorZ)
+    : Infinity;
   const carDistance = playerCar
     ? Math.hypot(player.position.x - playerCar.group.position.x, player.position.z - playerCar.group.position.z)
     : Infinity;
   if (homeDistance <= HOME_INTERACTION_PRIORITY_RADIUS) return 'enter-home';
   if (vehicleInteractionCooldown <= 0 && carDistance <= CAR_INTERACTION_RADIUS) return 'enter-car';
   if (homeDistance <= 4.2) return 'enter-home';
+
+  const station = getNearbyTransitStation();
+  if (station) return isTrainAtStation(transitNetwork, station) ? 'board-train' : 'wait-train';
+  const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
+  if (stadiumDistance <= 21) return 'watch-match';
   return null;
 }
 
@@ -2515,6 +2618,21 @@ function handleNearbyInteraction() {
   const target = getNearbyInteractionTarget();
   if (target === 'watch-match') {
     enterMatchView();
+    return true;
+  }
+  if (target === 'request-train-stop') {
+    requestIslandLineStop();
+    return true;
+  }
+  if (target === 'board-train') {
+    const station = getNearbyTransitStation();
+    if (!boardIslandLine(station)) showToast('The Island Line is pulling out. Wait for its next stop.');
+    return true;
+  }
+  if (target === 'wait-train') {
+    const station = getNearbyTransitStation();
+    const waitSeconds = getTransitWaitSeconds(transitNetwork, station);
+    showToast(`${station.name} · next tram in about ${waitSeconds} seconds.`, 3200);
     return true;
   }
   if (target === 'enter-car') {
@@ -2950,10 +3068,11 @@ function updateLocationAndMap() {
   const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
   const hasStadiumPrompt = interactionTarget === 'watch-match';
-  homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match'].includes(interactionTarget);
+  const hasTransitPrompt = ['board-train', 'wait-train', 'request-train-stop'].includes(interactionTarget);
+  homeInteraction.hidden = isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt) || isPhoneOpen();
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'request-train-stop'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Island Line station controls' : hasStadiumPrompt ? 'Stadium match controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -2976,6 +3095,28 @@ function updateLocationAndMap() {
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isInsideHome ? 'LEAVE HOME' : 'ENTER HOME');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', isInsideHome ? 'Leave your Meadow Court home' : 'Enter your Meadow Court home');
+  } else if (hasTransitPrompt && interactionTarget === 'request-train-stop') {
+    const nextStation = getNextTransitStation(transitNetwork);
+    setTextIfChanged(homeInteractionEyebrow, 'ISLAND LINE · ON BOARD');
+    setTextIfChanged(homeInteractionMessage, transitStopRequested
+      ? `Stop requested · ${nextStation.name} is next`
+      : `Next station · ${nextStation.name}`);
+    setTextIfChanged(homeInteractionAction, transitStopRequested ? 'STOP REQUESTED' : 'REQUEST STOP');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', transitStopRequested
+      ? `Stop requested at ${nextStation.name}`
+      : `Request a stop at ${nextStation.name}`);
+  } else if (hasTransitPrompt) {
+    const station = getNearbyTransitStation();
+    const trainWaiting = isTrainAtStation(transitNetwork, station);
+    const waitSeconds = getTransitWaitSeconds(transitNetwork, station);
+    setTextIfChanged(homeInteractionEyebrow, `${station.name.toUpperCase()} · ISLAND LINE`);
+    setTextIfChanged(homeInteractionMessage, trainWaiting
+      ? 'The Island Line is ready to board'
+      : `Next tram in about ${waitSeconds} seconds`);
+    setTextIfChanged(homeInteractionAction, trainWaiting ? 'BOARD TRAIN' : 'WAIT');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', trainWaiting
+      ? `Board the Island Line at ${station.name}`
+      : `Wait for the Island Line at ${station.name}`);
   } else if (hasStadiumPrompt) {
     setTextIfChanged(homeInteractionEyebrow, 'MATCHDAY · MEADOW PARK');
     setTextIfChanged(homeInteractionMessage, 'Fern Foxes vs River Blues · LIVE');
@@ -3045,6 +3186,70 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.lineCap = 'round';
   ctx.stroke();
   ctx.restore();
+
+  if (transitNetwork) {
+    ctx.save();
+    ctx.beginPath();
+    transitNetwork.roadMapPoints.forEach(([x, z], index) => {
+      if (index === 0) ctx.moveTo(mapX(x), mapY(z));
+      else ctx.lineTo(mapX(x), mapY(z));
+    });
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(244, 238, 216, .92)';
+    ctx.lineWidth = Math.max(3, radius * 0.052);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(91, 100, 91, .86)';
+    ctx.lineWidth = Math.max(1.7, radius * 0.031);
+    ctx.stroke();
+
+    ctx.beginPath();
+    transitNetwork.railMapPoints.forEach(([x, z], index) => {
+      if (index === 0) ctx.moveTo(mapX(x), mapY(z));
+      else ctx.lineTo(mapX(x), mapY(z));
+    });
+    ctx.closePath();
+    ctx.setLineDash([Math.max(2, radius * 0.025), Math.max(1.5, radius * 0.018)]);
+    ctx.strokeStyle = 'rgba(250, 248, 229, .94)';
+    ctx.lineWidth = Math.max(2.4, radius * 0.035);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#557a73';
+    ctx.lineWidth = Math.max(1.1, radius * 0.016);
+    ctx.stroke();
+
+    const stationMapNames = {
+      'meadow-court': 'COURT',
+      'beacon-circle': 'BEACON',
+      'meadow-park': 'PARK',
+    };
+    for (const station of transitNetwork.stations) {
+      const stationX = mapX(station.x);
+      const stationY = mapY(station.z);
+      ctx.beginPath();
+      ctx.arc(stationX, stationY, Math.max(2.7, radius * 0.026), 0, Math.PI * 2);
+      ctx.fillStyle = '#f2d27f';
+      ctx.fill();
+      ctx.strokeStyle = '#fff9e9';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(stationX, stationY, Math.max(0.8, radius * 0.008), 0, Math.PI * 2);
+      ctx.fillStyle = '#315b4a';
+      ctx.fill();
+      const labelOffsetX = stationX < centerX ? 6 : -6;
+      const labelOffsetY = stationY < centerY ? -8 : 8;
+      ctx.font = `700 ${Math.max(5.5, radius * 0.062)}px sans-serif`;
+      ctx.textAlign = labelOffsetX > 0 ? 'left' : 'right';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(1.5, radius * 0.02);
+      ctx.strokeStyle = 'rgba(245, 246, 228, .94)';
+      ctx.strokeText(stationMapNames[station.id] || station.name, stationX + labelOffsetX, stationY + labelOffsetY);
+      ctx.fillStyle = '#315b4a';
+      ctx.fillText(stationMapNames[station.id] || station.name, stationX + labelOffsetX, stationY + labelOffsetY);
+    }
+    ctx.restore();
+  }
 
   const houseIconSize = Math.max(3.1, radius * 0.034);
   for (const house of estateHouses) {
@@ -3160,6 +3365,16 @@ function animate() {
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
   updateStadiumMatch(stadium, delta, prefersReducedMotion);
+  const transitUpdate = updateTransportNetwork(transitNetwork, delta);
+  if (isRidingTransit && transitStopRequested && transitUpdate.arrivedStation
+    && transitUpdate.arrivedStation.id !== transitBoardedStationId) {
+    leaveIslandLine(transitUpdate.arrivedStation);
+  }
+  if (isRidingTransit) {
+    const train = transitNetwork.train.group;
+    player.position.set(train.position.x, train.position.y + 0.55, train.position.z);
+    player.rotation.y = train.rotation.y;
+  }
   if (homeDoorPivot) {
     if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;
     else {
@@ -3182,7 +3397,10 @@ function animate() {
   if (pressedKeys.has('s') || pressedKeys.has('arrowdown')) forwardInput -= 1;
   if (pressedKeys.has('d') || pressedKeys.has('arrowright')) sideInput += 1;
   if (pressedKeys.has('a') || pressedKeys.has('arrowleft')) sideInput -= 1;
-  if (isDriving) {
+  if (isRidingTransit) {
+    forwardInput = 0;
+    sideInput = 0;
+  } else if (isDriving) {
     if (vehicleTouchInput.accelerate || vehicleAccelerateTapTimer > 0) forwardInput += 1;
     sideInput += joystickInput.x;
     forwardInput = clamp(forwardInput, -1, 1);
@@ -3206,7 +3424,9 @@ function animate() {
   const isRunning = !isDriving && pressedKeys.has('shift');
   const desiredDirection = new THREE.Vector3();
   let isMoving = false;
-  if (isDriving) {
+  if (isRidingTransit) {
+    isMoving = false;
+  } else if (isDriving) {
     updateVehicleMovement(delta, forwardInput, sideInput);
     isMoving = Math.abs(playerCar?.speed || 0) > 0.15;
   } else {
@@ -3225,7 +3445,7 @@ function animate() {
   }
 
   const planarDistance = Math.hypot(player.position.x, player.position.z);
-  if (planarDistance > 70) {
+  if (!isRidingTransit && planarDistance > 70) {
     const correction = 70 / planarDistance;
     player.position.x *= correction;
     player.position.z *= correction;
@@ -3243,13 +3463,22 @@ function animate() {
       }
     }
   }
-  resolveHouseCollisions();
-  resolveWorldObstacleCollisions();
+  if (!isRidingTransit) {
+    resolveHouseCollisions();
+    resolveWorldObstacleCollisions();
+  }
 
   const ground = isInsideHome && homeHouse
     ? homeHouse.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET
     : groundHeightAt(player.position.x, player.position.z);
-  if (isDriving) {
+  if (isRidingTransit) {
+    jumpHeight = 0;
+    jumpVelocity = 0;
+    jumpRequested = false;
+    jumpBufferTimer = 0;
+    coyoteTimer = 0;
+    isGrounded = true;
+  } else if (isDriving) {
     jumpHeight = 0;
     jumpVelocity = 0;
     jumpRequested = false;
@@ -3283,9 +3512,9 @@ function animate() {
       }
     }
   }
-  player.position.y = ground + jumpHeight;
+  if (!isRidingTransit) player.position.y = ground + jumpHeight;
 
-  if (!isDriving && hasMovementInput) {
+  if (!isDriving && !isRidingTransit && hasMovementInput) {
     const targetYaw = Math.atan2(-desiredDirection.x, -desiredDirection.z);
     const angleDelta = Math.atan2(Math.sin(targetYaw - player.rotation.y), Math.cos(targetYaw - player.rotation.y));
     player.rotation.y += angleDelta * (1 - Math.exp(-12 * delta));
@@ -3366,7 +3595,7 @@ function animate() {
       : new THREE.Vector3();
     const eyePosition = new THREE.Vector3(
       player.position.x + seatOffset.x,
-      player.position.y + (isDriving ? 1.31 : avatarModel.position.y + 1.73),
+      player.position.y + (isDriving ? 1.31 : isRidingTransit ? 1.2 : avatarModel.position.y + 1.73),
       player.position.z + seatOffset.z,
     );
     const pitchCos = Math.cos(cameraPitch);
