@@ -20,6 +20,7 @@ const vehicleControlsHint = document.querySelector('#vehicle-controls');
 const jumpButtonLabel = document.querySelector('#jump-button-label');
 const jumpButtonIcon = document.querySelector('#jump-button-icon');
 const touchLabel = document.querySelector('#touch-label');
+const accelerateButton = document.querySelector('#accelerate-button');
 const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
@@ -181,6 +182,8 @@ const worldObstacleColliders = [];
 let playerCar = null;
 let isDriving = false;
 let vehicleInteractionCooldown = 0;
+let vehicleAccelerateTapTimer = 0;
+const vehicleTouchInput = { accelerate: false, brake: false };
 const homeFurnitureColliders = [];
 const homeLightFixtures = [];
 const HOME_FLOOR_TOP = 0.38;
@@ -1844,6 +1847,7 @@ player.rotation.y = Math.PI - 0.28;
 
 let cameraYaw = 0;
 let cameraPitch = 0;
+let drivingViewYawOffset = 0;
 let isFirstPerson = false;
 let pointerDragging = false;
 let activeCameraPointer = null;
@@ -1880,8 +1884,9 @@ function toggleCameraMode() {
   const nextMode = isFirstPerson ? 'third-person' : 'first-person';
   viewToggleButton.setAttribute('aria-label', `Switch to ${nextMode} view`);
   viewToggleButton.title = `Switch to ${nextMode} view (V)`;
-  if (isFirstPerson) showToast('First-person view · drag to look up, down, and around.', 2400);
-  else showToast('Third-person view · drag to orbit around you.', 2200);
+  if (isFirstPerson) {
+    showToast(isDriving ? 'Driver view · looking through the windscreen.' : 'First-person view · drag to look up, down, and around.', 2600);
+  } else showToast('Third-person view · drag to orbit around you.', 2200);
 }
 
 function updateVehicleControlUi() {
@@ -1891,7 +1896,11 @@ function updateVehicleControlUi() {
   jumpButtonLabel.textContent = isDriving ? 'BRAKE' : 'JUMP';
   jumpButtonIcon.textContent = isDriving ? '■' : '↑';
   jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : 'Jump');
-  touchLabel.textContent = isDriving ? 'DRIVE / STEER' : 'MOVE';
+  accelerateButton.hidden = !isDriving;
+  setAttributeIfChanged(joystick, 'aria-label', isDriving
+    ? 'Steering joystick. Drag left or right to steer the car.'
+    : 'Movement joystick. Drag to move; keyboard movement is also available.');
+  touchLabel.textContent = isDriving ? 'STEER' : 'MOVE';
 }
 
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
@@ -1939,6 +1948,7 @@ window.addEventListener('keyup', (event) => pressedKeys.delete(event.key.toLower
 window.addEventListener('blur', () => {
   pressedKeys.clear();
   resetJoystick();
+  resetVehicleTouchInputs();
   releasePointer();
   jumpRequested = false;
   jumpBufferTimer = 0;
@@ -2143,7 +2153,8 @@ canvas.addEventListener('pointermove', (event) => {
   const deltaY = event.clientY - previousPointerY;
   previousPointerX = event.clientX;
   previousPointerY = event.clientY;
-  cameraYaw -= deltaX * 0.0065;
+  if (isFirstPerson && isDriving) drivingViewYawOffset -= deltaX * 0.0065;
+  else cameraYaw -= deltaX * 0.0065;
   if (isFirstPerson) cameraPitch = clamp(cameraPitch - deltaY * 0.004, -0.7, 0.58);
 });
 function releasePointer(event) {
@@ -2181,6 +2192,11 @@ function resetJoystick() {
   joystick.classList.remove('is-active');
   joystickStick.style.transform = 'translate(-50%, -50%)';
 }
+function resetVehicleTouchInputs() {
+  vehicleTouchInput.accelerate = false;
+  vehicleTouchInput.brake = false;
+  vehicleAccelerateTapTimer = 0;
+}
 joystick.addEventListener('pointerdown', (event) => {
   if (joystickPointer !== null) return;
   event.preventDefault();
@@ -2211,11 +2227,36 @@ const jumpButton = document.querySelector('#jump-button');
 jumpButton.addEventListener('pointerdown', (event) => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
+  if (isDriving) {
+    vehicleTouchInput.brake = true;
+    jumpButton.setPointerCapture?.(event.pointerId);
+    return;
+  }
   requestJump();
 });
-// detail === 0 covers keyboard and assistive-technology activation; pointer presses jump immediately above.
+for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  jumpButton.addEventListener(eventName, () => {
+    vehicleTouchInput.brake = false;
+  });
+}
+// detail === 0 covers keyboard and assistive-technology activation; pointer presses act while held above.
 jumpButton.addEventListener('click', (event) => {
   if (event.detail === 0) requestJump();
+});
+
+accelerateButton.addEventListener('pointerdown', (event) => {
+  if (!isDriving || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  event.preventDefault();
+  vehicleTouchInput.accelerate = true;
+  accelerateButton.setPointerCapture?.(event.pointerId);
+});
+for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  accelerateButton.addEventListener(eventName, () => {
+    vehicleTouchInput.accelerate = false;
+  });
+}
+accelerateButton.addEventListener('click', (event) => {
+  if (event.detail === 0 && isDriving) vehicleAccelerateTapTimer = 0.22;
 });
 
 function showToast(message, duration = 2600) {
@@ -2314,6 +2355,7 @@ function enterParkedCar() {
   player.rotation.y = playerCar.group.rotation.y;
   cameraYaw = playerCar.group.rotation.y;
   cameraPitch = 0;
+  drivingViewYawOffset = 0;
   velocity.set(0, 0, 0);
   jumpHeight = 0;
   jumpVelocity = 0;
@@ -2325,9 +2367,11 @@ function enterParkedCar() {
   playerShadow.visible = false;
   pressedKeys.clear();
   resetJoystick();
+  resetVehicleTouchInputs();
   updateVehicleControlUi();
   updateLocationAndMap();
-  showToast('You’re in your car · W/S drive, A/D steer, Space brake, E to hop out.', 3800);
+  const touchDriving = Boolean(navigator.maxTouchPoints);
+  showToast(touchDriving ? 'Driver view · joystick steers; use the nearby pedals to move and brake.' : 'Driver view · W/S drive, A/D steer, Space brake, E to exit.', 3800);
 }
 
 function exitParkedCar() {
@@ -2345,6 +2389,7 @@ function exitParkedCar() {
   player.rotation.y = playerCar.group.rotation.y;
   cameraYaw = playerCar.group.rotation.y;
   cameraPitch = 0;
+  drivingViewYawOffset = 0;
   velocity.set(0, 0, 0);
   jumpHeight = 0;
   jumpVelocity = 0;
@@ -2357,6 +2402,7 @@ function exitParkedCar() {
   playerShadow.visible = !isFirstPerson;
   pressedKeys.clear();
   resetJoystick();
+  resetVehicleTouchInputs();
   updateVehicleControlUi();
   updateLocationAndMap();
   showToast('You’re out of the car. Walk back up and press E to drive again.', 3000);
@@ -2387,7 +2433,7 @@ function handleNearbyInteraction() {
 function updateVehicleMovement(delta, forwardInput, steeringInput) {
   if (!playerCar || !isDriving) return;
   const throttle = clamp(forwardInput, -1, 1);
-  if (pressedKeys.has(' ')) {
+  if (pressedKeys.has(' ') || vehicleTouchInput.brake) {
     const braking = Math.min(Math.abs(playerCar.speed), 13 * delta);
     playerCar.speed -= Math.sign(playerCar.speed) * braking;
   } else if (Math.abs(throttle) > 0.08) {
@@ -2805,7 +2851,7 @@ function updateLocationAndMap() {
     const speed = Math.round(Math.abs(playerCar.speed) * 5);
     const touchDriving = Boolean(navigator.maxTouchPoints);
     const interactionMessage = isDriving
-      ? `Driving · ${speed} km/h · ${touchDriving ? 'joystick to drive and steer' : 'W/S drive, A/D steer'}`
+      ? `Driving · ${speed} km/h · ${touchDriving ? 'joystick steers; pedals drive and brake' : 'W/S drive, A/D steer'}`
       : 'Your car is parked just ahead';
     setTextIfChanged(homeInteractionMessage, interactionMessage);
     setTextIfChanged(homeInteractionAction, isDriving ? 'EXIT CAR' : 'ENTER CAR');
@@ -2975,6 +3021,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.05);
   elapsedWorldTime += delta;
   vehicleInteractionCooldown = Math.max(0, vehicleInteractionCooldown - delta);
+  vehicleAccelerateTapTimer = Math.max(0, vehicleAccelerateTapTimer - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
   if (homeDoorPivot) {
@@ -2999,14 +3046,22 @@ function animate() {
   if (pressedKeys.has('s') || pressedKeys.has('arrowdown')) forwardInput -= 1;
   if (pressedKeys.has('d') || pressedKeys.has('arrowright')) sideInput += 1;
   if (pressedKeys.has('a') || pressedKeys.has('arrowleft')) sideInput -= 1;
-  forwardInput -= joystickInput.y;
-  sideInput += joystickInput.x;
+  if (isDriving) {
+    if (vehicleTouchInput.accelerate || vehicleAccelerateTapTimer > 0) forwardInput += 1;
+    sideInput += joystickInput.x;
+    forwardInput = clamp(forwardInput, -1, 1);
+    sideInput = clamp(sideInput, -1, 1);
+  } else {
+    forwardInput -= joystickInput.y;
+    sideInput += joystickInput.x;
+    const movementMagnitude = Math.hypot(forwardInput, sideInput);
+    if (movementMagnitude > 1) {
+      forwardInput /= movementMagnitude;
+      sideInput /= movementMagnitude;
+    }
+  }
 
   const inputMagnitude = Math.hypot(forwardInput, sideInput);
-  if (inputMagnitude > 1) {
-    forwardInput /= inputMagnitude;
-    sideInput /= inputMagnitude;
-  }
   const hasMovementInput = inputMagnitude > 0.08;
   const isRunning = !isDriving && pressedKeys.has('shift');
   const desiredDirection = new THREE.Vector3();
@@ -3157,10 +3212,11 @@ function animate() {
       player.position.z + seatOffset.z,
     );
     const pitchCos = Math.cos(cameraPitch);
+    const viewYaw = isDriving && playerCar ? -playerCar.group.rotation.y + drivingViewYawOffset : cameraYaw;
     const viewDirection = new THREE.Vector3(
-      Math.sin(cameraYaw) * pitchCos,
+      Math.sin(viewYaw) * pitchCos,
       Math.sin(cameraPitch),
-      -Math.cos(cameraYaw) * pitchCos,
+      -Math.cos(viewYaw) * pitchCos,
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
     camera.lookAt(eyePosition.clone().addScaledVector(viewDirection, 18));

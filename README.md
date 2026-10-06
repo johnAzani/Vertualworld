@@ -19,7 +19,7 @@ Open the local URL Vite prints. Build a production bundle with `npm run build`.
 - House walls, tree trunks, and rocks are solid, with collisions that let you slide along them; jumps have a short input buffer, forgiving coyote time, and lighter air steering
 - House 01 has an enterable, furnished interior with a living room, kitchen, and bedroom
 - Visit **Meadow Court**, the four-home estate east of the trail. At your front door, press **E** or tap the home prompt to enter; use **E** or the prompt by the inside doorway to head back outside, and press **L** or tap the light control to toggle the lamps while indoors
-- A car is parked beside your front walk. Press **E** or tap the car prompt to enter; use **W/S** or the touch joystick to drive, **A/D** to steer, **Space** or the touch brake to slow down, and **E** to get out
+- A car is parked beside your front walk. Press **E** or tap the car prompt to enter; use **W/S** to drive, **A/D** or the touch joystick to steer, **Space** or the brake pedal to slow down, the accelerator pedal to move on touch screens, and **E** to get out
 - Open the in-world field phone with the phone button or **P**: check your live map, message Nia, track glow seeds, open the Meadow Court home app, and save a private field note on this device
 - On touch screens, use the joystick and jump button; tap the eye button in the top bar to change view
 - Find the three glowing seeds hidden around the island
