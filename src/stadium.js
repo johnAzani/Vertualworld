@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { computeWalkCyclePose } from './walk-cycle.js';
 
 export const STADIUM_CONFIG = Object.freeze({
   x: -32,
@@ -527,27 +528,39 @@ function createPlayer(teamIndex, index, formation, jerseyMaterials, shortsMateri
     forearms.push(elbow);
   }
 
-  const legs = [];
+  const legPivots = [];
+  const kneePivots = [];
   for (const side of [-1, 1]) {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * 0.105, 0.47, 0);
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.34, 0.14), sockMaterials[teamIndex]);
-    shin.position.y = -0.16;
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.105, 0.56, 0);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.22, 0.15), shortsMaterials[teamIndex]);
+    thigh.position.y = -0.105;
+    thigh.castShadow = true;
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -0.21;
+    hip.add(knee);
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.23, 0.13), sockMaterials[teamIndex]);
+    shin.position.y = -0.115;
     shin.castShadow = true;
-    pivot.add(shin);
+    knee.add(shin);
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.085, 0.22), shoeMaterial);
-    boot.position.set(0, -0.34, -0.035);
+    boot.position.set(0, -0.235, -0.035);
     boot.castShadow = true;
-    pivot.add(boot);
-    group.add(pivot);
-    legs.push(pivot);
+    knee.add(boot);
+    group.add(hip);
+    legPivots.push(hip);
+    kneePivots.push(knee);
   }
 
   return {
     group,
     arms,
     forearms,
-    legs,
+    legs: legPivots,
+    legPivots,
+    kneePivots,
     teamIndex,
     index,
     isKeeper,
@@ -1547,14 +1560,21 @@ export function updateStadiumMatch(stadium, delta, reducedMotion = false, crowdU
       player.runAmount += (distance > 0.18 ? 1 : 0) - player.runAmount;
       player.runAmount = THREE.MathUtils.clamp(player.runAmount, 0, 1);
       player.kickPulse = Math.max(0, player.kickPulse - delta);
-      const gait = reducedMotion ? 0 : Math.sin(stadium.elapsed * 10.5 + player.phase) * 0.52 * player.runAmount;
-      const armSwing = gait * 0.76;
-      player.legs[0].rotation.x = gait + (player.kickPulse > 0 ? -player.kickPulse * 1.8 : 0);
-      player.legs[1].rotation.x = -gait;
-      player.arms[0].rotation.x = -armSwing + (player.kickPulse > 0 ? 0.22 : 0);
-      player.arms[1].rotation.x = armSwing - (player.kickPulse > 0 ? 0.14 : 0);
-      player.forearms[0].rotation.x = -0.3 - armSwing * 0.18;
-      player.forearms[1].rotation.x = -0.3 + armSwing * 0.18;
+      const walkPose = computeWalkCyclePose({
+        phase: stadium.elapsed * 10.5 + player.phase,
+        strideAmount: reducedMotion ? 0 : player.runAmount,
+        isRunning: player === chaser,
+      });
+      player.legPivots[0].rotation.x = walkPose.leftLeg.hipPitch + (player.kickPulse > 0 ? player.kickPulse * 1.4 : 0);
+      player.legPivots[1].rotation.x = walkPose.rightLeg.hipPitch;
+      if (player.kneePivots) {
+        player.kneePivots[0].rotation.x = walkPose.leftLeg.kneePitch + (player.kickPulse > 0 ? -player.kickPulse * 0.45 : 0);
+        player.kneePivots[1].rotation.x = walkPose.rightLeg.kneePitch;
+      }
+      player.arms[0].rotation.x = walkPose.leftArmPitch + (player.kickPulse > 0 ? 0.22 : 0);
+      player.arms[1].rotation.x = walkPose.rightArmPitch - (player.kickPulse > 0 ? 0.14 : 0);
+      player.forearms[0].rotation.x = walkPose.leftElbowPitch;
+      player.forearms[1].rotation.x = walkPose.rightElbowPitch;
     }
   }
 

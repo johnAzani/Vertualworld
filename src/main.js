@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { resolveDiscAgainstOrientedBox } from './collision.js';
 import { getFrameTiming } from './frame-timing.js';
+import { computeSeatedPose, computeWalkCyclePose } from './walk-cycle.js';
 import { createAbujaLandscape } from './abuja-world.js';
 import {
   BILLBOARD_LAYOUT,
@@ -3199,9 +3200,11 @@ for (const side of [-1, 1]) {
   elbowPivots.push(elbow);
 }
 
-// Articulated legs include separate knees, calves, cuffs, and built-up trail shoes.
+// Articulated legs include separate knees, calves, cuffs, ankle pivots, and built-up trail shoes.
 const legPivots = [];
 const kneePivots = [];
+const footPivots = [];
+let walkCyclePhase = 0;
 for (const side of [-1, 1]) {
   const hip = new THREE.Group();
   hip.position.set(side * 0.117, 0.94, 0);
@@ -3217,18 +3220,22 @@ for (const side of [-1, 1]) {
   calf.rotation.z = side * 0.01;
   avatarMesh(new THREE.CylinderGeometry(0.068, 0.067, 0.065, 12), pantsShadeMaterial, 0, -0.39, 0.005, lowerLeg);
 
-  const sole = avatarMesh(new THREE.SphereGeometry(1, 16, 11), soleMaterial, 0, -0.546, -0.052, lowerLeg);
+  const ankle = new THREE.Group();
+  ankle.position.set(0, -0.42, 0.005);
+  lowerLeg.add(ankle);
+  const sole = avatarMesh(new THREE.SphereGeometry(1, 16, 11), soleMaterial, 0, -0.126, -0.057, ankle);
   sole.scale.set(0.105, 0.022, 0.177);
-  const shoe = avatarMesh(new THREE.SphereGeometry(1, 16, 12), shoeMaterial, 0, -0.511, -0.065, lowerLeg);
+  const shoe = avatarMesh(new THREE.SphereGeometry(1, 16, 12), shoeMaterial, 0, -0.091, -0.07, ankle);
   shoe.scale.set(0.099, 0.063, 0.16);
-  const tongue = avatarMesh(new THREE.SphereGeometry(1, 12, 9), shirtLightMaterial, 0, -0.462, -0.105, lowerLeg);
+  const tongue = avatarMesh(new THREE.SphereGeometry(1, 12, 9), shirtLightMaterial, 0, -0.042, -0.11, ankle);
   tongue.scale.set(0.035, 0.015, 0.064);
   for (let lace = 0; lace < 3; lace += 1) {
-    const laceZ = -0.105 - lace * 0.027;
-    avatarTube([[-0.026, -0.464, laceZ], [0, -0.459, laceZ - 0.006], [0.026, -0.464, laceZ]], 0.0035, zipperMaterial, lowerLeg, 6);
+    const laceZ = -0.11 - lace * 0.027;
+    avatarTube([[-0.026, -0.044, laceZ], [0, -0.039, laceZ - 0.006], [0.026, -0.044, laceZ]], 0.0035, zipperMaterial, ankle, 6);
   }
   legPivots.push(hip);
   kneePivots.push(lowerLeg);
+  footPivots.push(ankle);
 }
 
 const playerShadow = new THREE.Mesh(
@@ -7523,40 +7530,60 @@ function animate(timestamp) {
     player.rotation.y += angleDelta * (1 - Math.exp(-12 * delta));
   }
 
-  const gait = isMoving ? Math.sin(elapsedWorldTime * (isRunning ? 13.2 : 9.4)) : 0;
+  const planarSpeed = !isDriving && !isRidingTransit ? Math.hypot(velocity.x, velocity.z) : 0;
+  const referenceSpeed = isRunning ? 9.0 : 5.1;
+  const strideAmount = isMoving ? Math.min(1.15, planarSpeed / referenceSpeed) : 0;
+  if (isMoving) {
+    walkCyclePhase += delta * (isRunning ? 12.6 : 8.8) * Math.max(0.45, strideAmount);
+  }
+  const gait = isMoving ? Math.sin(walkCyclePhase) : 0;
   const idleSway = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.35);
   if (isWatchingMatch && seatedStadiumSeat) {
     player.position.set(seatedStadiumSeat.worldX, seatedStadiumSeat.worldY, seatedStadiumSeat.worldZ);
     player.rotation.y = seatedStadiumSeat.facingYaw;
     const goalCheer = stadium.goalFlash > 0 ? Math.sin(elapsedWorldTime * 11) * 0.45 + 0.55 : 0;
-    legPivots[0].rotation.x = -1.28;
-    legPivots[1].rotation.x = -1.28;
-    kneePivots[0].rotation.x = 1.24;
-    kneePivots[1].rotation.x = 1.24;
-    armPivots[0].rotation.x = goalCheer > 0 ? -2.1 - goalCheer * 0.35 : -0.42 + idleSway * 0.03;
-    armPivots[1].rotation.x = goalCheer > 0 ? -2.1 + goalCheer * 0.35 : -0.42 - idleSway * 0.03;
-    elbowPivots[0].rotation.x = -0.35;
-    elbowPivots[1].rotation.x = -0.35;
+    const seatedPose = computeSeatedPose({ goalCheer, idleSway });
+    legPivots[0].rotation.set(seatedPose.hipPitch, 0, 0);
+    legPivots[1].rotation.set(seatedPose.hipPitch, 0, 0);
+    kneePivots[0].rotation.x = seatedPose.kneePitch;
+    kneePivots[1].rotation.x = seatedPose.kneePitch;
+    footPivots[0].rotation.x = seatedPose.anklePitch;
+    footPivots[1].rotation.x = seatedPose.anklePitch;
+    armPivots[0].rotation.x = seatedPose.leftArmPitch;
+    armPivots[1].rotation.x = seatedPose.rightArmPitch;
+    elbowPivots[0].rotation.x = seatedPose.leftElbowPitch;
+    elbowPivots[1].rotation.x = seatedPose.rightElbowPitch;
+    pelvis.rotation.set(0, 0, 0);
     headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.7) * 0.08;
     headGroup.rotation.x = 0.06;
-    avatarModel.position.y = -0.26;
+    avatarModel.position.y = seatedPose.avatarOffsetY;
     backpack.rotation.z = 0;
     backpack.rotation.x = -0.04;
     playerShadow.material.opacity = 0.18;
   } else {
-    legPivots[0].rotation.x = gait * (isMoving ? 0.43 : 0);
-    legPivots[1].rotation.x = -gait * (isMoving ? 0.43 : 0);
-    kneePivots[0].rotation.x = isMoving ? Math.max(0, -gait) * 0.3 : 0;
-    kneePivots[1].rotation.x = isMoving ? Math.max(0, gait) * 0.3 : 0;
-    armPivots[0].rotation.x = -gait * (isMoving ? 0.34 : 0) + idleSway * 0.018;
-    armPivots[1].rotation.x = gait * (isMoving ? 0.34 : 0) - idleSway * 0.018;
-    elbowPivots[0].rotation.x = -0.12 + Math.max(0, gait) * (isMoving ? 0.16 : 0);
-    elbowPivots[1].rotation.x = -0.12 + Math.max(0, -gait) * (isMoving ? 0.16 : 0);
-    headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.52) * 0.035;
-    headGroup.rotation.x = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.83) * 0.014) + (isMoving ? -0.018 : 0);
-    avatarModel.position.y = (isMoving ? Math.abs(gait) * 0.034 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.7) * 0.012)) + jumpHeight * 0.035;
-    backpack.rotation.z = isMoving ? gait * 0.013 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.2) * 0.008);
-    backpack.rotation.x = isMoving ? Math.abs(gait) * 0.012 : -0.01;
+    const walkPose = computeWalkCyclePose({
+      phase: walkCyclePhase,
+      strideAmount,
+      isRunning,
+      idleSway,
+      jumpHeight,
+    });
+    legPivots[0].rotation.set(walkPose.leftLeg.hipPitch, walkPose.pelvisYaw * 0.45, walkPose.pelvisRoll * 0.35);
+    legPivots[1].rotation.set(walkPose.rightLeg.hipPitch, walkPose.pelvisYaw * 0.45, walkPose.pelvisRoll * 0.35);
+    kneePivots[0].rotation.x = walkPose.leftLeg.kneePitch;
+    kneePivots[1].rotation.x = walkPose.rightLeg.kneePitch;
+    footPivots[0].rotation.x = walkPose.leftLeg.anklePitch;
+    footPivots[1].rotation.x = walkPose.rightLeg.anklePitch;
+    armPivots[0].rotation.x = walkPose.leftArmPitch;
+    armPivots[1].rotation.x = walkPose.rightArmPitch;
+    elbowPivots[0].rotation.x = walkPose.leftElbowPitch;
+    elbowPivots[1].rotation.x = walkPose.rightElbowPitch;
+    pelvis.rotation.set(walkPose.torsoForwardLean * 0.4, walkPose.pelvisYaw, walkPose.pelvisRoll);
+    headGroup.rotation.y = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.52) * 0.035) - walkPose.pelvisYaw * 0.5;
+    headGroup.rotation.x = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.83) * 0.014) + walkPose.torsoForwardLean * 0.35;
+    avatarModel.position.y = (isMoving ? walkPose.verticalBob : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.7) * 0.012)) + jumpHeight * 0.035;
+    backpack.rotation.z = isMoving ? gait * 0.016 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.2) * 0.008);
+    backpack.rotation.x = isMoving ? -walkPose.torsoForwardLean * 0.5 + Math.abs(gait) * 0.012 : -0.01;
     playerShadow.material.opacity = 0.24 - Math.min(jumpHeight * 0.025, 0.12);
   }
   const blinkPhase = elapsedWorldTime % 4.6;
