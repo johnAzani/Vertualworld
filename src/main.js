@@ -125,6 +125,27 @@ import {
   saveBillboardState,
   updateBillboardCampaign,
 } from './billboards.js';
+import {
+  DAILY_STREAK_REWARDS,
+  calculateDailyOwnershipDividend,
+  claimDailyBonusChest,
+  claimDailyCheckIn,
+  claimDailyContract,
+  collectDailyGoldenSeed,
+  collectDailyOwnershipDividend,
+  getDailyCityEvent,
+  getDailyGoldenSeedSpot,
+  getDailyReturnActionCount,
+  getNextStreakDayIndex,
+  isDailyBonusChestReady,
+  isDailyCheckInAvailable,
+  isDailyDividendAvailable,
+  isDailyGoldenSeedCollected,
+  loadDailyReturnState,
+  recordDailyActivity,
+  saveDailyReturnState,
+  syncDailyReturnDay,
+} from './daily-return.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -227,6 +248,18 @@ const billboardsWalletBalanceElement = document.querySelector('#billboards-walle
 const billboardsProximityElement = document.querySelector('#billboards-proximity');
 const billboardsStudioSectionElement = document.querySelector('#billboards-studio-section');
 const billboardsDirectorySectionElement = document.querySelector('#billboards-directory-section');
+const dailyStreakButton = document.querySelector('#daily-streak-button');
+const dailyStreakCountElement = document.querySelector('#daily-streak-count');
+const dailyStreakDotElement = document.querySelector('#daily-streak-dot');
+const hudDailyEventTitleElement = document.querySelector('#hud-daily-event-title');
+const hudDailyStatusElement = document.querySelector('#hud-daily-status');
+const hudOpenDailyButton = document.querySelector('#hud-open-daily-button');
+const phoneDailyBadge = document.querySelector('#phone-daily-badge');
+const dailyWalletBalanceElement = document.querySelector('#daily-wallet-balance');
+const dailyStreakSectionElement = document.querySelector('#daily-streak-section');
+const dailyEventSectionElement = document.querySelector('#daily-event-section');
+const dailyContractsSectionElement = document.querySelector('#daily-contracts-section');
+const dailyDividendSectionElement = document.querySelector('#daily-dividend-section');
 const residentForm = document.querySelector('#resident-form');
 const residentNameInput = document.querySelector('#resident-name-input');
 const residentOriginInput = document.querySelector('#resident-origin-input');
@@ -257,6 +290,8 @@ saveGovernment(economyStorage, government);
 const billboards = loadBillboardState(economyStorage);
 saveBillboardState(billboards, economyStorage);
 let selectedBillboardId = BILLBOARD_LAYOUT[0].id;
+const dailyReturn = loadDailyReturnState(economyStorage);
+saveDailyReturnState(economyStorage, dailyReturn);
 const lifeStorage = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -2853,6 +2888,52 @@ for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   seeds.push({ index: i + 1, group: seedGroup, orb, hoop, halo, x: position.x, z: position.y, phase: random() * Math.PI * 2, collected: false });
 }
 
+// Rotating Daily Golden Seed landmark.
+const dailyGoldenSeedSpot = getDailyGoldenSeedSpot();
+const dailyGoldenSeedGroup = new THREE.Group();
+dailyGoldenSeedGroup.position.set(
+  dailyGoldenSeedSpot.x,
+  terrainHeight(dailyGoldenSeedSpot.x, dailyGoldenSeedSpot.z),
+  dailyGoldenSeedSpot.z,
+);
+const dailyGoldenOrbMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffe484,
+  roughness: 0.16,
+  metalness: 0.35,
+  emissive: 0xf4a623,
+  emissiveIntensity: 2.35,
+});
+const dailyGoldenOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 1), dailyGoldenOrbMaterial);
+dailyGoldenOrb.position.y = 1.32;
+dailyGoldenOrb.scale.set(0.88, 1.22, 0.88);
+dailyGoldenOrb.castShadow = true;
+dailyGoldenSeedGroup.add(dailyGoldenOrb);
+const dailyGoldenHoop = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.042, 8, 36), seedRingMaterial);
+dailyGoldenHoop.rotation.x = Math.PI / 2;
+dailyGoldenHoop.position.y = 1.28;
+dailyGoldenSeedGroup.add(dailyGoldenHoop);
+const dailyGoldenHalo = new THREE.Mesh(
+  new THREE.TorusGeometry(0.88, 0.024, 6, 36),
+  new THREE.MeshBasicMaterial({ color: 0xfff0b8, transparent: true, opacity: 0.72 }),
+);
+dailyGoldenHalo.rotation.x = Math.PI / 3;
+dailyGoldenHalo.position.y = 1.28;
+dailyGoldenSeedGroup.add(dailyGoldenHalo);
+const dailyGoldenLight = new THREE.PointLight(0xffca58, 2.1, 7.5, 2);
+dailyGoldenLight.position.y = 1.4;
+dailyGoldenSeedGroup.add(dailyGoldenLight);
+dailyGoldenSeedGroup.visible = !isDailyGoldenSeedCollected(dailyReturn);
+scene.add(dailyGoldenSeedGroup);
+const dailyGoldenSeed = {
+  spot: dailyGoldenSeedSpot,
+  group: dailyGoldenSeedGroup,
+  orb: dailyGoldenOrb,
+  hoop: dailyGoldenHoop,
+  halo: dailyGoldenHalo,
+  x: dailyGoldenSeedSpot.x,
+  z: dailyGoldenSeedSpot.z,
+};
+
 // A few slow sparks circle the beacon like fireflies. One dynamic batch avoids
 // a separate draw submission for every tiny particle.
 const motes = [];
@@ -3776,6 +3857,7 @@ function enterMatchView() {
   if (isWorldView) toggleWorldView();
   if (isWatchingMatch || isDriving || isInsideHome || homeTransitionPending) return;
   isWatchingMatch = true;
+  notifyDailyActivity('watch-match');
   if (life.profile.created && completeLifeGoal(life, 'watch-match')) {
     adjustLifeNeeds(life, { mood: 8, social: 5, energy: -2 });
     persistLife();
@@ -4329,6 +4411,10 @@ function updateWalletBalances() {
   setTextIfChanged(cafeWalletBalanceElement, balance);
   setTextIfChanged(marketWalletBalanceElement, balance);
   setTextIfChanged(billboardsWalletBalanceElement, balance);
+  if (dailyWalletBalanceElement) {
+    const shields = dailyReturn.streakShields || 0;
+    setTextIfChanged(dailyWalletBalanceElement, `${balance} · ${shields} ${shields === 1 ? 'Shield' : 'Shields'}`);
+  }
   setTextIfChanged(bankAccountIdElement, economy.accountId);
   setTextIfChanged(bankWalletBalanceElement, balance);
 }
@@ -4748,6 +4834,253 @@ function persistBillboards() {
   return saveBillboardState(billboards, economyStorage);
 }
 
+function persistDailyReturn() {
+  const ok = saveDailyReturnState(economyStorage, dailyReturn);
+  syncDailyPulseHud();
+  return ok;
+}
+
+function syncDailyPulseHud() {
+  syncDailyReturnDay(dailyReturn);
+  const event = getDailyCityEvent();
+  const actionCount = getDailyReturnActionCount(dailyReturn);
+  const completedContracts = dailyReturn.contracts.filter((c) => c.completed).length;
+  const streakDisplay = Math.max(1, dailyReturn.streakCount || 1);
+
+  if (dailyStreakCountElement) {
+    setTextIfChanged(dailyStreakCountElement, streakDisplay);
+  }
+  if (dailyStreakDotElement) {
+    dailyStreakDotElement.hidden = actionCount === 0;
+  }
+  if (phoneDailyBadge) {
+    phoneDailyBadge.hidden = actionCount === 0;
+  }
+  if (hudDailyEventTitleElement) {
+    setTextIfChanged(hudDailyEventTitleElement, `☀ ${event.title.toUpperCase()}`);
+  }
+  if (hudDailyStatusElement) {
+    const checkInReady = isDailyCheckInAvailable(dailyReturn);
+    const statusText = checkInReady
+      ? `Day ${getNextStreakDayIndex(dailyReturn)} check-in ready · ${completedContracts}/3 contracts`
+      : actionCount > 0
+        ? `${actionCount} daily ${actionCount === 1 ? 'reward' : 'rewards'} ready · ${completedContracts}/3 contracts`
+        : `Streak Day ${dailyReturn.streakCount} locked in · ${completedContracts}/3 contracts`;
+    setTextIfChanged(hudDailyStatusElement, statusText);
+  }
+  if (dailyGoldenSeed?.group) {
+    dailyGoldenSeed.group.visible = !isDailyGoldenSeedCollected(dailyReturn);
+  }
+  updatePhoneBadge();
+}
+
+function notifyDailyActivity(activityType, amount = 1) {
+  const newlyCompleted = recordDailyActivity(dailyReturn, activityType, amount);
+  if (newlyCompleted.length > 0) {
+    persistDailyReturn();
+    if (isPhoneOpen() && activePhonePage === 'daily') renderDailyPage();
+    return newlyCompleted;
+  }
+  syncDailyPulseHud();
+  return [];
+}
+
+function renderDailyPage() {
+  if (!dailyStreakSectionElement || !dailyEventSectionElement || !dailyContractsSectionElement || !dailyDividendSectionElement) {
+    return;
+  }
+  syncDailyReturnDay(dailyReturn);
+  updateWalletBalances();
+  syncDailyPulseHud();
+
+  const checkInReady = isDailyCheckInAvailable(dailyReturn);
+  const nextCycleDay = getNextStreakDayIndex(dailyReturn);
+  const currentCycleDay = dailyReturn.streakCount > 0 ? ((dailyReturn.streakCount - 1) % 7) + 1 : 0;
+  const cycleBonusPct = Math.min(50, (dailyReturn.completedCycles || 0) * 10);
+
+  const streakGridHtml = DAILY_STREAK_REWARDS.map((tier) => {
+    const isClaimed = !checkInReady
+      ? tier.day <= currentCycleDay
+      : tier.day < nextCycleDay;
+    const isNext = checkInReady && tier.day === nextCycleDay;
+    return `<div class="daily-streak-day ${isClaimed ? 'is-claimed' : ''} ${isNext ? 'is-next' : ''}">
+      <span>D${tier.day}</span>
+      <strong>${tier.credits}</strong>
+      <small>${isClaimed ? '✓' : 'GC'}</small>
+    </div>`;
+  }).join('');
+
+  const activeTier = DAILY_STREAK_REWARDS[nextCycleDay - 1] || DAILY_STREAK_REWARDS[0];
+  dailyStreakSectionElement.innerHTML = `<div class="mall-showcase-card">
+    <div class="rental-lease-heading">
+      <span>7-DAY RESIDENT STREAK · ${dailyReturn.streakCount || 0} ${dailyReturn.streakCount === 1 ? 'DAY' : 'DAYS'}</span>
+      <small>BEST ${dailyReturn.bestStreak || 0}D${cycleBonusPct > 0 ? ` · +${cycleBonusPct}% BONUS` : ''}</small>
+    </div>
+    <p>Return every day to advance your 7-day Abuja passport. Streak Shields (${dailyReturn.streakShields || 0}/3) automatically protect your streak if you miss a day.</p>
+    <div class="daily-streak-grid">${streakGridHtml}</div>
+    <div class="mall-space-meta" style="margin-top:7px;">
+      <span>Day ${activeTier.day}: ${escapeHtml(activeTier.title)}</span>
+      <strong>${escapeHtml(activeTier.itemLabel)}</strong>
+    </div>
+    <button class="rental-action-button" style="width:100%;margin-top:7px;" type="button" data-daily-action="claim-checkin" ${!checkInReady ? 'disabled' : ''}>
+      ${checkInReady
+        ? `CLAIM DAY ${nextCycleDay} CHECK-IN (${escapeHtml(activeTier.itemLabel.toUpperCase())})`
+        : `TODAY’S CHECK-IN LOCKED IN · COME BACK TOMORROW`}
+    </button>
+  </div>`;
+
+  const event = getDailyCityEvent();
+  const goldenSpot = getDailyGoldenSeedSpot();
+  const goldenCollected = isDailyGoldenSeedCollected(dailyReturn);
+  const goldenReward = Math.round(75 * (event.goldenSeedMultiplier || 1));
+
+  dailyEventSectionElement.innerHTML = `<div class="estate-roster-heading"><span>TODAY IN ABUJA · ROTATING SPOTLIGHT</span><strong>${escapeHtml(event.district.toUpperCase())}</strong></div>
+    <div class="daily-event-banner">
+      <span class="phone-card-label">ACTIVE CITY EVENT</span>
+      <strong>${escapeHtml(event.title)}</strong>
+      <p>${escapeHtml(event.description)}</p>
+      <div class="mall-space-meta" style="margin-top:6px;">
+        <span>Today’s Bonus</span>
+        <strong>${escapeHtml(event.perkLabel)}</strong>
+      </div>
+    </div>
+    <div class="mall-space-card ${goldenCollected ? 'is-rented' : ''}" style="margin-top:7px;">
+      <div class="mall-space-header">
+        <span class="mall-space-title">
+          <strong>✦ Daily Golden Seed · ${escapeHtml(goldenSpot.name)}</strong>
+          <small>${escapeHtml(goldenSpot.hint)}</small>
+        </span>
+        <span class="mall-size-badge ${goldenCollected ? 'mall-size-badge--medium' : 'mall-size-badge--small'}">
+          ${goldenCollected ? 'COLLECTED' : `+${goldenReward} GC`}
+        </span>
+      </div>
+    </div>`;
+
+  const completedCount = dailyReturn.contracts.filter((c) => c.completed).length;
+  const chestReady = isDailyBonusChestReady(dailyReturn);
+  const chestClaimed = dailyReturn.bonusChestClaimedDayKey === dailyReturn.currentDayKey;
+
+  dailyContractsSectionElement.innerHTML = `<div class="estate-roster-heading"><span>TODAY’S DAILY CONTRACTS</span><strong>${completedCount} / 3 DONE</strong></div>
+    <div class="daily-contract-list">
+      ${dailyReturn.contracts.map((contract) => {
+        const canClaim = contract.completed && !contract.claimed;
+        return `<div class="daily-contract-card ${contract.completed ? 'is-completed' : ''}">
+          <div class="daily-contract-top">
+            <strong>${escapeHtml(contract.title)}</strong>
+            <span class="daily-contract-reward">+${contract.rewardCredits} GC · +${contract.rewardXp} XP</span>
+          </div>
+          <p>${escapeHtml(contract.description)}</p>
+          <div class="mall-space-actions">
+            <button class="rental-action-button ${canClaim ? '' : 'rental-action-button--quiet'}" type="button" data-daily-contract="${escapeHtml(contract.id)}" ${!canClaim ? 'disabled' : ''}>
+              ${contract.claimed
+                ? 'REWARD CLAIMED ✓'
+                : canClaim
+                  ? `CLAIM REWARD (+${contract.rewardCredits} GC)`
+                  : `IN PROGRESS (${contract.progress}/${contract.target})`}
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="rental-action-button" style="width:100%;margin-top:7px;" type="button" data-daily-action="claim-chest" ${!chestReady ? 'disabled' : ''}>
+      ${chestClaimed
+        ? 'ABUJA PULSE CHEST CLAIMED TODAY ✓'
+        : chestReady
+          ? 'OPEN 3/3 ABUJA PULSE CHEST (+150 GC · +50 XP · +1 SHIELD)'
+          : `COMPLETE ALL 3 CONTRACTS FOR PULSE CHEST (${completedCount}/3)`}
+    </button>`;
+
+  const dividend = calculateDailyOwnershipDividend({ economy, billboards, government, life });
+  const dividendReady = isDailyDividendAvailable(dailyReturn);
+
+  dailyDividendSectionElement.innerHTML = `<div class="estate-roster-heading"><span>DAILY RESIDENT &amp; EMPIRE DIVIDEND</span><strong>+${formatCredits(dividend.total)} / DAY</strong></div>
+    <div class="mall-showcase-card">
+      <p>Your daily city dividend grows as you rent Unity Mall shops, lease Strategic Billboards, advance your career, or serve as Governor.</p>
+      <div class="daily-dividend-breakdown">
+        <div class="daily-dividend-row"><span>Abuja Resident Base</span><strong>+${formatCredits(dividend.baseResident)}</strong></div>
+        <div class="daily-dividend-row"><span>Unity Mall Shops (${dividend.mallShopCount} leased)</span><strong>+${formatCredits(dividend.mallDividend)}</strong></div>
+        <div class="daily-dividend-row"><span>Strategic Billboards (${dividend.billboardCount} leased)</span><strong>+${formatCredits(dividend.billboardDividend)}</strong></div>
+        <div class="daily-dividend-row"><span>Governor’s Office (${dividend.isGovernor ? 'In Office' : 'Not held'})</span><strong>+${formatCredits(dividend.governorDividend)}</strong></div>
+        <div class="daily-dividend-row"><span>Career Rank Bonus (Rank ${dividend.careerRank})</span><strong>+${formatCredits(dividend.careerDividend)}</strong></div>
+      </div>
+      <button class="rental-action-button" style="width:100%;margin-top:8px;" type="button" data-daily-action="claim-dividend" ${!dividendReady ? 'disabled' : ''}>
+        ${dividendReady
+          ? `COLLECT TODAY’S DIVIDEND (+${formatCredits(dividend.total)})`
+          : 'TODAY’S DIVIDEND COLLECTED · RETURNS TOMORROW'}
+      </button>
+    </div>`;
+}
+
+function handleDailyActionFromPhone(action) {
+  if (action === 'claim-checkin') {
+    const result = claimDailyCheckIn(dailyReturn, { economy, life, government });
+    if (!result.ok) {
+      showToast('You already locked in today’s check-in. Come back tomorrow to keep your streak growing!');
+      return;
+    }
+    persistEconomy();
+    persistLife();
+    persistGovernment();
+    persistDailyReturn();
+    renderDailyPage();
+    showToast(
+      `Day ${result.streakCount} Streak locked in! +${formatCredits(result.creditsAwarded)} · +${result.xpAwarded} XP (${result.rewardTier.title})!`,
+      4000,
+    );
+    return;
+  }
+  if (action === 'claim-chest') {
+    const result = claimDailyBonusChest(dailyReturn, { economy, life });
+    if (!result.ok) {
+      showToast(
+        result.reason === 'already-claimed'
+          ? 'You already opened today’s Abuja Pulse Chest.'
+          : 'Complete all 3 daily contracts first to unlock the Abuja Pulse Chest.',
+      );
+      return;
+    }
+    persistEconomy();
+    persistLife();
+    persistDailyReturn();
+    renderDailyPage();
+    showToast(
+      `Opened the 3/3 Daily Abuja Pulse Chest! +${formatCredits(result.creditsAwarded)} · +${result.xpAwarded} XP · +1 Streak Shield!`,
+      4200,
+    );
+    return;
+  }
+  if (action === 'claim-dividend') {
+    const result = collectDailyOwnershipDividend(dailyReturn, { economy, billboards, government, life });
+    if (!result.ok) {
+      showToast('Today’s Resident & Empire Dividend has already been collected.');
+      return;
+    }
+    persistEconomy();
+    persistDailyReturn();
+    renderDailyPage();
+    showToast(
+      `Collected +${formatCredits(result.creditsAwarded)} Daily Abuja Resident & Empire Dividend!`,
+      3800,
+    );
+  }
+}
+
+function claimDailyContractFromPhone(contractId) {
+  const result = claimDailyContract(dailyReturn, contractId, { economy, life });
+  if (!result.ok) {
+    showToast('Complete this daily contract first to claim its reward.');
+    return;
+  }
+  persistEconomy();
+  persistLife();
+  persistDailyReturn();
+  renderDailyPage();
+  showToast(
+    `Daily contract claimed: ${result.contract.title} (+${formatCredits(result.creditsAwarded)} · +${result.xpAwarded} XP)!`,
+    3600,
+  );
+}
+
 function handleMallActionFromPhone(action, spaceId) {
   selectedMallSpaceId = spaceId;
   if (action === 'collect-sales') {
@@ -4764,22 +5097,26 @@ function handleMallActionFromPhone(action, spaceId) {
     const policyMultiplier = activePolicy.mallSalesMultiplier || 1;
     const billboardBonuses = getBillboardBonuses(billboards);
     const adMultiplier = billboardBonuses.mallSalesBonusMultiplier || 1;
+    const dailyEvent = getDailyCityEvent();
+    const eventMultiplier = dailyEvent.mallPayoutMultiplier || 1;
     const policyBonus = policyMultiplier > 1 ? Math.round(result.payout * (policyMultiplier - 1)) : 0;
     const adBonus = adMultiplier > 1 ? Math.round(result.payout * (adMultiplier - 1)) : 0;
-    const totalBonus = policyBonus + adBonus;
+    const eventBonus = eventMultiplier > 1 ? Math.round(result.payout * (eventMultiplier - 1)) : 0;
+    const totalBonus = policyBonus + adBonus + eventBonus;
     if (totalBonus > 0) {
       earnGameCredits(
         economy,
-        `${result.lease.shopName} · Governor & Billboard promo bonus`,
+        `${result.lease.shopName} · Governor, Billboard & Daily Event bonus`,
         totalBonus,
         Date.now(),
       );
       result.lease.totalSales += totalBonus;
     }
+    notifyDailyActivity('business-collect');
     persistEconomy();
     renderCommercePage('market');
     showToast(
-      `Showcase sales collected · +${formatCredits(result.payout + totalBonus)} from ${result.lease.shopName}${totalBonus > 0 ? ` (includes +${formatCredits(totalBonus)} policy & billboard ad bonus)` : ''}!`,
+      `Showcase sales collected · +${formatCredits(result.payout + totalBonus)} from ${result.lease.shopName}${totalBonus > 0 ? ` (includes +${formatCredits(totalBonus)} bonus)` : ''}!`,
       3800,
     );
     return;
@@ -4945,22 +5282,26 @@ function handleGovernmentActionFromPhone(action) {
   }
   if (action === 'town-hall') {
     const result = holdCivicTownHall(government);
+    const dailyEvent = getDailyCityEvent();
+    const eventBonus = dailyEvent.townHallBonusCredits || 0;
+    const totalStipend = result.stipend + eventBonus;
     earnGameCredits(
       economy,
       `Unity Community Hall · ${government.isPlayerGovernor ? 'Governor' : 'Civic'} town-hall stipend`,
-      result.stipend,
+      totalStipend,
       Date.now(),
     );
     if (life.profile?.created) {
       adjustLifeNeeds(life, { mood: 6, social: 8 });
       persistLife();
     }
+    notifyDailyActivity('business-collect');
     persistEconomy();
     persistGovernment();
     syncCommunityHall3D();
     renderGovernmentPage();
     showToast(
-      `Town Hall resolved: ${result.petition.resolution} (+${formatCredits(result.treasuryAdded)} Treasury, +${formatCredits(result.stipend)} to your wallet)!`,
+      `Town Hall resolved: ${result.petition.resolution} (+${formatCredits(result.treasuryAdded)} Treasury, +${formatCredits(totalStipend)} to your wallet)!`,
       4200,
     );
     return;
@@ -5213,15 +5554,17 @@ function handleBillboardActionFromPhone(action, billboardId) {
   selectedBillboardId = billboardId;
   if (action === 'collect') {
     const activePolicy = getActiveGovernorPolicy(government);
+    const dailyEvent = getDailyCityEvent();
     const hasMallShop = Boolean(getPlayerFirstMallShop());
     const result = collectBillboardRevenue(billboards, economy, billboardId, {
       hasMallShop,
-      policyMultiplier: activePolicy.mallSalesMultiplier || 1,
+      policyMultiplier: (activePolicy.mallSalesMultiplier || 1) * (dailyEvent.billboardPayoutMultiplier || 1),
     });
     if (!result.ok) {
       showToast('Lease this billboard first to collect ad revenue.');
       return;
     }
+    notifyDailyActivity('business-collect');
     persistEconomy();
     persistBillboards();
     renderBillboardsPage();
@@ -5451,6 +5794,7 @@ function useFoodFromBag(productId) {
     renderLifePage();
     return;
   }
+  notifyDailyActivity('eat-food');
   persistEconomy();
   persistLife();
   renderLifePage();
@@ -5490,8 +5834,12 @@ function answerWorkShift(optionId) {
   persistLife();
   if (result.complete) {
     const activePolicy = getActiveGovernorPolicy(government);
-    const totalPay = Math.round(result.reward * (activePolicy.workPayMultiplier || 1));
+    const dailyEvent = getDailyCityEvent();
+    const hasEventBonus = dailyEvent.shiftBonusWorkplace === 'all' || dailyEvent.shiftBonusWorkplace === result.job.workplace;
+    const eventBonus = hasEventBonus ? (dailyEvent.shiftBonusCredits || 0) : 0;
+    const totalPay = Math.round(result.reward * (activePolicy.workPayMultiplier || 1)) + eventBonus;
     const creditResult = earnGameCredits(economy, `${result.job.workplaceName} · shift pay`, totalPay);
+    notifyDailyActivity('work-shift');
     if (creditResult.ok) {
       persistEconomy();
       updateWalletBalances();
@@ -5513,11 +5861,13 @@ function performLifeAction(action) {
       showToast('Walk to your home and press E to step inside before resting.');
       return;
     }
+    notifyDailyActivity('rest-home');
     persistLife();
     renderLifePage();
     showToast('A quiet rest at home restored some energy.');
   } else if (action === 'message-nia') {
     connectWithNeighbour(life);
+    notifyDailyActivity('connect-neighbour');
     persistLife();
     phoneUnread = false;
     updatePhoneBadge();
@@ -5534,6 +5884,7 @@ function performLifeAction(action) {
 
 const phonePageCopy = {
   home: { eyebrow: 'YOUR POCKET GUIDE', title: 'Abuja, your neighbourhood', subtitle: 'Useful things for wherever the path takes you.' },
+  daily: { eyebrow: 'DAILY ABUJA PULSE · 7-DAY STREAK', title: 'Reasons to return', subtitle: 'Lock in your daily streak, complete 3 contracts, and collect your city dividend.' },
   map: { eyebrow: 'ABUJA · FCT · LIVE', title: 'Field map', subtitle: 'Find your place and see what’s close.' },
   messages: { eyebrow: 'YOUR NEIGHBOURHOOD', title: 'Messages', subtitle: 'A small check-in from someone nearby.' },
   journal: { eyebrow: 'FIELD NOTES · PRIVATE', title: 'Journal', subtitle: 'A note to keep, just for you.' },
@@ -5549,9 +5900,16 @@ const phonePageCopy = {
 };
 
 function updatePhoneBadge() {
-  phoneNotificationDot.hidden = !phoneUnread;
+  const dailyActions = getDailyReturnActionCount(dailyReturn);
+  const showDot = phoneUnread || dailyActions > 0;
+  phoneNotificationDot.hidden = !showDot;
   phoneMessageBadge.hidden = !phoneUnread;
-  const phoneLabel = phoneUnread ? 'Open your phone · unread message' : 'Open your phone';
+  if (phoneDailyBadge) phoneDailyBadge.hidden = dailyActions === 0;
+  const phoneLabel = phoneUnread
+    ? 'Open your phone · unread message'
+    : dailyActions > 0
+      ? 'Open your phone · daily rewards ready'
+      : 'Open your phone';
   phoneButton.setAttribute('aria-label', phoneLabel);
   phoneButton.title = `${phoneLabel} (P)`;
 }
@@ -5567,7 +5925,8 @@ function setPhonePage(pageName) {
   phonePageSubtitle.textContent = phonePageCopy[page].subtitle;
   phoneBackButton.hidden = page === 'home';
   phoneContent.scrollTop = 0;
-  if (page === 'property') renderPropertyPage();
+  if (page === 'daily') renderDailyPage();
+  else if (page === 'property') renderPropertyPage();
   else if (page === 'cafe' || page === 'market') renderCommercePage(page);
   else if (page === 'government') renderGovernmentPage();
   else if (page === 'billboards') renderBillboardsPage();
@@ -5580,7 +5939,7 @@ function setPhonePage(pageName) {
   }
   if (page === 'map') drawMap();
   if (isPhoneOpen()) {
-    const focusTarget = page === 'home' ? phoneContent.querySelector('[data-phone-app="map"]') : phoneBackButton;
+    const focusTarget = page === 'home' ? phoneContent.querySelector('[data-phone-app="daily"]') || phoneContent.querySelector('[data-phone-app="map"]') : phoneBackButton;
     focusTarget?.focus({ preventScroll: true });
   }
 }
@@ -5607,7 +5966,8 @@ function openPhone() {
   phonePanel.classList.add('is-open');
   phoneScrim.classList.add('is-open');
   phoneCloseButton.focus({ preventScroll: true });
-  if (activePhonePage === 'map') drawMap();
+  if (activePhonePage === 'daily') renderDailyPage();
+  else if (activePhonePage === 'map') drawMap();
   else if (activePhonePage === 'life') renderLifePage();
   else if (activePhonePage === 'work') renderWorkPage();
   else if (activePhonePage === 'cafe' || activePhonePage === 'market') renderCommercePage(activePhonePage);
@@ -5684,6 +6044,7 @@ function sendPhoneReply(replyKey) {
     persistLife();
     if (isPhoneOpen() && activePhonePage === 'life') renderLifePage();
   }
+  notifyDailyActivity('connect-neighbour');
   phoneUnread = false;
   updatePhoneBadge();
   appendPhoneMessage('outgoing', reply.sent);
@@ -5712,6 +6073,13 @@ function updatePhoneQuestProgress() {
   }
 }
 
+function openDailyPulseFromHud() {
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('daily');
+}
+
+dailyStreakButton?.addEventListener('click', openDailyPulseFromHud);
+hudOpenDailyButton?.addEventListener('click', openDailyPulseFromHud);
 phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
 worldViewButton.addEventListener('click', toggleWorldView);
@@ -5726,6 +6094,16 @@ phoneContent.addEventListener('click', (event) => {
   const appButton = event.target.closest('[data-phone-app]');
   if (appButton) {
     setPhonePage(appButton.dataset.phoneApp);
+    return;
+  }
+  const dailyActionButton = event.target.closest('[data-daily-action]');
+  if (dailyActionButton) {
+    handleDailyActionFromPhone(dailyActionButton.dataset.dailyAction);
+    return;
+  }
+  const dailyContractButton = event.target.closest('[data-daily-contract]');
+  if (dailyContractButton) {
+    claimDailyContractFromPhone(dailyContractButton.dataset.dailyContract);
     return;
   }
   const shopButton = event.target.closest('[data-shop-buy]');
@@ -6042,6 +6420,7 @@ phoneMessageForm.addEventListener('submit', (event) => {
     persistLife();
     if (isPhoneOpen() && activePhonePage === 'life') renderLifePage();
   }
+  notifyDailyActivity('connect-neighbour');
   phoneUnread = false;
   updatePhoneBadge();
   appendPhoneMessage('outgoing', message);
@@ -6108,6 +6487,8 @@ phoneNote.addEventListener('input', () => {
 phoneNote.addEventListener('change', flushPhoneNote);
 window.addEventListener('pagehide', flushPhoneNote);
 window.addEventListener('pagehide', persistLife);
+window.addEventListener('pagehide', persistDailyReturn);
+syncDailyPulseHud();
 updatePhoneBadge();
 setPhonePage('home');
 updatePhoneQuestProgress();
@@ -6178,6 +6559,15 @@ function updateLocationAndMap() {
   let currentHomeRoom = '';
   const currentResidence = getCurrentResidence();
   const currentCommerceVenue = commerceVenues.find((venue) => Math.hypot(x - venue.x, z - venue.z) < 10);
+  if (currentCommerceVenue) {
+    notifyDailyActivity(`visit-${currentCommerceVenue.id}`);
+  }
+  if (Math.hypot(x - COMMUNITY_HALL_LAYOUT.x, z - COMMUNITY_HALL_LAYOUT.z) < 12) {
+    notifyDailyActivity('visit-hall');
+  }
+  if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) {
+    notifyDailyActivity('visit-stadium');
+  }
   if (life.profile.created) {
     let lifeGoalUpdated = false;
     if (currentCommerceVenue) lifeGoalUpdated = recordLifeVisit(life, currentCommerceVenue.id) || lifeGoalUpdated;
@@ -7039,6 +7429,32 @@ function animate(timestamp) {
       updatePhoneQuestProgress();
       updateLocationAndMap();
       showToast(seedCount === seeds.length ? 'All three lights are home. Lovely work.' : 'You found a glow seed. Abuja is a little brighter.');
+    }
+  }
+
+  if (dailyGoldenSeed.group.visible && !isDailyGoldenSeedCollected(dailyReturn)) {
+    const goldenFloat = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 2.15) * 0.2;
+    dailyGoldenSeed.orb.position.y = 1.32 + goldenFloat;
+    dailyGoldenSeed.hoop.position.y = 1.28 + goldenFloat;
+    dailyGoldenSeed.halo.position.y = 1.28 + goldenFloat;
+    if (!prefersReducedMotion) {
+      dailyGoldenSeed.orb.rotation.y += delta * 1.1;
+      dailyGoldenSeed.halo.rotation.z += delta * 0.65;
+    }
+    if (Math.hypot(player.position.x - dailyGoldenSeed.x, player.position.z - dailyGoldenSeed.z) < 1.65) {
+      const goldenResult = collectDailyGoldenSeed(dailyReturn, { economy, life });
+      if (goldenResult.ok) {
+        dailyGoldenSeed.group.visible = false;
+        persistEconomy();
+        persistLife();
+        persistDailyReturn();
+        updateWalletBalances();
+        if (isPhoneOpen() && activePhonePage === 'daily') renderDailyPage();
+        showToast(
+          `Found Today’s Golden Seed at ${goldenResult.spot.name}! +${formatCredits(goldenResult.creditsAwarded)} · +${goldenResult.xpAwarded} XP!`,
+          4200,
+        );
+      }
     }
   }
 

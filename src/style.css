@@ -1185,3 +1185,36 @@ kbd { font-size: 9px; }
 .billboard-live-preview-cta { display: inline-block; padding: 2px 8px; border-radius: 6px; color: #1b2820; font-size: 8.5px; font-weight: 800; letter-spacing: .08em; }
 .billboard-preset-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 7px; }
 
+.daily-streak-pill { position: relative; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid rgba(212,155,66,.38); border-radius: 999px; color: #5c4318; background: linear-gradient(135deg,rgba(255,246,220,.92),rgba(247,229,184,.88)); box-shadow: 0 6px 16px rgba(92,67,24,.1); cursor: pointer; font: 700 10px/1 'DM Sans',sans-serif; letter-spacing: .08em; pointer-events: auto; }
+.daily-streak-pill:hover { background: linear-gradient(135deg,#fff9e6,#f5dfa6); }
+.daily-streak-flame { color: #c97d1d; font-size: 13px; }
+.daily-streak-label strong { color: #3c2a0d; font-size: 11px; }
+.daily-streak-dot { width: 7px; height: 7px; border-radius: 999px; background: #d65a38; box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.hud-daily-pulse { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(78,113,85,.14); }
+.hud-daily-pulse-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hud-daily-kicker { color: #9c6c25; font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.hud-daily-pulse-copy strong { color: #3e5e4b; font-size: 10px; line-height: 1.25; }
+.hud-daily-button { flex: 0 0 auto; min-height: 27px; padding: 0 9px; border: 1px solid rgba(186,133,52,.34); border-radius: 999px; color: #5c4318; background: linear-gradient(135deg,#fdf2d0,#f3dca4); cursor: pointer; font: 700 9px/1 'DM Sans',sans-serif; letter-spacing: .04em; }
+.hud-daily-button:hover { background: #fff6dc; }
+.app-icon-daily { position: relative; color: #9a6216; background: linear-gradient(145deg,#fff3cf,#f1d28f); }
+.shop-heading--daily { background: linear-gradient(125deg,#faecc8,#ebd197); }
+.shop-heading--daily .shop-avatar { background: #9c651c; }
+.daily-streak-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 7px; }
+.daily-streak-day { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 2px; border: 1px solid rgba(156,108,37,.22); border-radius: 9px; color: #6e5936; background: rgba(255,252,242,.78); font-size: 8.5px; text-align: center; }
+.daily-streak-day strong { color: #463414; font-size: 9.5px; }
+.daily-streak-day.is-claimed { border-color: rgba(63,122,99,.45); color: #2f5e49; background: rgba(224,242,229,.88); }
+.daily-streak-day.is-next { border-color: #c98827; box-shadow: 0 0 0 1px rgba(201,136,39,.35); background: linear-gradient(145deg,#fff6da,#f6e0a9); }
+.daily-event-banner { padding: 9px 10px; border: 1px solid rgba(186,133,52,.28); border-radius: 12px; background: linear-gradient(135deg,rgba(255,248,228,.92),rgba(244,234,204,.85)); }
+.daily-event-banner strong { display: block; margin-top: 2px; color: #4a3715; font-size: 11.5px; }
+.daily-event-banner p { margin: 4px 0 0; color: #695737; font-size: 9.5px; line-height: 1.4; }
+.daily-contract-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.daily-contract-card { padding: 8px 10px; border: 1px solid rgba(66,105,77,.14); border-radius: 11px; background: rgba(255,255,255,.78); }
+.daily-contract-card.is-completed { border-color: rgba(63,122,99,.42); background: linear-gradient(135deg,rgba(232,245,228,.9),rgba(255,255,255,.85)); }
+.daily-contract-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.daily-contract-top strong { color: #3d5d49; font-size: 10.5px; }
+.daily-contract-reward { flex: 0 0 auto; padding: 2px 6px; border-radius: 999px; color: #6a4c18; background: #f6e7c1; font-size: 8.5px; font-weight: 700; }
+.daily-contract-card p { margin: 3px 0 6px; color: #6c7f6f; font-size: 9.5px; line-height: 1.35; }
+.daily-dividend-breakdown { display: grid; gap: 4px; margin-top: 6px; padding: 7px 9px; border-radius: 10px; background: rgba(244,248,239,.85); font-size: 9.5px; color: #4d6754; }
+.daily-dividend-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+

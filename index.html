@@ -40,6 +40,11 @@
         </div>
 
         <div class="topbar-actions">
+          <button class="daily-streak-pill" id="daily-streak-button" type="button" aria-label="Open Daily Abuja Pulse and check-in streak" title="Open Daily Abuja Pulse">
+            <span class="daily-streak-flame" aria-hidden="true">☀</span>
+            <span class="daily-streak-label">DAY <strong id="daily-streak-count">1</strong></span>
+            <span class="daily-streak-dot" id="daily-streak-dot" aria-hidden="true"></span>
+          </button>
           <div class="seed-counter" role="group" aria-label="Glow seeds collected">
             <span class="seed-counter-icon" aria-hidden="true">✦</span>
             <span id="seed-count-top" aria-live="polite" aria-atomic="true">0</span><span class="seed-total">/ 3</span>
@@ -117,6 +122,13 @@
           <p>Three little lights are tucked around the neighbourhood. Collect them if you feel like it.</p>
           <div class="quest-progress-row"><span>NEIGHBOURHOOD LIGHT</span><strong><span id="seed-count">0</span><span class="progress-total"> / 3</span></strong></div>
           <progress id="progress-fill" class="progress-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress>
+          <div class="hud-daily-pulse" id="hud-daily-pulse-card">
+            <div class="hud-daily-pulse-copy">
+              <span class="hud-daily-kicker" id="hud-daily-event-title">☀ TODAY IN ABUJA</span>
+              <strong id="hud-daily-status">Daily check-in &amp; 3 contracts ready</strong>
+            </div>
+            <button class="hud-daily-button" id="hud-open-daily-button" type="button" aria-label="Open Daily Abuja Pulse">Daily Pulse</button>
+          </div>
         </aside>
 
         <div class="controls-hint" id="controls-hint" role="group" aria-label="Keyboard controls">
@@ -193,8 +205,12 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">11</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">12</span></div>
                 <div class="phone-app-grid">
+                  <button class="phone-app-button" type="button" data-phone-app="daily" aria-label="Open Daily Abuja Pulse, 7-day check-in streak, and daily contracts">
+                    <span class="phone-app-icon app-icon-daily"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.65"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg><span class="phone-app-badge" id="phone-daily-badge" hidden></span></span>
+                    <span>Daily</span>
+                  </button>
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
                     <span>Map</span>
@@ -400,6 +416,25 @@
                 <p class="shop-proximity-note" id="billboards-proximity">5 strategic billboards live across Unity Mall, Civic Boulevard, Unity Court, Unity Circle, and Abuja Stadium.</p>
                 <div class="mall-spaces-section" id="billboards-studio-section" aria-label="Selected billboard campaign studio"></div>
                 <div class="mall-spaces-section" id="billboards-directory-section" aria-label="Strategic billboard locations"></div>
+              </section>
+
+              <section class="phone-page" data-phone-page="daily" aria-label="Daily Abuja Pulse, 7-day check-in streak, daily contracts, and city event" hidden>
+                <div class="shop-heading shop-heading--daily">
+                  <span class="shop-avatar" aria-hidden="true">☀</span>
+                  <span>
+                    <span class="phone-card-label">DAILY ABUJA PULSE · STREAK &amp; REWARDS</span>
+                    <strong>Return Every Day</strong>
+                    <small>Build your 7-day check-in streak, complete 3 daily contracts, and collect your empire dividend.</small>
+                  </span>
+                </div>
+                <div class="economy-wallet">
+                  <span>WALLET · STREAK SHIELDS</span>
+                  <strong id="daily-wallet-balance">160 GC · 1 Shield</strong>
+                </div>
+                <div class="mall-section-block" id="daily-streak-section" aria-live="polite"></div>
+                <div class="mall-section-block" id="daily-event-section" aria-live="polite"></div>
+                <div class="mall-section-block" id="daily-contracts-section" aria-live="polite"></div>
+                <div class="mall-section-block" id="daily-dividend-section" aria-live="polite"></div>
               </section>
 
               <section class="phone-page" data-phone-page="map" aria-label="Abuja neighbourhood map" hidden>
