@@ -5,9 +5,11 @@ import { resolveDiscAgainstOrientedBox } from '../src/collision.js';
 import {
   BUS_ROUTE_XZ,
   BUS_TERMINAL_LAYOUT,
+  CROSSWALK_LAYOUT,
   createPlanarCurve,
   RAIL_ROUTE_XZ,
   ROAD_NETWORK_LAYOUT,
+  ROUNDABOUT_LAYOUT,
   STATION_LAYOUT,
 } from '../src/transport.js';
 import {
@@ -167,6 +169,7 @@ test('bus and rail curves stay clear of every residence, café, market, and comm
 });
 
 test('local streets meet the bus-road spine without endpoint gaps', () => {
+  assert.equal(ROAD_NETWORK_LAYOUT.length, 7, 'Abuja road network includes the outer ring plus 6 district connector boulevards');
   const spine = ROAD_NETWORK_LAYOUT[0].points;
   for (const road of ROAD_NETWORK_LAYOUT.slice(1)) {
     for (const point of [road.points[0], road.points.at(-1)]) {
@@ -176,6 +179,16 @@ test('local streets meet the bus-road spine without endpoint gaps', () => {
       );
     }
   }
+
+  assert.equal(ROUNDABOUT_LAYOUT.length, 5, '5 planted Abuja traffic roundabouts sit at district junctions');
+  for (const rb of ROUNDABOUT_LAYOUT) {
+    assert.ok(
+      distanceToPolyline(rb.x, rb.z, spine) <= 1e-6,
+      `roundabout ${rb.name} must sit directly on the main arterial ring`,
+    );
+  }
+
+  assert.equal(CROSSWALK_LAYOUT.length, 6, '6 zebra pedestrian crosswalks serve all district hubs');
 });
 
 test('Unity Community Hall and its shaded approach keep clear of every connected road surface', () => {

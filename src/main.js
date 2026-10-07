@@ -8002,6 +8002,27 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.lineWidth = Math.max(1.7, radius * 0.031);
     ctx.stroke();
 
+    // Draw the 5 Abuja Traffic Roundabouts / District Interchanges on the map
+    if (transitNetwork.roundabouts) {
+      for (const rb of transitNetwork.roundabouts) {
+        const rbx = mapX(rb.x);
+        const rby = mapY(rb.z);
+        const outerR = Math.max(2.6, (rb.outerRadius / WORLD_RADIUS) * radius);
+        const innerR = Math.max(1.1, (rb.islandRadius / WORLD_RADIUS) * radius);
+        ctx.beginPath();
+        ctx.arc(rbx, rby, outerR, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(91, 100, 91, .92)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(244, 238, 216, .95)';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(rbx, rby, innerR, 0, Math.PI * 2);
+        ctx.fillStyle = '#3b7a5e';
+        ctx.fill();
+      }
+    }
+
     // Highlight the 4 Bridges & Elevated Highway Flyovers on the map
     for (const bridge of BRIDGES_AND_FLYOVERS_LAYOUT) {
       const halfL = bridge.length / 2;

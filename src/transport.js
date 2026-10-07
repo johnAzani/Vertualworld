@@ -5,14 +5,15 @@ import { getBridgeFlyoverSurfaceHeight } from './world-layout.js';
 export const BUS_ROUTE_XZ = [
   [38, -32], [38, -24], [38, -14],
   [38, -4], [38, 6], [38, 16], [38, 26], [38, 36],
-  [38, 48], [38, 56], [48, 56], [48, 68], [48, 78],
-  [36, 78], [26, 78], [26, 66], [26, 60],
-  [18, 60], [8, 60], [-2, 60], [-12, 60], [-22, 60],
-  [-34, 60], [-44, 60], [-44, 52], [-34, 52],
-  [-34, 44], [-34, 34], [-34, 24], [-34, 14], [-34, 4],
-  [-34, -8], [-34, -24], [-34, -38], [-34, -46],
-  [-30, -46], [-20, -46], [-10, -46], [0, -46], [10, -46],
-  [18, -46], [26, -46],
+  [38, 46], [42, 54], [48, 60], [48, 68],
+  [45, 76], [36, 78], [28, 74], [24, 64], [18, 60],
+  [8, 60], [-2, 60], [-12, 60], [-22, 60],
+  [-32, 60], [-40, 60], [-44, 60],
+  [-46, 55], [-42, 49], [-36, 46], [-34, 40],
+  [-34, 34], [-34, 24], [-34, 14], [-34, 4],
+  [-34, -8], [-34, -24], [-34, -36],
+  [-32, -43], [-26, -46], [-20, -46], [-10, -46], [0, -46],
+  [10, -46], [18, -46], [28, -46],
 ];
 
 export const RAIL_ROUTE_XZ = [
@@ -82,15 +83,108 @@ const BUS_LENGTH = 5.7;
 const TRAIN_WHEEL_RADIUS = 0.29;
 
 export const ROAD_NETWORK_LAYOUT = [
-  { points: BUS_ROUTE_XZ, halfWidth: ROAD_HALF_WIDTH, centerline: true },
   {
-    points: [[26, -46], [38, -46], [38, -32]],
+    id: 'abuja-ring-expressway',
+    name: 'Abuja Outer Ring Expressway',
+    points: BUS_ROUTE_XZ,
     halfWidth: ROAD_HALF_WIDTH,
     centerline: true,
   },
-  { points: [[48, 56], [56, 56], [56, 72], [48, 78]], halfWidth: 1.95 },
-  { points: [[26, 60], [38, 56]], halfWidth: 1.78 },
+  {
+    id: 'southeast-ring-closure',
+    name: 'Constitution–Unity Court Connector',
+    points: [[28, -46], [35, -43], [38, -36], [38, -32]],
+    halfWidth: ROAD_HALF_WIDTH,
+    centerline: true,
+  },
+  {
+    id: 'unity-mall-boulevard',
+    name: 'Unity Grand Mall & VIP Parking Boulevard',
+    points: [[42, 54], [54, 54], [58.5, 62], [58.5, 72], [48, 68]],
+    halfWidth: 1.95,
+    centerline: true,
+  },
+  {
+    id: 'civic-cafe-promenade',
+    name: 'Civic Café Promenade Drive',
+    points: [[42, 54], [35, 58], [27, 60], [24, 64]],
+    halfWidth: 1.85,
+    centerline: true,
+  },
+  {
+    id: 'three-arms-ceremonial-drive',
+    name: 'Three Arms Ceremonial Drive',
+    points: [[-22, 60], [-28, 65], [-36, 65], [-44, 60]],
+    halfWidth: 1.85,
+    centerline: true,
+  },
+  {
+    id: 'stadium-gate-boulevard',
+    name: 'Stadium East Gate & VIP Approach Drive',
+    points: [[-34, -8], [-40, -14], [-42, -24], [-40, -34], [-34, -36]],
+    halfWidth: 1.95,
+    centerline: true,
+  },
+  {
+    id: 'unity-circle-plaza-ring',
+    name: 'Unity Circle Fountain Plaza Ring',
+    points: [[10, -46], [12, -53], [18, -62], [24, -53], [28, -46]],
+    halfWidth: 1.85,
+    centerline: true,
+  },
 ];
+
+export const ROUNDABOUT_LAYOUT = Object.freeze([
+  Object.freeze({
+    id: 'unity-court-roundabout',
+    name: 'Unity Court Gateway Roundabout',
+    x: 38,
+    z: -24,
+    outerRadius: 4.1,
+    islandRadius: 1.15,
+  }),
+  Object.freeze({
+    id: 'cbd-interchange-roundabout',
+    name: 'CBD & Unity Mall Interchange Roundabout',
+    x: 42,
+    z: 54,
+    outerRadius: 4.3,
+    islandRadius: 1.25,
+  }),
+  Object.freeze({
+    id: 'three-arms-roundabout',
+    name: 'Three Arms Civic Roundabout',
+    x: -22,
+    z: 60,
+    outerRadius: 4.1,
+    islandRadius: 1.15,
+  }),
+  Object.freeze({
+    id: 'stadium-boulevard-roundabout',
+    name: 'Stadium Boulevard Roundabout',
+    x: -34,
+    z: -8,
+    outerRadius: 4.1,
+    islandRadius: 1.15,
+  }),
+  Object.freeze({
+    id: 'unity-circle-roundabout',
+    name: 'Unity Circle Gateway Roundabout',
+    x: 18,
+    z: -46,
+    outerRadius: 4.1,
+    islandRadius: 1.15,
+  }),
+]);
+
+export const CROSSWALK_LAYOUT = Object.freeze([
+  Object.freeze({ id: 'unity-court-crosswalk', name: 'Unity Court Hub Crossing', x: 38, z: -19.5, yaw: 0, width: 4.2 }),
+  Object.freeze({ id: 'unity-mall-crosswalk', name: 'Unity Grand Mall Entrance Crossing', x: 58.5, z: 68.5, yaw: 0, width: 3.6 }),
+  Object.freeze({ id: 'civic-cafe-crosswalk', name: 'Civic Café Terrace Crossing', x: 35, z: 58, yaw: Math.PI / 2, width: 3.4 }),
+  Object.freeze({ id: 'three-arms-crosswalk', name: 'Governor’s Office Plaza Crossing', x: -32, z: 65, yaw: Math.PI / 2, width: 3.4 }),
+  Object.freeze({ id: 'stadium-gate-crosswalk', name: 'Stadium East Gate Crossing', x: -42, z: -24, yaw: 0, width: 3.6 }),
+  Object.freeze({ id: 'unity-circle-crosswalk', name: 'Unity Circle Monument Crossing', x: 18, z: -46, yaw: Math.PI / 2, width: 4.2 }),
+]);
 
 function addBox(parent, width, height, depth, material, x, y, z, castShadow = true, receiveShadow = true) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
@@ -692,6 +786,9 @@ export function createTransportNetwork(scene, terrainHeight) {
   const asphalt = new THREE.MeshStandardMaterial({ color: 0x59615d, roughness: 0.94, metalness: 0.01 });
   const roadEdge = new THREE.MeshStandardMaterial({ color: 0xd2c7a2, roughness: 0.88 });
   const centerPaint = new THREE.MeshBasicMaterial({ color: 0xe6d39e, toneMapped: false });
+  const whiteLanePaint = new THREE.MeshBasicMaterial({ color: 0xf7f3e4, toneMapped: false });
+  const roundaboutShrubMat = new THREE.MeshStandardMaterial({ color: 0x3b7a5e, roughness: 0.9, flatShading: true });
+  const roundaboutFlowerMat = new THREE.MeshStandardMaterial({ color: 0xebb652, roughness: 0.85, flatShading: true });
   const ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x696c62, roughness: 1, flatShading: true });
   const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x655846, roughness: 0.96, flatShading: true });
   const railMaterial = new THREE.MeshStandardMaterial({ color: 0xb6b5a4, roughness: 0.3, metalness: 0.72 });
@@ -704,6 +801,7 @@ export function createTransportNetwork(scene, terrainHeight) {
   const roadGeometryParts = [];
   const roadEdgeGeometryParts = [];
   const roadMarkingGeometryParts = [];
+  const whiteLaneGeometryParts = [];
   const roadSegments = [];
   const roadMapLines = [];
   for (const roadPath of roadPathCurves) {
@@ -716,13 +814,23 @@ export function createTransportNetwork(scene, terrainHeight) {
       ROAD_SURFACE_OFFSET,
     ));
     for (const side of [-1, 1]) {
+      // Raised warm granite curb shoulder
       roadEdgeGeometryParts.push(createRibbonGeometry(
         roadPath.curve,
         roadTerrainHeight,
         segmentCount,
-        0.055,
-        ROAD_SURFACE_OFFSET + 0.012,
-        side * (roadPath.halfWidth - 0.14),
+        0.14,
+        ROAD_SURFACE_OFFSET + 0.01,
+        side * (roadPath.halfWidth + 0.08),
+      ));
+      // Crisp white outer lane marking
+      whiteLaneGeometryParts.push(createRibbonGeometry(
+        roadPath.curve,
+        roadTerrainHeight,
+        segmentCount,
+        0.045,
+        ROAD_SURFACE_OFFSET + 0.013,
+        side * (roadPath.halfWidth - 0.18),
       ));
     }
     if (roadPath.centerline) {
@@ -742,6 +850,24 @@ export function createTransportNetwork(scene, terrainHeight) {
     }));
   }
 
+  // Zebra pedestrian crosswalk stripes across key district hubs and entrances
+  for (const cw of CROSSWALK_LAYOUT) {
+    const stripeCount = 6;
+    const stripeSpacing = cw.width / stripeCount;
+    const baseY = roadTerrainHeight(cw.x, cw.z) + ROAD_SURFACE_OFFSET + 0.016;
+    const cosY = Math.cos(cw.yaw);
+    const sinY = Math.sin(cw.yaw);
+    for (let s = 0; s < stripeCount; s += 1) {
+      const lateral = (s - (stripeCount - 1) / 2) * stripeSpacing;
+      const sx = cw.x + lateral * cosY;
+      const sz = cw.z - lateral * sinY;
+      const stripeGeo = new THREE.BoxGeometry(0.28, 0.008, 1.85);
+      stripeGeo.rotateY(cw.yaw);
+      stripeGeo.translate(sx, baseY, sz);
+      whiteLaneGeometryParts.push(stripeGeo);
+    }
+  }
+
   const road = new THREE.Mesh(mergeGeometries(roadGeometryParts, false), asphalt);
   road.geometry.computeBoundingSphere();
   road.receiveShadow = true;
@@ -750,10 +876,94 @@ export function createTransportNetwork(scene, terrainHeight) {
   roadEdges.geometry.computeBoundingSphere();
   roadEdges.receiveShadow = true;
   scene.add(roadEdges);
+  const whiteLaneLines = new THREE.Mesh(mergeGeometries(whiteLaneGeometryParts, false), whiteLanePaint);
+  whiteLaneLines.geometry.computeBoundingSphere();
+  whiteLaneLines.receiveShadow = false;
+  scene.add(whiteLaneLines);
   const dashedCenterline = new THREE.Mesh(mergeGeometries(roadMarkingGeometryParts, false), centerPaint);
   dashedCenterline.geometry.computeBoundingSphere();
   dashedCenterline.receiveShadow = false;
   scene.add(dashedCenterline);
+
+  // 5 Abuja Planted Traffic Roundabouts / District Interchanges
+  const roundaboutsGroup = new THREE.Group();
+  roundaboutsGroup.name = 'Abuja Traffic Roundabouts';
+  for (const rb of ROUNDABOUT_LAYOUT) {
+    const baseY = roadTerrainHeight(rb.x, rb.z) + ROAD_SURFACE_OFFSET;
+    const apron = new THREE.Mesh(
+      new THREE.CylinderGeometry(rb.outerRadius, rb.outerRadius + 0.18, 0.025, 28),
+      asphalt,
+    );
+    apron.position.set(rb.x, baseY - 0.005, rb.z);
+    apron.receiveShadow = true;
+    roundaboutsGroup.add(apron);
+
+    const outerCurbRing = new THREE.Mesh(
+      new THREE.RingGeometry(rb.outerRadius - 0.22, rb.outerRadius + 0.08, 28),
+      roadEdge,
+    );
+    outerCurbRing.rotation.x = -Math.PI / 2;
+    outerCurbRing.position.set(rb.x, baseY + 0.012, rb.z);
+    roundaboutsGroup.add(outerCurbRing);
+
+    const islandCurb = new THREE.Mesh(
+      new THREE.CylinderGeometry(rb.islandRadius, rb.islandRadius + 0.16, 0.18, 24),
+      roadEdge,
+    );
+    islandCurb.position.set(rb.x, baseY + 0.09, rb.z);
+    islandCurb.receiveShadow = true;
+    roundaboutsGroup.add(islandCurb);
+
+    const islandCrown = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(rb.islandRadius * 0.64, 1),
+      roundaboutShrubMat,
+    );
+    islandCrown.position.set(rb.x, baseY + 0.48, rb.z);
+    islandCrown.scale.set(1.15, 0.62, 1.15);
+    roundaboutsGroup.add(islandCrown);
+
+    const flowerTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      roundaboutFlowerMat,
+    );
+    flowerTop.position.set(rb.x, baseY + 0.78, rb.z);
+    roundaboutsGroup.add(flowerTop);
+  }
+  scene.add(roundaboutsGroup);
+
+  // Arterial Solar/LED Streetlamps lining the Abuja Ring Expressway
+  const lampCount = 26;
+  const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x2c4b3e, roughness: 0.5, metalness: 0.35 });
+  const lampBulbMat = new THREE.MeshStandardMaterial({
+    color: 0xffebba,
+    emissive: 0xffc764,
+    emissiveIntensity: 0.9,
+    roughness: 0.25,
+  });
+  const lampPoles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.085, 3.6, 7), lampPoleMat, lampCount);
+  const lampBulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 8, 6), lampBulbMat, lampCount);
+  const lampXform = new THREE.Object3D();
+  for (let i = 0; i < lampCount; i += 1) {
+    const frac = (i + 0.5) / lampCount;
+    const pt = roadCurve.getPointAt(frac);
+    const tan = roadCurve.getTangentAt(frac).setY(0).normalize();
+    const normal = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+    const side = i % 2 === 0 ? 1 : -1;
+    const lx = pt.x + normal.x * side * (ROAD_HALF_WIDTH + 1.15);
+    const lz = pt.z + normal.z * side * (ROAD_HALF_WIDTH + 1.15);
+    const ly = roadTerrainHeight(pt.x, pt.z) + ROAD_SURFACE_OFFSET;
+    lampXform.position.set(lx, ly + 1.8, lz);
+    lampXform.rotation.set(0, 0, 0);
+    lampXform.updateMatrix();
+    lampPoles.setMatrixAt(i, lampXform.matrix);
+    lampXform.position.set(lx, ly + 3.65, lz);
+    lampXform.updateMatrix();
+    lampBulbs.setMatrixAt(i, lampXform.matrix);
+  }
+  lampPoles.instanceMatrix.needsUpdate = true;
+  lampBulbs.instanceMatrix.needsUpdate = true;
+  scene.add(lampPoles);
+  scene.add(lampBulbs);
 
   const ballast = new THREE.Mesh(createRibbonGeometry(railCurve, terrainHeight, 520, TRACK_HALF_WIDTH, 0.1), ballastMaterial);
   ballast.receiveShadow = true;
@@ -874,6 +1084,8 @@ export function createTransportNetwork(scene, terrainHeight) {
     busMapPoints: roadMapPoints,
     roadSegments,
     railSegments,
+    roundabouts: ROUNDABOUT_LAYOUT,
+    crosswalks: CROSSWALK_LAYOUT,
     stations,
     busTerminals,
     train,
@@ -1086,6 +1298,16 @@ export function getTransportSurfaceHeight(network, x, z) {
     if (result.distanceSquared <= segment.halfWidth * segment.halfWidth && result.distanceSquared < nearestDistanceSquared) {
       height = result.height;
       nearestDistanceSquared = result.distanceSquared;
+    }
+  }
+  if (network.roundabouts) {
+    const roadHeightFn = network.roadTerrainHeight || network.terrainHeight;
+    for (const rb of network.roundabouts) {
+      const distSq = (x - rb.x) ** 2 + (z - rb.z) ** 2;
+      if (distSq <= rb.outerRadius * rb.outerRadius && distSq < nearestDistanceSquared) {
+        height = roadHeightFn(x, z) + ROAD_SURFACE_OFFSET;
+        nearestDistanceSquared = distSq;
+      }
     }
   }
   for (const station of network.stations) {
