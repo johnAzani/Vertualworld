@@ -5,7 +5,9 @@ import { getFrameTiming } from './frame-timing.js';
 import { computeSeatedPose, computeWalkCyclePose } from './walk-cycle.js';
 import { createAbujaLandscape } from './abuja-world.js';
 import {
+  ABUJA_RIVER_WATERWAY_POINTS,
   BILLBOARD_LAYOUT,
+  BRIDGES_AND_FLYOVERS_LAYOUT,
   COMMUNITY_HALL_LAYOUT,
   COMMERCE_VENUE_COLLIDER,
   COMMERCE_VENUE_LAYOUT,
@@ -17,6 +19,9 @@ import {
   MALL_PARKING_BAYS,
   MALL_PARKING_LOT_LAYOUT,
   MALL_SHOP_BAY_LAYOUT,
+  getBridgeFlyoverAt,
+  getBridgeFlyoverGuardrailColliders,
+  getBridgeFlyoverSurfaceHeight,
   getMallIndoorWallColliders,
   getMallLockupShopAt,
   getMallParkingSurfaceHeight,
@@ -374,14 +379,14 @@ reducedMotionQuery?.addEventListener?.('change', (event) => {
   prefersReducedMotion = event.matches;
 });
 
-const WORLD_RADIUS = 82;
+const WORLD_RADIUS = 128;
 const SEED_POSITIONS = [
-  new THREE.Vector2(-18, -10),
-  new THREE.Vector2(25, -24),
-  new THREE.Vector2(-39, -42),
+  new THREE.Vector2(-24, -18),
+  new THREE.Vector2(30, -48),
+  new THREE.Vector2(-52, 42),
 ];
 const PATH_POINTS_XZ = [
-  [-13.1, 18], [-9, 18], [-5, 18], [0, 18], [0.4, 13], [-1.8, 9], [1.6, 5], [1.4, 0], [-1.2, -5], [-2.2, -11], [0.8, -16], [1.2, -21], [0, -27],
+  [36, -24], [28, -28], [22, -34], [18, -42], [18, -56],
 ];
 
 let renderer;
@@ -414,9 +419,9 @@ renderer.shadowMap.needsUpdate = true;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xb5dce0);
-scene.fog = new THREE.Fog(0xb5dce0, 90, 225);
+scene.fog = new THREE.Fog(0xb5dce0, 130, 310);
 
-const camera = new THREE.PerspectiveCamera(49, window.innerWidth / window.innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(49, window.innerWidth / window.innerHeight, 0.1, 750);
 camera.position.set(0, 7, 23);
 
 const hemi = new THREE.HemisphereLight(0xe2fff1, 0x597662, 2.0);
@@ -426,12 +431,12 @@ const sunLight = new THREE.DirectionalLight(0xffedcf, 3.1);
 sunLight.position.set(-36, 54, 22);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(1024, 1024);
-sunLight.shadow.camera.left = -78;
-sunLight.shadow.camera.right = 78;
-sunLight.shadow.camera.top = 78;
-sunLight.shadow.camera.bottom = -78;
+sunLight.shadow.camera.left = -118;
+sunLight.shadow.camera.right = 118;
+sunLight.shadow.camera.top = 118;
+sunLight.shadow.camera.bottom = -118;
 sunLight.shadow.camera.near = 1;
-sunLight.shadow.camera.far = 160;
+sunLight.shadow.camera.far = 220;
 sunLight.shadow.bias = -0.00028;
 sunLight.shadow.normalBias = 0.035;
 scene.add(sunLight);
@@ -471,7 +476,7 @@ function terrainHeight(x, z) {
     + Math.sin(x * 0.105 + Math.sin(z * 0.08)) * Math.cos(z * 0.085) * 0.28
     + Math.sin((x + z) * 0.16) * 0.12;
   // The playable plateau eases into inland savannah; there is no shoreline or sea cliff.
-  const savannahBlend = smoothstep01((radius - 62) / 28);
+  const savannahBlend = smoothstep01((radius - 102) / 36);
   const naturalHeight = THREE.MathUtils.lerp(plateau, -0.72, savannahBlend);
   const outsideX = Math.max(Math.abs(x - STADIUM.x) - STADIUM.plateauHalfX, 0);
   const outsideZ = Math.max(Math.abs(z - STADIUM.z) - STADIUM.plateauHalfZ, 0);
@@ -493,7 +498,7 @@ function distanceToPath(x, z) {
   return minimum;
 }
 
-const ESTATE_BOUNDS = { minX: 9, maxX: 46, minZ: -9, maxZ: 25 };
+const ESTATE_BOUNDS = { minX: 43, maxX: 80, minZ: -41, maxZ: -7 };
 const TRAIL_HALF_WIDTH = 0.82;
 const TRAIL_SURFACE_OFFSET = 0.065;
 const PLAYER_FOOT_OFFSET = 0.042;
@@ -583,8 +588,10 @@ function isInsideEstate(x, z, margin = 0) {
 
 function isReservedSpot(x, z, extra = 0) {
   if (distanceToPath(x, z) < 4.2 + extra) return true;
-  if (Math.hypot(x, z + 27) < 11 + extra) return true;
-  if (Math.hypot(x, z - 12) < 7 + extra) return true;
+  if (Math.hypot(x - 18, z + 56) < 11 + extra) return true;
+  if (Math.hypot(x - 38, z + 24) < 7 + extra) return true;
+  if (getBridgeFlyoverAt(x, z, 2.8 + extra)) return true;
+  if (Math.abs(x + 6) < 6.5 + extra) return true;
   if (isInsideEstate(x, z, extra)) return true;
   for (const venue of COMMERCE_VENUE_LAYOUT) {
     const collider = venue.collider ?? COMMERCE_VENUE_COLLIDER;
@@ -602,7 +609,7 @@ function isReservedSpot(x, z, extra = 0) {
 }
 
 // A gently rolling Abuja plateau blends into a warm, dry-season savannah edge.
-const terrainGeometry = new THREE.PlaneGeometry(180, 180, 112, 112);
+const terrainGeometry = new THREE.PlaneGeometry(310, 310, 144, 144);
 const terrainPositions = terrainGeometry.attributes.position;
 const terrainColors = [];
 const grassDeep = new THREE.Color(0x5d8057);
@@ -618,7 +625,7 @@ for (let i = 0; i < terrainPositions.count; i += 1) {
   const patch = 0.5 + 0.5 * Math.sin(x * 0.14 + Math.sin(z * 0.11)) * Math.cos(z * 0.13);
   const color = grassDeep.clone().lerp(grassBase, 0.42 + patch * 0.42);
   color.lerp(grassLight, Math.max(0, patch - 0.66) * 0.35);
-  color.lerp(savannahSoil, smoothstep01((radius - 52) / 38) * 0.78);
+  color.lerp(savannahSoil, smoothstep01((radius - 92) / 44) * 0.78);
   terrainColors.push(color.r, color.g, color.b);
 }
 terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(terrainColors, 3));
@@ -840,6 +847,10 @@ function groundHeightAt(x, z) {
       ground = Math.max(ground, surface.top);
     }
   }
+  const bridgeSurface = getBridgeFlyoverSurfaceHeight(x, z, terrainHeight(x, z));
+  if (bridgeSurface !== null) {
+    ground = Math.max(ground, bridgeSurface);
+  }
   const transportSurface = getTransportSurfaceHeight(transitNetwork, x, z);
   if (transportSurface !== null) ground = Math.max(ground, transportSurface);
 
@@ -873,7 +884,7 @@ for (let i = 0; i < 19; i += 1) {
 
 // Unity Circle plaza and its softly animated portal.
 const beacon = new THREE.Group();
-beacon.position.set(0, terrainHeight(0, -27), -27);
+beacon.position.set(18, terrainHeight(18, -56), -56);
 scene.add(beacon);
 const plaza = new THREE.Mesh(
   new THREE.CylinderGeometry(5.1, 5.45, 0.34, 40),
@@ -2832,34 +2843,347 @@ function createParkedCar(x, z, heading) {
   return { group, wheelPivots, collider, speed: 0, steering: 0 };
 }
 
+function makeHighwayGantrySignTexture(bridgeTitle, directionLabel) {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 640;
+  signCanvas.height = 148;
+  const ctx = signCanvas.getContext('2d');
+  ctx.fillStyle = '#184737';
+  ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  ctx.strokeStyle = '#e5c478';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(7, 7, signCanvas.width - 14, signCanvas.height - 14);
+  ctx.fillStyle = '#e5c478';
+  ctx.font = '800 20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(bridgeTitle.toUpperCase(), signCanvas.width / 2, 42, 600);
+  ctx.fillStyle = '#fff9e6';
+  ctx.font = '900 30px system-ui, sans-serif';
+  ctx.fillText(directionLabel.toUpperCase(), signCanvas.width / 2, 98, 600);
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function createBridgesAndFlyovers() {
+  const infraGroup = new THREE.Group();
+  infraGroup.name = 'Abuja Bridges, Flyovers & Waterway';
+
+  // 1. Abuja Jabi–Usuma River Waterway flowing north-south through the central valley beneath the bridges
+  const riverPoints = ABUJA_RIVER_WATERWAY_POINTS.map(
+    ([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + 0.04, z),
+  );
+  const riverCurve = new THREE.CatmullRomCurve3(riverPoints, false, 'centripetal');
+  const riverWaterMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3b8692,
+    roughness: 0.22,
+    metalness: 0.18,
+    emissive: 0x123a42,
+    emissiveIntensity: 0.16,
+  });
+  const riverBankMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9e937a,
+    roughness: 0.94,
+  });
+  const buildRiverStrip = (halfWidth, yOffset, mat) => {
+    const segs = 120;
+    const pos = new Float32Array((segs + 1) * 2 * 3);
+    const idx = [];
+    const tangent = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    for (let i = 0; i <= segs; i += 1) {
+      const t = i / segs;
+      const pt = riverCurve.getPointAt(t);
+      tangent.copy(riverCurve.getTangentAt(t)).setY(0).normalize();
+      side.set(-tangent.z, 0, tangent.x).normalize();
+      for (let e = 0; e < 2; e += 1) {
+        const off = e === 0 ? -halfWidth : halfWidth;
+        const rx = pt.x + side.x * off;
+        const rz = pt.z + side.z * off;
+        const v = (i * 2 + e) * 3;
+        pos[v] = rx;
+        pos[v + 1] = terrainHeight(rx, rz) + yOffset;
+        pos[v + 2] = rz;
+      }
+      if (i < segs) {
+        const f = i * 2;
+        idx.push(f, f + 1, f + 2, f + 1, f + 3, f + 2);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    infraGroup.add(mesh);
+  };
+  buildRiverStrip(5.6, 0.025, riverBankMaterial);
+  buildRiverStrip(4.3, 0.055, riverWaterMaterial);
+
+  // 2. Build all 4 Monumental 3D Bridges & Elevated Highway Flyovers
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xcfc7b2, roughness: 0.86 });
+  const darkConcreteMat = new THREE.MeshStandardMaterial({ color: 0x8d8777, roughness: 0.9 });
+  const guardrailMat = new THREE.MeshStandardMaterial({ color: 0x2a4d3e, roughness: 0.48, metalness: 0.34 });
+  const goldAccentMat = new THREE.MeshStandardMaterial({ color: 0xe3be6b, roughness: 0.36, metalness: 0.38 });
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0xd9d5c8, roughness: 0.35, metalness: 0.62 });
+  const lampGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xffe8af,
+    emissive: 0xffc766,
+    emissiveIntensity: 0.95,
+    roughness: 0.25,
+  });
+
+  for (const spec of BRIDGES_AND_FLYOVERS_LAYOUT) {
+    const structGroup = new THREE.Group();
+    structGroup.name = spec.name;
+    const isZAxis = spec.axis === 'z';
+    const halfL = spec.length / 2;
+    const halfW = spec.deckWidth / 2;
+    const stepCount = 20;
+    const sliceLen = spec.length / stepCount;
+
+    // Sampled bridge/flyover structural deck, side fascia beams, and guardrails
+    for (let s = 0; s < stepCount; s += 1) {
+      const alongCenter = -halfL + (s + 0.5) * sliceLen;
+      const wx = isZAxis ? spec.x : spec.x + alongCenter;
+      const wz = isZAxis ? spec.z + alongCenter : spec.z;
+      const baseY = terrainHeight(wx, wz);
+      const hit = getBridgeFlyoverAt(wx, wz);
+      const elev = hit ? hit.elevation : 0;
+
+      // Structural concrete box-girder underside beneath the road surface
+      const girderThickness = Math.max(0.24, Math.min(0.68, elev + 0.12));
+      const girder = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          isZAxis ? spec.deckWidth + 0.65 : sliceLen + 0.08,
+          girderThickness,
+          isZAxis ? sliceLen + 0.08 : spec.deckWidth + 0.65,
+        ),
+        concreteMat,
+      );
+      girder.position.set(wx, baseY + elev - girderThickness / 2 + 0.08, wz);
+      girder.castShadow = true;
+      girder.receiveShadow = true;
+      structGroup.add(girder);
+
+      // Retaining wall fill on the approach ramps
+      if (hit && hit.onRamp && elev > 0.25) {
+        const rampWall = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            isZAxis ? spec.deckWidth + 0.35 : sliceLen + 0.05,
+            elev,
+            isZAxis ? sliceLen + 0.05 : spec.deckWidth + 0.35,
+          ),
+          darkConcreteMat,
+        );
+        rampWall.position.set(wx, baseY + elev / 2, wz);
+        rampWall.castShadow = true;
+        rampWall.receiveShadow = true;
+        structGroup.add(rampWall);
+      }
+
+      // Left and right raised parapet curbs + steel safety guardrails
+      for (const side of [-1, 1]) {
+        const edgeOffset = side * (halfW + 0.18);
+        const gx = isZAxis ? spec.x + edgeOffset : wx;
+        const gz = isZAxis ? wz : spec.z + edgeOffset;
+        const parapet = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            isZAxis ? 0.32 : sliceLen + 0.06,
+            0.52,
+            isZAxis ? sliceLen + 0.06 : 0.32,
+          ),
+          concreteMat,
+        );
+        parapet.position.set(gx, baseY + elev + 0.34, gz);
+        parapet.castShadow = true;
+        structGroup.add(parapet);
+
+        const topRail = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            isZAxis ? 0.14 : sliceLen + 0.06,
+            0.12,
+            isZAxis ? sliceLen + 0.06 : 0.14,
+          ),
+          s % 2 === 0 ? guardrailMat : goldAccentMat,
+        );
+        topRail.position.set(gx, baseY + elev + 0.78, gz);
+        structGroup.add(topRail);
+      }
+    }
+
+    // Heavy reinforced concrete T-piers supporting the main elevated span
+    for (const pierAlong of [-9.5, 0, 9.5]) {
+      const px = isZAxis ? spec.x : spec.x + pierAlong;
+      const pz = isZAxis ? spec.z + pierAlong : spec.z;
+      const groundY = terrainHeight(px, pz);
+      const pierHeight = spec.deckHeight + 0.5;
+      const crosshead = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          isZAxis ? spec.deckWidth + 0.5 : 1.35,
+          0.55,
+          isZAxis ? 1.35 : spec.deckWidth + 0.5,
+        ),
+        darkConcreteMat,
+      );
+      crosshead.position.set(px, groundY + spec.deckHeight - 0.52, pz);
+      crosshead.castShadow = true;
+      structGroup.add(crosshead);
+
+      for (const colSide of [-1, 1]) {
+        const colOffset = colSide * (halfW - 0.85);
+        const cx = isZAxis ? px + colOffset : px;
+        const cz = isZAxis ? pz : pz + colOffset;
+        const column = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.46, 0.56, pierHeight, 12),
+          darkConcreteMat,
+        );
+        column.position.set(cx, groundY + pierHeight / 2 - 0.45, cz);
+        column.castShadow = true;
+        column.receiveShadow = true;
+        structGroup.add(column);
+      }
+    }
+
+    // Iconic Cable-Stayed Pylon Towers for River Bridges
+    if (spec.kind === 'bridge') {
+      for (const pylonAlong of [-8.5, 8.5]) {
+        const pyX = isZAxis ? spec.x : spec.x + pylonAlong;
+        const pyZ = isZAxis ? spec.z + pylonAlong : spec.z;
+        const baseY = terrainHeight(pyX, pyZ) + spec.deckHeight;
+        const towerH = 7.4;
+        for (const side of [-1, 1]) {
+          const towerX = isZAxis ? pyX + side * (halfW + 0.35) : pyX;
+          const towerZ = isZAxis ? pyZ : pyZ + side * (halfW + 0.35);
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.55, towerH, 0.55), concreteMat);
+          leg.position.set(towerX, baseY + towerH / 2, towerZ);
+          leg.castShadow = true;
+          structGroup.add(leg);
+
+          // Stay cables fanning from the pylon top to the bridge deck
+          for (const cableSpan of [-5.5, -2.8, 2.8, 5.5]) {
+            const targetAlong = pylonAlong + cableSpan;
+            const tx = isZAxis ? towerX : spec.x + targetAlong;
+            const tz = isZAxis ? spec.z + targetAlong : towerZ;
+            const startVec = new THREE.Vector3(towerX, baseY + towerH - 0.6, towerZ);
+            const endVec = new THREE.Vector3(tx, baseY + 0.65, tz);
+            const cableLen = startVec.distanceTo(endVec);
+            const cableMesh = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.035, 0.035, cableLen, 6),
+              cableMat,
+            );
+            cableMesh.position.copy(startVec).lerp(endVec, 0.5);
+            cableMesh.quaternion.setFromUnitVectors(
+              new THREE.Vector3(0, 1, 0),
+              endVec.clone().sub(startVec).normalize(),
+            );
+            structGroup.add(cableMesh);
+          }
+        }
+        const crossBeam = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            isZAxis ? spec.deckWidth + 1.3 : 0.62,
+            0.52,
+            isZAxis ? 0.62 : spec.deckWidth + 1.3,
+          ),
+          guardrailMat,
+        );
+        crossBeam.position.set(pyX, baseY + towerH - 0.85, pyZ);
+        structGroup.add(crossBeam);
+      }
+    }
+
+    // Highway LED Streetlamps on the elevated span
+    for (const lampAlong of [-6, 6]) {
+      for (const side of [-1, 1]) {
+        const lx = isZAxis ? spec.x + side * (halfW + 0.22) : spec.x + lampAlong;
+        const lz = isZAxis ? spec.z + lampAlong : spec.z + side * (halfW + 0.22);
+        const deckTopY = terrainHeight(lx, lz) + spec.deckHeight + 0.14;
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.4, 8), guardrailMat);
+        pole.position.set(lx, deckTopY + 1.7, lz);
+        structGroup.add(pole);
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lampGlowMat);
+        bulb.position.set(lx, deckTopY + 3.42, lz);
+        structGroup.add(bulb);
+      }
+    }
+
+    // Overhead Highway Directional Gantry Sign Portals at both ends of the Bridge/Flyover
+    for (const endSign of [
+      { along: -halfL + 1.2, label: spec.signPositive, faceYaw: isZAxis ? 0 : -Math.PI / 2 },
+      { along: halfL - 1.2, label: spec.signNegative, faceYaw: isZAxis ? Math.PI : Math.PI / 2 },
+    ]) {
+      const gx = isZAxis ? spec.x : spec.x + endSign.along;
+      const gz = isZAxis ? spec.z + endSign.along : spec.z;
+      const gBaseY = terrainHeight(gx, gz) + 0.4;
+      const gantryH = 4.6;
+      for (const side of [-1, 1]) {
+        const postX = isZAxis ? gx + side * (halfW + 0.45) : gx;
+        const postZ = isZAxis ? gz : gz + side * (halfW + 0.45);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, gantryH, 10), guardrailMat);
+        post.position.set(postX, gBaseY + gantryH / 2, postZ);
+        post.castShadow = true;
+        structGroup.add(post);
+      }
+      const beam = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          isZAxis ? spec.deckWidth + 1.2 : 0.28,
+          0.28,
+          isZAxis ? 0.28 : spec.deckWidth + 1.2,
+        ),
+        guardrailMat,
+      );
+      beam.position.set(gx, gBaseY + gantryH, gz);
+      structGroup.add(beam);
+
+      const signTex = makeHighwayGantrySignTexture(spec.shortName, endSign.label);
+      const signMat = new THREE.MeshBasicMaterial({ map: signTex, toneMapped: false, side: THREE.DoubleSide });
+      const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.28), signMat);
+      signBoard.position.set(gx, gBaseY + gantryH - 0.1, gz);
+      signBoard.rotation.y = endSign.faceYaw;
+      structGroup.add(signBoard);
+    }
+
+    infraGroup.add(structGroup);
+  }
+
+  scene.add(infraGroup);
+  worldObstacleColliders.push(...getBridgeFlyoverGuardrailColliders());
+}
+
+createBridgesAndFlyovers();
+
 // A paved entry lane meets a quiet shared street, with a short drive to each front porch.
-addEstateRoad(28, 3.7, 14.1, 8, false);
-addEstateRoad(33, 3.7, 27, 8, true);
-for (const [x, z] of [[23.8, 1], [23.8, 17], [30.2, 1], [30.2, 17]]) {
+addEstateRoad(28, 3.7, 48.1, -24, false);
+addEstateRoad(33, 3.7, 61, -24, true);
+for (const [x, z] of [[57.8, -31], [57.8, -15], [64.2, -31], [64.2, -15]]) {
   addEstateRoad(3.1, 2.45, x, z, false);
 }
 
 const gateMaterial = new THREE.MeshStandardMaterial({ color: 0x9a8769, roughness: 0.9, flatShading: true });
-for (const z of [6.15, 9.85]) {
+for (const z of [-25.85, -22.15]) {
   const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.48, 2.9, 0.48), gateMaterial);
-  pillar.position.set(9.05, terrainHeight(9.05, z) + 1.45, z);
+  pillar.position.set(43.05, terrainHeight(43.05, z) + 1.45, z);
   pillar.castShadow = true;
   pillar.receiveShadow = true;
   scene.add(pillar);
   const cap = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.2, 0.68), estateTrimMaterial);
-  cap.position.set(9.05, terrainHeight(9.05, z) + 2.98, z);
+  cap.position.set(43.05, terrainHeight(43.05, z) + 2.98, z);
   cap.castShadow = true;
   scene.add(cap);
 }
 const gateSign = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.84, 3.45), gateMaterial);
-gateSign.position.set(9.05, terrainHeight(9.05, 8) + 2.55, 8);
+gateSign.position.set(43.05, terrainHeight(43.05, -24) + 2.55, -24);
 gateSign.castShadow = true;
 scene.add(gateSign);
 const gateSignFace = new THREE.Mesh(
   new THREE.PlaneGeometry(3.2, 0.64),
   new THREE.MeshBasicMaterial({ map: makeEstateSignTexture() }),
 );
-gateSignFace.position.set(8.89, terrainHeight(9.05, 8) + 2.55, 8);
+gateSignFace.position.set(42.89, terrainHeight(43.05, -24) + 2.55, -24);
 gateSignFace.rotation.y = -Math.PI / 2;
 scene.add(gateSignFace);
 
@@ -2868,16 +3192,16 @@ const roundabout = new THREE.Mesh(
   new THREE.CylinderGeometry(1.28, 1.48, 0.28, 24),
   new THREE.MeshStandardMaterial({ color: 0xb2a786, roughness: 0.95 }),
 );
-roundabout.position.set(27, terrainHeight(27, 8) + 0.14, 8);
+roundabout.position.set(61, terrainHeight(61, -24) + 0.14, -24);
 roundabout.receiveShadow = true;
 scene.add(roundabout);
 const roundaboutShrub = new THREE.Mesh(new THREE.IcosahedronGeometry(0.92, 1), estateShrubMaterial);
-roundaboutShrub.position.set(27, terrainHeight(27, 8) + 1.0, 8);
+roundaboutShrub.position.set(61, terrainHeight(61, -24) + 1.0, -24);
 roundaboutShrub.scale.set(1.2, 0.92, 1.1);
 roundaboutShrub.castShadow = true;
 scene.add(roundaboutShrub);
 const roundaboutFlowers = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), estateFlowerMaterials[0]);
-roundaboutFlowers.position.set(27.38, terrainHeight(27, 8) + 1.22, 7.72);
+roundaboutFlowers.position.set(61.38, terrainHeight(61, -24) + 1.22, -24.28);
 scene.add(roundaboutFlowers);
 
 for (const houseLayout of ESTATE_HOUSE_LAYOUT) {
@@ -2891,11 +3215,11 @@ if (economy.lease && !savedRentalHouse) economy.lease = null;
 setActiveResidence(savedRentalHouse || homeHouse);
 for (const venueLayout of COMMERCE_VENUE_LAYOUT) createCommerceVenue(venueLayout);
 // Keep the street lamps on the verges so they don't stand in the middle of the walking and driving lanes.
-for (const [x, z] of [[11.8, 10.3], [29.35, -5], [29.35, 21], [42.5, 10.3]]) createEstateLamp(x, z);
+for (const [x, z] of [[45.8, -21.7], [63.35, -37], [63.35, -11], [76.5, -21.7]]) createEstateLamp(x, z);
 
 // A small paved bay places your car just off the porch walk, facing out toward the lane.
-addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
-playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
+addEstateRoad(4.45, 2.5, 57.85, -34.8, false);
+playerCar = createParkedCar(57.85, -34.8, -Math.PI / 2);
 const privateTaxiState = createPrivateTaxiState();
 const privateTaxiMesh = createPrivateTaxiMesh();
 syncPrivateTaxiMesh(
@@ -2913,7 +3237,7 @@ transitNetwork = createTransportNetwork(scene, terrainHeight);
 createCommunityHall();
 createStrategicBillboards();
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 3.25, height: 2.55 });
-worldObstacleColliders.push({ vehicleGroup: transitNetwork.bus.group, radius: 2.9, height: 2.55 });
+worldObstacleColliders.push({ vehicleGroup: transitNetwork.bus.group, radius: 2.9, height: 2.55, onBridgeDeck: true });
 
 const treeLocations = [];
 const treePartInstances = {
@@ -2986,13 +3310,13 @@ function createTree(x, z, scale, type) {
 }
 
 let treeAttempts = 0;
-while (treeLocations.length < 38 && treeAttempts < 1000) {
+while (treeLocations.length < 48 && treeAttempts < 1200) {
   treeAttempts += 1;
   const angle = random() * Math.PI * 2;
-  const radius = 17 + Math.sqrt(random()) * 45;
+  const radius = 18 + Math.sqrt(random()) * 88;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
-  if (Math.hypot(x, z) > 63 || isReservedSpot(x, z)) continue;
+  if (Math.hypot(x, z) > 108 || isReservedSpot(x, z)) continue;
   createTree(x, z, 0.78 + random() * 0.53, random() < 0.82 ? 1 : 0);
 }
 
@@ -3035,12 +3359,12 @@ const rockGeometry = new THREE.DodecahedronGeometry(0.75, 0);
 const ROCK_COLORS = [0x879487, 0xa59d7e, 0x74847b];
 const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
 const rockInstances = [];
-for (let i = 0; i < 30; i += 1) {
+for (let i = 0; i < 36; i += 1) {
   const angle = random() * Math.PI * 2;
-  const radius = 14 + random() * 51;
+  const radius = 16 + random() * 90;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
-  if (radius > 65 || isReservedSpot(x, z, 1.3)) continue;
+  if (radius > 110 || isReservedSpot(x, z, 1.3)) continue;
   const color = ROCK_COLORS[Math.floor(random() * ROCK_COLORS.length)];
   const scaleX = 0.7 + random() * 0.9;
   const scaleY = 0.42 + random() * 0.5;
@@ -3501,7 +3825,7 @@ playerShadow.rotation.x = -Math.PI / 2;
 playerShadow.position.y = 0.035 - PLAYER_FOOT_OFFSET;
 player.add(playerShadow);
 
-const startPosition = new THREE.Vector3(0, groundHeightAt(0, 12), 12);
+const startPosition = new THREE.Vector3(36, groundHeightAt(36, -24), -24);
 player.position.copy(startPosition);
 // Let the player greet the camera at the trailhead, then turn naturally when movement begins.
 player.rotation.y = Math.PI - 0.28;
@@ -3875,11 +4199,13 @@ function resolveWorldObstacleCollisions() {
   const collisionHeight = isDriving ? CAR_BODY_HEIGHT : PLAYER_BODY_HEIGHT;
   for (let pass = 0; pass < 3; pass += 1) {
     let resolvedAny = false;
-    const playerBottom = jumpHeight;
-    const playerTop = playerBottom + collisionHeight;
+    const bridgeHit = getBridgeFlyoverAt(player.position.x, player.position.z, 0.35);
+    const bridgeElevation = bridgeHit ? bridgeHit.elevation : 0;
     for (const obstacle of worldObstacleColliders) {
       if (isDriving && obstacle.vehicleGroup === playerCar?.group) continue;
-      const overlapsVertically = playerBottom < obstacle.height && playerTop > 0;
+      const effectiveBottom = obstacle.onBridgeDeck ? jumpHeight : jumpHeight + bridgeElevation;
+      const effectiveTop = effectiveBottom + collisionHeight;
+      const overlapsVertically = effectiveBottom < obstacle.height && effectiveTop > 0;
       if (!overlapsVertically) continue;
       if (Number.isFinite(obstacle.halfX) && Number.isFinite(obstacle.halfZ)) {
         const contact = resolveDiscAgainstOrientedBox(player.position, obstacle, collisionRadius);
@@ -7300,6 +7626,7 @@ function updateLocationAndMap() {
   const nearbyMallLockup = getNearbyMallLockupShop();
   const insideMallBuilding = isInsideMallBuilding(x, z);
   const onMallParkingLot = !insideMallBuilding && getMallParkingSurfaceHeight(x, z, 0) !== null;
+  const activeBridgeHit = getBridgeFlyoverAt(x, z, 0.4);
   if (isInsideHome && currentResidence) {
     const local = homeWorldToLocal(x, z);
     currentHomeRoom = local.z > 0.9
@@ -7308,18 +7635,21 @@ function updateLocationAndMap() {
         ? 'Kitchen'
         : 'Living Room';
     location = `${currentHomeRoom} · House ${String(currentResidence.number).padStart(2, '0')}`;
+  } else if (activeBridgeHit) {
+    location = activeBridgeHit.structure.name;
   } else if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) location = 'Abuja Community Stadium';
-  else if (Math.hypot(x, z + 27) < 10) location = 'Unity Circle';
+  else if (Math.hypot(x - 18, z + 56) < 10) location = 'Unity Circle';
   else if (Math.hypot(x - COMMUNITY_HALL_LAYOUT.x, z - COMMUNITY_HALL_LAYOUT.z) < 10) location = 'Unity Community Hall · Governor’s Office';
   else if (nearbyMallLockup) location = `Unity Mall · ${nearbyMallLockup.shop.code} ${nearbyMallLockup.shop.name}`;
   else if (insideMallBuilding) location = 'Unity Grand Indoor Mall · Concourse';
   else if (onMallParkingLot) location = 'Unity Mall · Customer & VIP Parking Lot';
   else if (currentCommerceVenue) location = currentCommerceVenue.name;
   else if (isInsideEstate(x, z)) location = 'Unity Court';
-  else if (Math.hypot(x, z - 12) < 15) location = 'Unity Court North';
-  else if (x < -24) location = 'Western Greenway';
-  else if (x > 24) location = 'Eastern Savannah';
-  else if (z < -16) location = 'Civic Park';
+  else if (x >= 18 && z >= 38) location = 'Central Business District';
+  else if (x < -18 && z >= 38) location = 'Three Arms Government District';
+  else if (x < -24 && z < 16) location = 'Sports & Stadium District';
+  else if (x >= 18 && z < -4) location = 'Unity Court Residential District';
+  else if (z < -32) location = 'Southern Greenway Valley';
 
   const roundedX = Math.round(x);
   const roundedZ = Math.round(z);
@@ -7352,13 +7682,16 @@ function updateLocationAndMap() {
     const dest = getPrivateTaxiDestination(privateTaxiState.selectedDestinationId);
     if (interactionTarget === 'complete-private-taxi') {
       const distLeft = Math.max(1, Math.round(Math.hypot(dest.x - privateTaxiState.x, dest.z - privateTaxiState.z)));
+      const bridgeNote = privateTaxiState.activeBridgeName
+        ? ` · Crossing ${privateTaxiState.activeBridgeName}`
+        : '';
       setTextIfChanged(
         homeInteractionEyebrow,
         `ABUJA PRIVATE TAXI · EN ROUTE TO ${dest.shortName.toUpperCase()}`,
       );
       setTextIfChanged(
         homeInteractionMessage,
-        `${PRIVATE_TAXI_DRIVER.name} is driving you to ${dest.name} · ${distLeft}m remaining`,
+        `${PRIVATE_TAXI_DRIVER.name} is driving you to ${dest.name}${bridgeNote} · ${distLeft}m remaining`,
       );
       setTextIfChanged(homeInteractionAction, 'ARRIVE NOW');
       setAttributeIfChanged(homeInteractionButton, 'aria-label', `Arrive at ${dest.name} now`);
@@ -7614,6 +7947,20 @@ function drawMapCanvas(targetCanvas, ctx) {
   const mapX = (x) => centerX + (x / WORLD_RADIUS) * radius;
   const mapY = (z) => centerY + (z / WORLD_RADIUS) * radius;
 
+  // Abuja Jabi–Usuma River Waterway flowing north-south through the central valley
+  ctx.save();
+  ctx.beginPath();
+  ABUJA_RIVER_WATERWAY_POINTS.forEach(([rx, rz], index) => {
+    if (index === 0) ctx.moveTo(mapX(rx), mapY(rz));
+    else ctx.lineTo(mapX(rx), mapY(rz));
+  });
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(65, 142, 158, 0.72)';
+  ctx.lineWidth = Math.max(3.6, radius * 0.048);
+  ctx.stroke();
+  ctx.restore();
+
   const estateLeft = mapX(ESTATE_BOUNDS.minX);
   const estateTop = mapY(ESTATE_BOUNDS.minZ);
   const estateWidth = mapX(ESTATE_BOUNDS.maxX) - estateLeft;
@@ -7627,10 +7974,10 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.strokeRect(estateLeft, estateTop, estateWidth, estateHeight);
   ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.moveTo(mapX(1), mapY(8));
-  ctx.lineTo(mapX(27), mapY(8));
-  ctx.moveTo(mapX(27), mapY(-8));
-  ctx.lineTo(mapX(27), mapY(24));
+  ctx.moveTo(mapX(38), mapY(-24));
+  ctx.lineTo(mapX(61), mapY(-24));
+  ctx.moveTo(mapX(61), mapY(-40));
+  ctx.lineTo(mapX(61), mapY(-8));
   ctx.strokeStyle = 'rgba(231, 218, 177, .94)';
   ctx.lineWidth = Math.max(2, radius * 0.034);
   ctx.lineCap = 'round';
@@ -7654,6 +8001,24 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.strokeStyle = 'rgba(91, 100, 91, .86)';
     ctx.lineWidth = Math.max(1.7, radius * 0.031);
     ctx.stroke();
+
+    // Highlight the 4 Bridges & Elevated Highway Flyovers on the map
+    for (const bridge of BRIDGES_AND_FLYOVERS_LAYOUT) {
+      const halfL = bridge.length / 2;
+      const sx = bridge.axis === 'x' ? bridge.x - halfL : bridge.x;
+      const sz = bridge.axis === 'z' ? bridge.z - halfL : bridge.z;
+      const ex = bridge.axis === 'x' ? bridge.x + halfL : bridge.x;
+      const ez = bridge.axis === 'z' ? bridge.z + halfL : bridge.z;
+      ctx.beginPath();
+      ctx.moveTo(mapX(sx), mapY(sz));
+      ctx.lineTo(mapX(ex), mapY(ez));
+      ctx.strokeStyle = '#e5c478';
+      ctx.lineWidth = Math.max(3.8, radius * 0.058);
+      ctx.stroke();
+      ctx.strokeStyle = '#254a3c';
+      ctx.lineWidth = Math.max(2.0, radius * 0.032);
+      ctx.stroke();
+    }
 
     ctx.beginPath();
     transitNetwork.busMapPoints.forEach(([x, z], index) => {
@@ -7682,9 +8047,11 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.stroke();
 
     const stationMapNames = {
-      'unity-court': 'UNITY',
-      'unity-circle': 'CIVIC',
+      'unity-court': 'HOME',
+      'unity-mall': 'MALL',
+      'three-arms-hall': 'GOVT',
       'abuja-community-stadium': 'STADIUM',
+      'unity-circle': 'CIVIC',
     };
     for (const station of transitNetwork.stations) {
       const stationX = mapX(station.x);
@@ -7850,7 +8217,7 @@ function drawMapCanvas(targetCanvas, ctx) {
 
   // Civic-plaza symbol.
   ctx.beginPath();
-  ctx.arc(mapX(0), mapY(-27), Math.max(3.4, radius * 0.026), 0, Math.PI * 2);
+  ctx.arc(mapX(18), mapY(-56), Math.max(3.4, radius * 0.026), 0, Math.PI * 2);
   ctx.fillStyle = '#77b8a0';
   ctx.fill();
   ctx.strokeStyle = '#eff4d9';
@@ -8059,7 +8426,7 @@ function animate(timestamp) {
   if (!prefersReducedMotion) {
     for (const cloud of clouds) {
       cloud.position.x += cloud.userData.speed * delta;
-      if (cloud.position.x > 115) cloud.position.x = -115;
+      if (cloud.position.x > 165) cloud.position.x = -165;
     }
   }
 
@@ -8149,12 +8516,12 @@ function animate(timestamp) {
     }
 
     const planarDistance = Math.hypot(player.position.x, player.position.z);
-    if (!isRidingTransit && !isRidingPrivateTaxi && planarDistance > 88) {
-      const correction = 88 / planarDistance;
+    if (!isRidingTransit && !isRidingPrivateTaxi && planarDistance > 124) {
+      const correction = 124 / planarDistance;
       player.position.x *= correction;
       player.position.z *= correction;
-      const outwardX = player.position.x / 88;
-      const outwardZ = player.position.z / 88;
+      const outwardX = player.position.x / 124;
+      const outwardZ = player.position.z / 124;
       if (isDriving && playerCar) {
         const forwardX = -Math.sin(playerCar.group.rotation.y);
         const forwardZ = -Math.cos(playerCar.group.rotation.y);

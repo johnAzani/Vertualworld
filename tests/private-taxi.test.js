@@ -7,6 +7,7 @@ import {
   boardPrivateTaxi,
   cancelPrivateTaxi,
   completePrivateTaxiRide,
+  computePrivateTaxiWaypoints,
   createPrivateTaxiMesh,
   createPrivateTaxiState,
   getPrivateTaxiDestination,
@@ -94,7 +95,7 @@ test('private car taxi can be ordered in the phone, drives to meet the player at
   // Step the simulation until the private taxi reaches the destination (Unity Grand Indoor Mall)
   let arrivedDestEvent = null;
   let completion = null;
-  for (let step = 0; step < 120; step += 1) {
+  for (let step = 0; step < 360; step += 1) {
     const update = updatePrivateTaxi(taxiState, 0.1, {
       playerX: taxiState.x,
       playerZ: taxiState.z,
@@ -133,4 +134,48 @@ test('private taxi orders can be cancelled before boarding and support direct co
   const done = completePrivateTaxiRide(taxiState);
   assert.equal(done.ok, true);
   assert.equal(taxiState.status, 'idle');
+});
+
+test('cross-district private taxi rides route across bridges and highway flyovers', () => {
+  const home = getPrivateTaxiDestination('home');
+  const mall = getPrivateTaxiDestination('mall');
+  const hall = getPrivateTaxiDestination('hall');
+  const stadium = getPrivateTaxiDestination('stadium');
+  const extractBridges = (waypoints) => [...new Set(waypoints.map((wp) => wp.bridgeId).filter(Boolean))];
+
+  // Residential Area (SE) -> Business Area (NE) crosses Maitama–CBD Commercial Flyover
+  const homeToMallBridges = extractBridges(computePrivateTaxiWaypoints(home.x, home.z, mall.x, mall.z));
+  assert.ok(
+    homeToMallBridges.includes('cbd-flyover'),
+    'Residential to Business Area taxi route must pass through Maitama–CBD Commercial Flyover',
+  );
+
+  // Business Area (NE) -> Government Area (NW) crosses Three Arms Civic River Bridge
+  const mallToHallBridges = extractBridges(computePrivateTaxiWaypoints(mall.x, mall.z, hall.x, hall.z));
+  assert.ok(
+    mallToHallBridges.includes('civic-bridge'),
+    'Business to Government Area taxi route must pass across Three Arms Civic River Bridge',
+  );
+
+  // Residential Area (SE) -> Government Area (NW) crosses both the CBD Flyover and Three Arms Civic River Bridge
+  const homeToHallBridges = extractBridges(computePrivateTaxiWaypoints(home.x, home.z, hall.x, hall.z));
+  assert.ok(
+    homeToHallBridges.includes('cbd-flyover')
+      && homeToHallBridges.includes('civic-bridge'),
+    'Residential to Government Area taxi route must pass through both the CBD Flyover and Three Arms Civic Bridge',
+  );
+
+  // Government Area (NW) -> Stadium (SW) crosses Usuma West Viaduct Flyover
+  const hallToStadiumBridges = extractBridges(computePrivateTaxiWaypoints(hall.x, hall.z, stadium.x, stadium.z));
+  assert.ok(
+    hallToStadiumBridges.includes('west-flyover'),
+    'Government Area to Stadium taxi route must pass through Usuma West Viaduct Flyover',
+  );
+
+  // Stadium (SW) -> Residential Area (SE) crosses Constitution Stadium Bridge & Flyover
+  const stadiumToHomeBridges = extractBridges(computePrivateTaxiWaypoints(stadium.x, stadium.z, home.x, home.z));
+  assert.ok(
+    stadiumToHomeBridges.includes('stadium-flyover'),
+    'Stadium to Residential Area taxi route must pass across Constitution Stadium Bridge & Flyover',
+  );
 });

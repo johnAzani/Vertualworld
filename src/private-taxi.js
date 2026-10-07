@@ -1,74 +1,75 @@
 import * as THREE from 'three';
+import { getBridgeFlyoverAt } from './world-layout.js';
 
 export const PRIVATE_TAXI_DESTINATIONS = Object.freeze([
   Object.freeze({
     id: 'mall',
     name: 'Unity Grand Indoor Mall & Lockup Shops',
     shortName: 'Unity Grand Mall',
-    category: 'Shopping · 6 Walk-In Lockup Shops',
-    summary: 'Front Taxi Forecourt right outside the 6.2m Grand Entrance Portal',
-    x: 51.8,
-    z: 36.8,
+    category: 'Business District · 6 Walk-In Lockup Shops',
+    summary: 'Via Maitama–CBD Commercial Flyover to the Mall Front Taxi Forecourt',
+    x: 60.8,
+    z: 72.0,
     dropOffYaw: -Math.PI / 2,
   }),
   Object.freeze({
     id: 'mall-parking',
     name: 'Unity Mall Customer & VIP Parking Lot',
     shortName: 'Mall Parking Lot',
-    category: 'Mall Parking Bays VIP P-01 to P-06',
-    summary: 'Direct drop-off inside the Unity Grand Mall paved parking lot',
-    x: 60.4,
-    z: 18.8,
+    category: 'Business District · Parking Bays VIP P-01 to P-06',
+    summary: 'Via CBD Commercial Flyover directly into the Unity Mall parking lot',
+    x: 69.4,
+    z: 54.0,
     dropOffYaw: Math.PI / 2,
   }),
   Object.freeze({
     id: 'home',
     name: 'Unity Court · House 01 (Your Home)',
     shortName: 'House 01 · Unity Court',
-    category: 'Residence & Driveway',
-    summary: 'Front porch and driveway at House 01 in Unity Court',
-    x: 24.2,
-    z: 1.0,
+    category: 'Residential District · Southeast Estate',
+    summary: 'Front porch and driveway at House 01 in Unity Court Residential Estate',
+    x: 58.2,
+    z: -31.0,
     dropOffYaw: Math.PI / 2,
   }),
   Object.freeze({
     id: 'stadium',
     name: 'Abuja Community Stadium & VIP Parking',
     shortName: 'Community Stadium',
-    category: 'Live Football Arena & VIP Lounge',
-    summary: 'East Gate VIP & Matchday Parking Lot entrance',
-    x: -44.5,
-    z: 18.0,
+    category: 'Sports District · Live Football Arena & VIP Lounge',
+    summary: 'Via Constitution Stadium Bridge / West Viaduct to East Gate Parking',
+    x: -45.0,
+    z: -24.0,
     dropOffYaw: Math.PI / 2,
   }),
   Object.freeze({
     id: 'hall',
     name: 'Unity Community Hall · Governor’s Office',
     shortName: 'Governor’s Office',
-    category: 'Civic Government & Treasury',
-    summary: 'Governor’s Boulevard plaza in front of Community Hall',
-    x: 10.0,
-    z: 27.6,
+    category: 'Government District · Three Arms Civic Zone',
+    summary: 'Via Three Arms Civic River Bridge to Governor’s Boulevard Plaza',
+    x: -44.0,
+    z: 65.5,
     dropOffYaw: 0,
   }),
   Object.freeze({
     id: 'cafe',
     name: 'Civic Café · Promenade',
     shortName: 'Civic Café',
-    category: 'Coffee, Suya & Neighbourhood Social',
-    summary: 'Curbside drop-off outside Civic Café',
-    x: 35.2,
-    z: 33.0,
+    category: 'Business District · Coffee & Neighbourhood Social',
+    summary: 'Via CBD Commercial Flyover to Civic Café curbside drop-off',
+    x: 41.2,
+    z: 68.0,
     dropOffYaw: Math.PI / 2,
   }),
   Object.freeze({
     id: 'circle',
     name: 'Unity Circle · Central Fountain Plaza',
     shortName: 'Unity Circle',
-    category: 'Southern Landmark & Transit Plaza',
-    summary: 'Unity Circle overlook promenade',
-    x: 5.5,
-    z: -24.5,
+    category: 'Southern Greenway & Constitution Bridge Plaza',
+    summary: 'Unity Circle monument overlook near Constitution Bridge',
+    x: 18.0,
+    z: -53.0,
     dropOffYaw: 0,
   }),
 ]);
@@ -80,11 +81,68 @@ export const PRIVATE_TAXI_DRIVER = Object.freeze({
   rating: '4.98 ★',
 });
 
-export const PRIVATE_TAXI_APPROACH_SPEED = 12.5;
-export const PRIVATE_TAXI_RIDE_SPEED = 15.2;
+export const PRIVATE_TAXI_APPROACH_SPEED = 14.0;
+export const PRIVATE_TAXI_RIDE_SPEED = 24.0;
 export const PRIVATE_TAXI_PICKUP_STOP_DISTANCE = 3.1;
 export const PRIVATE_TAXI_BOARD_RADIUS = 5.4;
 export const PRIVATE_TAXI_DROPOFF_STOP_DISTANCE = 2.2;
+
+function getDistrictQuadrant(x, z) {
+  if (x >= 0 && z < 16) return 'se';
+  if (x >= 0 && z >= 16) return 'ne';
+  if (x < 0 && z >= 16) return 'nw';
+  return 'sw';
+}
+
+export function computePrivateTaxiWaypoints(startX, startZ, endX, endZ) {
+  const startQuad = getDistrictQuadrant(startX, startZ);
+  const endQuad = getDistrictQuadrant(endX, endZ);
+  const waypoints = [];
+
+  const addBridgeTraverse = (bridgeId, entryX, entryZ, midX, midZ, exitX, exitZ) => {
+    waypoints.push(
+      { x: entryX, z: entryZ, bridgeId },
+      { x: midX, z: midZ, bridgeId },
+      { x: exitX, z: exitZ, bridgeId },
+    );
+  };
+
+  if (startQuad !== endQuad) {
+    const key = `${startQuad}->${endQuad}`;
+    if (key === 'se->ne') {
+      addBridgeTraverse('cbd-flyover', 38, -4, 38, 16, 38, 36);
+    } else if (key === 'ne->se') {
+      addBridgeTraverse('cbd-flyover', 38, 36, 38, 16, 38, -4);
+    } else if (key === 'ne->nw') {
+      addBridgeTraverse('civic-bridge', 18, 60, -2, 60, -22, 60);
+    } else if (key === 'nw->ne') {
+      addBridgeTraverse('civic-bridge', -22, 60, -2, 60, 18, 60);
+    } else if (key === 'nw->sw') {
+      addBridgeTraverse('west-flyover', -34, 44, -34, 24, -34, 4);
+    } else if (key === 'sw->nw') {
+      addBridgeTraverse('west-flyover', -34, 4, -34, 24, -34, 44);
+    } else if (key === 'sw->se') {
+      addBridgeTraverse('stadium-flyover', -30, -46, -10, -46, 10, -46);
+    } else if (key === 'se->sw') {
+      addBridgeTraverse('stadium-flyover', 10, -46, -10, -46, -30, -46);
+    } else if (key === 'se->nw') {
+      addBridgeTraverse('cbd-flyover', 38, -4, 38, 16, 38, 36);
+      addBridgeTraverse('civic-bridge', 18, 60, -2, 60, -22, 60);
+    } else if (key === 'nw->se') {
+      addBridgeTraverse('civic-bridge', -22, 60, -2, 60, 18, 60);
+      addBridgeTraverse('cbd-flyover', 38, 36, 38, 16, 38, -4);
+    } else if (key === 'ne->sw') {
+      addBridgeTraverse('civic-bridge', 18, 60, -2, 60, -22, 60);
+      addBridgeTraverse('west-flyover', -34, 44, -34, 24, -34, 4);
+    } else if (key === 'sw->ne') {
+      addBridgeTraverse('west-flyover', -34, 4, -34, 24, -34, 44);
+      addBridgeTraverse('civic-bridge', -22, 60, -2, 60, 18, 60);
+    }
+  }
+
+  waypoints.push({ x: endX, z: endZ, bridgeId: null });
+  return waypoints;
+}
 
 export function getPrivateTaxiDestination(destinationId) {
   return (
@@ -95,33 +153,51 @@ export function getPrivateTaxiDestination(destinationId) {
 
 export function getPrivateTaxiQuote(playerX, playerZ, destinationId) {
   const destination = getPrivateTaxiDestination(destinationId);
-  const distance = Math.hypot((Number(playerX) || 0) - destination.x, (Number(playerZ) || 0) - destination.z);
-  const distanceMeters = Math.max(1, Math.round(distance));
-  const fare = Math.max(10, Math.min(45, Math.round(10 + distance * 0.28)));
-  const etaSeconds = Math.max(3, Math.round(distance / PRIVATE_TAXI_RIDE_SPEED) + 2);
+  const waypoints = computePrivateTaxiWaypoints(
+    Number(playerX) || 0,
+    Number(playerZ) || 0,
+    destination.x,
+    destination.z,
+  );
+  let totalDist = 0;
+  let prevX = Number(playerX) || 0;
+  let prevZ = Number(playerZ) || 0;
+  for (const wp of waypoints) {
+    totalDist += Math.hypot(wp.x - prevX, wp.z - prevZ);
+    prevX = wp.x;
+    prevZ = wp.z;
+  }
+  const distanceMeters = Math.max(1, Math.round(totalDist));
+  const fare = Math.max(10, Math.min(45, Math.round(10 + totalDist * 0.16)));
+  const etaSeconds = Math.max(3, Math.round(totalDist / PRIVATE_TAXI_RIDE_SPEED) + 2);
   return {
     destination,
     distanceMeters,
     fare,
     etaSeconds,
+    waypoints,
   };
 }
 
 export function createPrivateTaxiState() {
   return {
     status: 'idle', // 'idle' | 'approaching' | 'arrived' | 'en-route'
-    x: 56.4,
-    z: 21.6,
+    x: 69.4,
+    z: 54.0,
     yaw: 0,
     speed: 0,
     steering: 0,
     selectedDestinationId: PRIVATE_TAXI_DESTINATIONS[0].id,
-    pickupX: 56.4,
-    pickupZ: 21.6,
+    pickupX: 69.4,
+    pickupZ: 54.0,
     pickupLabel: 'Unity Mall Parking Lot',
     quotedFare: 0,
     farePaid: false,
     tripsCompleted: 0,
+    waypoints: [],
+    waypointIndex: 0,
+    crossedBridgeIds: [],
+    activeBridgeName: null,
   };
 }
 
@@ -146,14 +222,18 @@ export function orderPrivateTaxi(
   taxiState.pickupLabel = String(locationLabel || 'Current Location').slice(0, 48);
   taxiState.quotedFare = quote.fare;
   taxiState.farePaid = false;
+  taxiState.waypoints = [];
+  taxiState.waypointIndex = 0;
+  taxiState.crossedBridgeIds = [];
+  taxiState.activeBridgeName = null;
 
   // If the taxi is very far away (> 28m), dispatch it from an approach point ~20m away so the player sees it drive up promptly
   const currentDist = Math.hypot(taxiState.x - taxiState.pickupX, taxiState.z - taxiState.pickupZ);
   if (currentDist > 28) {
     const angle = Math.atan2(taxiState.x - taxiState.pickupX, taxiState.z - taxiState.pickupZ);
     const spawnDist = 20;
-    taxiState.x = Math.max(-78, Math.min(78, taxiState.pickupX + Math.sin(angle) * spawnDist));
-    taxiState.z = Math.max(-78, Math.min(78, taxiState.pickupZ + Math.cos(angle) * spawnDist));
+    taxiState.x = Math.max(-128, Math.min(128, taxiState.pickupX + Math.sin(angle) * spawnDist));
+    taxiState.z = Math.max(-128, Math.min(128, taxiState.pickupZ + Math.cos(angle) * spawnDist));
   }
 
   const distAfterDispatch = Math.hypot(taxiState.x - taxiState.pickupX, taxiState.z - taxiState.pickupZ);
@@ -180,6 +260,8 @@ export function cancelPrivateTaxi(taxiState) {
   taxiState.status = 'idle';
   taxiState.speed = 0;
   taxiState.steering = 0;
+  taxiState.waypoints = [];
+  taxiState.waypointIndex = 0;
   return { ok: true };
 }
 
@@ -214,12 +296,22 @@ export function boardPrivateTaxi(taxiState, economy = null, now = Date.now()) {
   }
   taxiState.farePaid = true;
   taxiState.status = 'en-route';
-  taxiState.speed = PRIVATE_TAXI_RIDE_SPEED;
+  taxiState.waypoints = computePrivateTaxiWaypoints(
+    taxiState.x,
+    taxiState.z,
+    destination.x,
+    destination.z,
+  );
+  taxiState.waypointIndex = 0;
+  taxiState.crossedBridgeIds = [];
+  taxiState.activeBridgeName = null;
+  taxiState.speed = Math.max(PRIVATE_TAXI_RIDE_SPEED, quote.distanceMeters / 6.2);
   return {
     ok: true,
     destination,
     chargedFare,
     courtesyRide: chargedFare === 0,
+    waypoints: taxiState.waypoints,
   };
 }
 
@@ -228,12 +320,20 @@ export function completePrivateTaxiRide(taxiState) {
     return { ok: false, reason: 'not-en-route' };
   }
   const destination = getPrivateTaxiDestination(taxiState.selectedDestinationId);
+  if (Array.isArray(taxiState.waypoints)) {
+    for (const wp of taxiState.waypoints) {
+      if (wp.bridgeId && !taxiState.crossedBridgeIds.includes(wp.bridgeId)) {
+        taxiState.crossedBridgeIds.push(wp.bridgeId);
+      }
+    }
+  }
   taxiState.x = destination.x;
   taxiState.z = destination.z;
   taxiState.yaw = destination.dropOffYaw;
   taxiState.speed = 0;
   taxiState.steering = 0;
   taxiState.status = 'idle';
+  taxiState.activeBridgeName = null;
   taxiState.tripsCompleted = (taxiState.tripsCompleted || 0) + 1;
 
   // Compute safe passenger exit point right beside the taxi door
@@ -245,6 +345,7 @@ export function completePrivateTaxiRide(taxiState) {
     exitX: destination.x + exitOffsetX,
     exitZ: destination.z + exitOffsetZ,
     exitYaw: destination.dropOffYaw,
+    crossedBridgeIds: [...(taxiState.crossedBridgeIds || [])],
   };
 }
 
@@ -282,27 +383,63 @@ export function updatePrivateTaxi(
     }
   } else if (taxiState.status === 'en-route') {
     const destination = getPrivateTaxiDestination(taxiState.selectedDestinationId);
-    const dx = destination.x - taxiState.x;
-    const dz = destination.z - taxiState.z;
-    const dist = Math.hypot(dx, dz);
-
-    if (dist <= PRIVATE_TAXI_DROPOFF_STOP_DISTANCE) {
-      const completion = completePrivateTaxiRide(taxiState);
-      event = 'arrived-at-destination';
-      if (taxiMesh) {
-        syncPrivateTaxiMesh(taxiState, taxiMesh, dt, groundHeightAt);
-      }
-      return { event, completion };
+    if (!Array.isArray(taxiState.waypoints) || taxiState.waypoints.length === 0) {
+      taxiState.waypoints = computePrivateTaxiWaypoints(
+        taxiState.x,
+        taxiState.z,
+        destination.x,
+        destination.z,
+      );
+      taxiState.waypointIndex = 0;
     }
 
-    const targetYaw = Math.atan2(-dx, -dz);
-    const angleDiff = Math.atan2(Math.sin(targetYaw - taxiState.yaw), Math.cos(targetYaw - taxiState.yaw));
-    taxiState.yaw += angleDiff * Math.min(1, dt * 9.0);
-    taxiState.steering = Math.max(-0.42, Math.min(0.42, angleDiff * 0.7));
-    const stepDist = Math.min(dist, PRIVATE_TAXI_RIDE_SPEED * dt);
-    taxiState.x += (dx / dist) * stepDist;
-    taxiState.z += (dz / dist) * stepDist;
-    taxiState.speed = PRIVATE_TAXI_RIDE_SPEED;
+    const rideSpeed = Math.max(PRIVATE_TAXI_RIDE_SPEED, Number(taxiState.speed) || PRIVATE_TAXI_RIDE_SPEED);
+    let remainingMove = rideSpeed * dt;
+
+    while (remainingMove > 0 && taxiState.waypointIndex < taxiState.waypoints.length) {
+      const wp = taxiState.waypoints[taxiState.waypointIndex];
+      const isFinal = taxiState.waypointIndex === taxiState.waypoints.length - 1;
+      const dx = wp.x - taxiState.x;
+      const dz = wp.z - taxiState.z;
+      const dist = Math.hypot(dx, dz);
+
+      if (wp.bridgeId && !taxiState.crossedBridgeIds.includes(wp.bridgeId)) {
+        taxiState.crossedBridgeIds.push(wp.bridgeId);
+      }
+
+      if (isFinal && dist <= PRIVATE_TAXI_DROPOFF_STOP_DISTANCE) {
+        const completion = completePrivateTaxiRide(taxiState);
+        event = 'arrived-at-destination';
+        if (taxiMesh) {
+          syncPrivateTaxiMesh(taxiState, taxiMesh, dt, groundHeightAt);
+        }
+        return { event, completion };
+      }
+
+      if (!isFinal && dist <= remainingMove) {
+        taxiState.x = wp.x;
+        taxiState.z = wp.z;
+        remainingMove -= dist;
+        taxiState.waypointIndex += 1;
+        continue;
+      }
+
+      const targetYaw = Math.atan2(-dx, -dz);
+      const angleDiff = Math.atan2(Math.sin(targetYaw - taxiState.yaw), Math.cos(targetYaw - taxiState.yaw));
+      taxiState.yaw += angleDiff * Math.min(1, dt * 10.0);
+      taxiState.steering = Math.max(-0.42, Math.min(0.42, angleDiff * 0.7));
+      const stepDist = Math.min(dist, remainingMove);
+      taxiState.x += (dx / dist) * stepDist;
+      taxiState.z += (dz / dist) * stepDist;
+      remainingMove = 0;
+    }
+
+    const bridgeHit = getBridgeFlyoverAt(taxiState.x, taxiState.z, 1.2);
+    taxiState.activeBridgeName = bridgeHit ? bridgeHit.structure.name : null;
+    if (bridgeHit && !taxiState.crossedBridgeIds.includes(bridgeHit.structure.id)) {
+      taxiState.crossedBridgeIds.push(bridgeHit.structure.id);
+    }
+    taxiState.speed = rideSpeed;
   } else {
     taxiState.speed = 0;
     taxiState.steering = 0;

@@ -1,56 +1,80 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { getBridgeFlyoverSurfaceHeight } from './world-layout.js';
 
 export const BUS_ROUTE_XZ = [
-  [44, 8], [44, 26], [47, 26], [47, 33], [47, 40], [36, 40], [36, 26], [24, 26], [14, 26], [5, 26], [5, 8], [8, 5],
-  [7, -2], [7, -10], [7, -18], [7, -25], [7, -29],
-  [-4, -32], [-17, -34], [-30, -31], [-42, -24], [-50, -15],
-  [-53, -5], [-54, 6], [-53.5, 18],
+  [38, -32], [38, -24], [38, -14],
+  [38, -4], [38, 6], [38, 16], [38, 26], [38, 36],
+  [38, 48], [38, 56], [48, 56], [48, 68], [48, 78],
+  [36, 78], [26, 78], [26, 66], [26, 60],
+  [18, 60], [8, 60], [-2, 60], [-12, 60], [-22, 60],
+  [-34, 60], [-44, 60], [-44, 52], [-34, 52],
+  [-34, 44], [-34, 34], [-34, 24], [-34, 14], [-34, 4],
+  [-34, -8], [-34, -24], [-34, -38], [-34, -46],
+  [-30, -46], [-20, -46], [-10, -46], [0, -46], [10, -46],
+  [18, -46], [26, -46],
 ];
 
 export const RAIL_ROUTE_XZ = [
-  [44, 8], [44, -7], [44, -12], [38, -16], [31, -10], [20, -19], [10, -26], [3, -29],
-  [-8, -31], [-21, -29], [-34, -23], [-46, -14], [-54, -4],
-  [-57, 7], [-57, 18], [-58, 30], [-49, 41], [-34, 46],
-  [-16, 45], [3, 39], [22, 42], [43, 42], [47, 33], [51, 23], [54, 16],
+  [42, -24], [40, -38], [30, -48], [18, -50],
+  [0, -54], [-18, -44], [-30, -24], [-32, 0],
+  [-34, 24], [-38, 44], [-44, 56], [-30, 68],
+  [-6, 74], [20, 82], [44, 82], [52, 68],
+  [47, 56], [42, 36], [38, 16], [41, -4],
 ];
 
 export const STATION_LAYOUT = [
   {
     id: 'unity-court',
     name: 'Unity Court',
-    railPoint: [44, 8],
+    railPoint: [42, -24],
     platformSide: 1,
-    accessPoint: [43, 8],
+    accessPoint: [39.2, -24],
   },
   {
-    id: 'unity-circle',
-    name: 'Unity Circle',
-    railPoint: [3, -29],
+    id: 'unity-mall',
+    name: 'Unity Grand Mall',
+    railPoint: [52, 68],
+    platformSide: 1,
+    accessPoint: [49.2, 68],
+  },
+  {
+    id: 'three-arms-hall',
+    name: 'Unity Community Hall',
+    railPoint: [-44, 56],
     platformSide: -1,
-    accessPoint: [6, -27.5],
+    accessPoint: [-44, 58.6],
   },
   {
     id: 'abuja-community-stadium',
     name: 'Abuja Community Stadium',
-    railPoint: [-57, 18],
-    platformSide: 1,
-    accessPoint: [-53.5, 18],
+    railPoint: [-30, -24],
+    platformSide: -1,
+    accessPoint: [-32.6, -24],
+  },
+  {
+    id: 'unity-circle',
+    name: 'Unity Circle',
+    railPoint: [18, -50],
+    platformSide: -1,
+    accessPoint: [18, -47.4],
   },
 ];
 
 export const BUS_TERMINAL_LAYOUT = [
-  { id: 'unity-court-bus', name: 'Unity Court', roadPoint: [44, 8], terminalPoint: [48, 0] },
-  { id: 'unity-circle-bus', name: 'Unity Circle', roadPoint: [7, -29], terminalPoint: [12, -34] },
-  { id: 'abuja-community-stadium-bus', name: 'Abuja Community Stadium', roadPoint: [-53.5, 18], terminalPoint: [-57, 27] },
+  { id: 'unity-court-bus', name: 'Unity Court', roadPoint: [38, -24], terminalPoint: [32, -29] },
+  { id: 'unity-mall-bus', name: 'Unity Grand Mall', roadPoint: [48, 68], terminalPoint: [42, 62] },
+  { id: 'three-arms-hall-bus', name: 'Unity Community Hall', roadPoint: [-44, 60], terminalPoint: [-51, 63] },
+  { id: 'abuja-community-stadium-bus', name: 'Abuja Community Stadium', roadPoint: [-34, -24], terminalPoint: [-39, -15] },
+  { id: 'unity-circle-bus', name: 'Unity Circle', roadPoint: [18, -46], terminalPoint: [24, -52] },
 ];
 
 const ROAD_HALF_WIDTH = 2.35;
 const ROAD_SURFACE_OFFSET = 0.115;
 const TRACK_HALF_WIDTH = 1.25;
 const RAIL_GAUGE_HALF_WIDTH = 0.68;
-const TRAIN_SPEED = 7.2;
-const BUS_SPEED = 8.8;
+const TRAIN_SPEED = 10.5;
+const BUS_SPEED = 12.2;
 const STATION_DWELL_SECONDS = 6.5;
 const BUS_TERMINAL_DWELL_SECONDS = 7.5;
 const TRAIN_LENGTH = 6.3;
@@ -60,13 +84,12 @@ const TRAIN_WHEEL_RADIUS = 0.29;
 export const ROAD_NETWORK_LAYOUT = [
   { points: BUS_ROUTE_XZ, halfWidth: ROAD_HALF_WIDTH, centerline: true },
   {
-    points: [[44, 8], [36, 8], [28, 8], [20, 8], [13, 8], [8, 5]],
+    points: [[26, -46], [38, -46], [38, -32]],
     halfWidth: ROAD_HALF_WIDTH,
     centerline: true,
   },
-  { points: [[36, 26], [44, 26]], halfWidth: 1.78 },
-  { points: [[44, 26], [44, 40]], halfWidth: 1.78 },
-  { points: [[36, 33], [47, 33]], halfWidth: 1.78 },
+  { points: [[48, 56], [56, 56], [56, 72], [48, 78]], halfWidth: 1.95 },
+  { points: [[26, 60], [38, 56]], halfWidth: 1.78 },
 ];
 
 function addBox(parent, width, height, depth, material, x, y, z, castShadow = true, receiveShadow = true) {
@@ -661,6 +684,11 @@ function addBus(scene) {
 export function createTransportNetwork(scene, terrainHeight) {
   const roadCurve = createPlanarCurve(BUS_ROUTE_XZ, false);
   const railCurve = createPlanarCurve(RAIL_ROUTE_XZ, true);
+  const roadTerrainHeight = (x, z) => {
+    const base = terrainHeight(x, z);
+    const bridgeY = getBridgeFlyoverSurfaceHeight(x, z, base);
+    return bridgeY !== null ? bridgeY - ROAD_SURFACE_OFFSET : base;
+  };
   const asphalt = new THREE.MeshStandardMaterial({ color: 0x59615d, roughness: 0.94, metalness: 0.01 });
   const roadEdge = new THREE.MeshStandardMaterial({ color: 0xd2c7a2, roughness: 0.88 });
   const centerPaint = new THREE.MeshBasicMaterial({ color: 0xe6d39e, toneMapped: false });
@@ -679,10 +707,10 @@ export function createTransportNetwork(scene, terrainHeight) {
   const roadSegments = [];
   const roadMapLines = [];
   for (const roadPath of roadPathCurves) {
-    const segmentCount = Math.max(24, Math.ceil(roadPath.curve.getLength() * 1.5));
+    const segmentCount = Math.max(48, Math.ceil(roadPath.curve.getLength() * 2.2));
     roadGeometryParts.push(createRibbonGeometry(
       roadPath.curve,
-      terrainHeight,
+      roadTerrainHeight,
       segmentCount,
       roadPath.halfWidth,
       ROAD_SURFACE_OFFSET,
@@ -690,7 +718,7 @@ export function createTransportNetwork(scene, terrainHeight) {
     for (const side of [-1, 1]) {
       roadEdgeGeometryParts.push(createRibbonGeometry(
         roadPath.curve,
-        terrainHeight,
+        roadTerrainHeight,
         segmentCount,
         0.055,
         ROAD_SURFACE_OFFSET + 0.012,
@@ -698,11 +726,11 @@ export function createTransportNetwork(scene, terrainHeight) {
       ));
     }
     if (roadPath.centerline) {
-      roadMarkingGeometryParts.push(createDashedLineGeometry(roadPath.curve, terrainHeight));
+      roadMarkingGeometryParts.push(createDashedLineGeometry(roadPath.curve, roadTerrainHeight));
     }
     roadSegments.push(...createSurfaceSegments(
       roadPath.curve,
-      terrainHeight,
+      roadTerrainHeight,
       segmentCount,
       roadPath.halfWidth,
       ROAD_SURFACE_OFFSET,
@@ -838,6 +866,7 @@ export function createTransportNetwork(scene, terrainHeight) {
     roadCurve,
     railCurve,
     terrainHeight,
+    roadTerrainHeight,
     roadPoints: BUS_ROUTE_XZ,
     roadMapPoints,
     roadMapLines,
@@ -890,7 +919,8 @@ function updateBusPosition(network, distanceDelta) {
   const point = network.roadCurve.getPointAt(fraction);
   const tangent = network.roadCurve.getTangentAt(fraction).multiplyScalar(service.direction);
   const bus = network.bus;
-  bus.group.position.set(point.x, network.terrainHeight(point.x, point.z) + 0.24, point.z);
+  const roadHeightFn = network.roadTerrainHeight || network.terrainHeight;
+  bus.group.position.set(point.x, roadHeightFn(point.x, point.z) + 0.24, point.z);
   bus.group.rotation.y = Math.atan2(-tangent.x, -tangent.z);
   if (distanceDelta !== 0) {
     const rotationDelta = distanceDelta / 0.31;

@@ -4,8 +4,8 @@ import * as THREE from 'three';
 export const ABUJA_HORIZON = Object.freeze({
   landmark: Object.freeze({
     name: 'Aso Rock — distant stylised landmark',
-    x: 18,
-    z: -154,
+    x: 24,
+    z: -210,
     baseY: -0.72,
     height: 46,
     radius: 21,
@@ -109,11 +109,11 @@ export function createAbujaLandscape() {
   const ridgeGeometry = new THREE.DodecahedronGeometry(1, 0);
   const ridgeMaterial = new THREE.MeshStandardMaterial({ color: 0x8d8061, roughness: 1, flatShading: true });
   const ridgeLayout = [
-    { x: -150, z: -115, width: 52, height: 13, depth: 30, rotation: 0.18 },
-    { x: 133, z: -106, width: 48, height: 10, depth: 28, rotation: -0.34 },
-    { x: 161, z: 42, width: 59, height: 12, depth: 32, rotation: 0.42 },
-    { x: -130, z: 145, width: 55, height: 11, depth: 31, rotation: -0.22 },
-    { x: 72, z: 178, width: 47, height: 9, depth: 26, rotation: 0.61 },
+    { x: -195, z: -155, width: 58, height: 14, depth: 32, rotation: 0.18 },
+    { x: 185, z: -145, width: 54, height: 11, depth: 30, rotation: -0.34 },
+    { x: 205, z: 54, width: 64, height: 13, depth: 34, rotation: 0.42 },
+    { x: -180, z: 185, width: 60, height: 12, depth: 33, rotation: -0.22 },
+    { x: 96, z: 215, width: 52, height: 10, depth: 28, rotation: 0.61 },
   ];
   const ridges = new THREE.InstancedMesh(ridgeGeometry, ridgeMaterial, ridgeLayout.length);
   const transform = new THREE.Object3D();

@@ -11,7 +11,9 @@ import {
   STATION_LAYOUT,
 } from '../src/transport.js';
 import {
+  ABUJA_RIVER_WATERWAY_POINTS,
   BILLBOARD_LAYOUT,
+  BRIDGES_AND_FLYOVERS_LAYOUT,
   COMMUNITY_HALL_LAYOUT,
   COMMERCE_VENUE_COLLIDER,
   COMMERCE_VENUE_LAYOUT,
@@ -20,6 +22,9 @@ import {
   ESTATE_HOUSE_SIZE,
   MALL_LOCKUP_SHOP_LAYOUT,
   MALL_SHOP_BAY_LAYOUT,
+  getBridgeFlyoverAt,
+  getBridgeFlyoverGuardrailColliders,
+  getBridgeFlyoverSurfaceHeight,
   getMallIndoorWallColliders,
   getMallLockupShopAt,
   isInsideMallBuilding,
@@ -220,10 +225,86 @@ test('rail stations and bus terminals remain connected at the shared road stops'
     assert.ok(accessDistance <= 2, `${station.name} rail walkway must meet its bus-stop paving`);
   }
 
-  const crossing = [47, 33];
-  const roadDistance = Math.min(...busSamples.map((point) => Math.hypot(point.x - crossing[0], point.z - crossing[1])));
-  const railDistance = Math.min(...railSamples.map((point) => Math.hypot(point.x - crossing[0], point.z - crossing[1])));
-  assert.ok(roadDistance <= 0.2 && railDistance <= 0.2, 'the north-east road/rail crossing should meet at the marked junction');
+  const riverCurve = createPlanarCurve(ABUJA_RIVER_WATERWAY_POINTS, false);
+  const riverSamples = Array.from({ length: 2001 }, (_, index) => riverCurve.getPointAt(index / 2000));
+
+  for (const structure of BRIDGES_AND_FLYOVERS_LAYOUT) {
+    const roadDistance = Math.min(
+      ...busSamples.map((point) => Math.hypot(point.x - structure.x, point.z - structure.z)),
+    );
+    assert.ok(roadDistance <= 0.2, `${structure.name} should sit directly on the main bus highway`);
+    if (structure.kind === 'flyover') {
+      const railDistance = Math.min(
+        ...railSamples.map((point) => Math.hypot(point.x - structure.x, point.z - structure.z)),
+      );
+      assert.ok(railDistance <= 0.2, `${structure.name} should cross directly above the rail corridor`);
+    }
+    if (structure.kind === 'bridge') {
+      const riverDistance = Math.min(
+        ...riverSamples.map((point) => Math.hypot(point.x - structure.x, point.z - structure.z)),
+      );
+      assert.ok(riverDistance <= 0.3, `${structure.name} should span the Abuja river waterway`);
+    }
+  }
+});
+
+test('residential area, business area, and government area are far apart in distinct districts connected by bridges and flyovers', () => {
+  const mall = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
+  const cafe = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'cafe');
+  assert.ok(mall && cafe);
+
+  // Pairwise separation between Residential Area, Business Area, and Government Area
+  for (const house of ESTATE_HOUSE_LAYOUT) {
+    const distToMall = Math.hypot(house.x - mall.x, house.z - mall.z);
+    const distToCafe = Math.hypot(house.x - cafe.x, house.z - cafe.z);
+    const distToGov = Math.hypot(house.x - COMMUNITY_HALL_LAYOUT.x, house.z - COMMUNITY_HALL_LAYOUT.z);
+    assert.ok(
+      distToMall >= 85 && distToCafe >= 80,
+      `House ${house.number} in the Residential Area must be far from the Business Area (got ${distToMall.toFixed(1)}m / ${distToCafe.toFixed(1)}m)`,
+    );
+    assert.ok(
+      distToGov >= 120,
+      `House ${house.number} in the Residential Area must be far from the Government Area (got ${distToGov.toFixed(1)}m)`,
+    );
+  }
+
+  const businessToGovDistance = Math.hypot(
+    mall.x - COMMUNITY_HALL_LAYOUT.x,
+    mall.z - COMMUNITY_HALL_LAYOUT.z,
+  );
+  assert.ok(
+    businessToGovDistance >= 100,
+    `Business Area (Unity Mall) must be far from the Government Area (got ${businessToGovDistance.toFixed(1)}m)`,
+  );
+
+  // Verify all 4 bridges and flyovers provide smooth elevated ramp-to-deck height and side guardrails
+  assert.equal(BRIDGES_AND_FLYOVERS_LAYOUT.length, 4);
+  for (const bridge of BRIDGES_AND_FLYOVERS_LAYOUT) {
+    const centerHit = getBridgeFlyoverAt(bridge.x, bridge.z);
+    assert.ok(centerHit, `${bridge.name} should be detected at its centre`);
+    assert.equal(centerHit.onMainSpan, true);
+    assert.ok(centerHit.elevation >= 3.4, `${bridge.name} deck should rise at least 3.4m above terrain`);
+
+    const centerSurfaceY = getBridgeFlyoverSurfaceHeight(bridge.x, bridge.z, 1.0);
+    assert.ok(
+      Math.abs(centerSurfaceY - (1.0 + bridge.deckHeight)) < 1e-6,
+      `${bridge.name} surface height should add deckHeight (${bridge.deckHeight}m) to base terrain`,
+    );
+
+    // Mid-ramp check
+    const midRampOffset = bridge.length / 2 - bridge.rampLength / 2;
+    const rampX = bridge.axis === 'x' ? bridge.x + midRampOffset : bridge.x;
+    const rampZ = bridge.axis === 'z' ? bridge.z + midRampOffset : bridge.z;
+    const rampHit = getBridgeFlyoverAt(rampX, rampZ);
+    assert.ok(rampHit && rampHit.onRamp, `${bridge.name} approach ramp should be detected`);
+    assert.ok(
+      rampHit.elevation > 0.5 && rampHit.elevation < bridge.deckHeight - 0.5,
+      `${bridge.name} ramp should smoothly interpolate height (got ${rampHit.elevation.toFixed(2)}m)`,
+    );
+  }
+
+  const guardrails = getBridgeFlyoverGuardrailColliders();
+  assert.equal(guardrails.length, BRIDGES_AND_FLYOVERS_LAYOUT.length * 2);
 });
 
 test('walking collision keeps the player outside rotated house walls', () => {

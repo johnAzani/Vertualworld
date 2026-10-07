@@ -176,13 +176,13 @@ export const DAILY_CITY_EVENTS = Object.freeze([
 ]);
 
 export const DAILY_GOLDEN_SEED_SPOTS = Object.freeze([
-  Object.freeze({ id: 'unity-circle', name: 'Unity Circle Beacon', hint: 'Beside the glowing Unity Circle plaza south of town', x: 0, z: -23.5 }),
-  Object.freeze({ id: 'cafe-terrace', name: 'Civic Café Terrace', hint: 'Near the warm lantern steps outside Civic Café', x: -12.5, z: -8.5 }),
-  Object.freeze({ id: 'mall-plaza', name: 'Unity Mall Promenade', hint: 'In front of the Unity Mall showcase windows', x: 13.5, z: -8.5 }),
-  Object.freeze({ id: 'hall-steps', name: 'Unity Community Hall Steps', hint: 'By the civic forecourt at Unity Community Hall', x: -16.5, z: -24.5 }),
-  Object.freeze({ id: 'stadium-gate', name: 'Abuja Stadium East Gate', hint: 'Outside the East Stand entrance at Abuja Community Stadium', x: 35.5, z: -16.5 }),
-  Object.freeze({ id: 'court-roundabout', name: 'Unity Court Roundabout', hint: 'At the planted roundabout in the heart of Unity Court', x: 0, z: 16.5 }),
-  Object.freeze({ id: 'greenway-overlook', name: 'Civic Greenway Overlook', hint: 'Along the central trail between Unity Court and the shops', x: 4.5, z: -2.5 }),
+  Object.freeze({ id: 'unity-circle', name: 'Unity Circle Beacon', hint: 'Beside the glowing Unity Circle plaza south of Constitution Bridge', x: 18.0, z: -52.5 }),
+  Object.freeze({ id: 'cafe-terrace', name: 'Civic Café Terrace', hint: 'Near the warm lantern steps outside Civic Café in the Business District', x: 40.5, z: 68.0 }),
+  Object.freeze({ id: 'mall-plaza', name: 'Unity Mall Promenade', hint: 'In front of the Unity Grand Indoor Mall entrance in the Business District', x: 58.0, z: 72.0 }),
+  Object.freeze({ id: 'hall-steps', name: 'Unity Community Hall Steps', hint: 'By the civic forecourt at Unity Community Hall in the Government Area', x: -44.0, z: 66.5 }),
+  Object.freeze({ id: 'stadium-gate', name: 'Abuja Stadium East Gate', hint: 'Outside the East Stand entrance at Abuja Community Stadium', x: -46.5, z: -24.0 }),
+  Object.freeze({ id: 'court-roundabout', name: 'Unity Court Roundabout', hint: 'At the planted roundabout in the heart of Unity Court Residential Estate', x: 61.0, z: -20.5 }),
+  Object.freeze({ id: 'greenway-overlook', name: 'Three Arms Bridge Overlook', hint: 'Near the Three Arms Civic River Bridge connecting the Business and Government areas', x: -2.0, z: 54.0 }),
 ]);
 
 const SPOTLIGHT_CONTRACTS = Object.freeze({

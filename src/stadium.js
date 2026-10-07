@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { computeWalkCyclePose } from './walk-cycle.js';
 
 export const STADIUM_CONFIG = Object.freeze({
-  x: -32,
-  z: 18,
+  x: -68,
+  z: -24,
   level: 0.32,
   fieldHalfX: 11.5,
   fieldHalfZ: 14.5,

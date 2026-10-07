@@ -2,8 +2,8 @@ export const NEIGHBOURHOOD_NAME = 'Unity Court';
 export const COMMUNITY_HALL_LAYOUT = Object.freeze({
   id: 'community-hall',
   name: 'Unity Community Hall',
-  x: 10,
-  z: 34,
+  x: -44,
+  z: 72,
   facing: 0,
   width: 6.6,
   depth: 5.4,
@@ -15,10 +15,10 @@ export const ESTATE_HOUSE_SIZE = Object.freeze({ width: 8.2, depth: 8.2 });
 export const ESTATE_HOUSE_COLLISION_MARGIN = 0.22;
 
 export const ESTATE_HOUSE_LAYOUT = Object.freeze([
-  Object.freeze({ number: 1, x: 18, z: 1, facing: -Math.PI / 2 }),
-  Object.freeze({ number: 2, x: 18, z: 17, facing: -Math.PI / 2 }),
-  Object.freeze({ number: 3, x: 36, z: 1, facing: Math.PI / 2 }),
-  Object.freeze({ number: 4, x: 36, z: 17, facing: Math.PI / 2 }),
+  Object.freeze({ number: 1, x: 52, z: -31, facing: -Math.PI / 2 }),
+  Object.freeze({ number: 2, x: 52, z: -15, facing: -Math.PI / 2 }),
+  Object.freeze({ number: 3, x: 70, z: -31, facing: Math.PI / 2 }),
+  Object.freeze({ number: 4, x: 70, z: -15, facing: Math.PI / 2 }),
 ]);
 
 export const COMMERCE_VENUE_SIZE = Object.freeze({ width: 8.2, depth: 6.4 });
@@ -36,8 +36,8 @@ export const COMMERCE_VENUE_LAYOUT = Object.freeze([
     kind: 'cafe',
     name: 'Civic Café',
     sign: 'CIVIC CAFE',
-    x: 29,
-    z: 33,
+    x: 35,
+    z: 68,
     facing: -Math.PI / 2,
     width: COMMERCE_VENUE_SIZE.width,
     depth: COMMERCE_VENUE_SIZE.depth,
@@ -51,8 +51,8 @@ export const COMMERCE_VENUE_LAYOUT = Object.freeze([
     kind: 'mall',
     name: 'Unity Mall',
     sign: 'UNITY GRAND INDOOR MALL',
-    x: 63.0,
-    z: 36.8,
+    x: 72.0,
+    z: 72.0,
     facing: Math.PI / 2,
     width: 25.2,
     depth: 17.2,
@@ -428,11 +428,11 @@ export const BILLBOARD_LAYOUT = Object.freeze([
   Object.freeze({
     id: 'billboard-mall',
     code: 'BB-01',
-    name: 'Unity Mall Junction Megaboard',
-    corridor: 'Commerce Promenade & Rail Crossing',
+    name: 'Unity Mall & CBD Flyover Megaboard',
+    corridor: 'Central Business District & CBD Flyover',
     locationLabel: 'Unity Mall Approach',
-    x: 52.8,
-    z: 25.4,
+    x: 60.5,
+    z: 50.0,
     facing: -Math.PI * 0.72,
     boardWidth: 5.8,
     boardHeight: 2.9,
@@ -455,10 +455,10 @@ export const BILLBOARD_LAYOUT = Object.freeze([
     id: 'billboard-civic',
     code: 'BB-02',
     name: 'Governor’s Boulevard Spectacular',
-    corridor: 'Unity Community Hall & Civic Café',
-    locationLabel: 'Civic Boulevard North',
-    x: 18.2,
-    z: 31.8,
+    corridor: 'Three Arms Bridge & Government Zone',
+    locationLabel: 'Three Arms Civic Bridge',
+    x: -25.0,
+    z: 52.0,
     facing: Math.PI,
     boardWidth: 5.4,
     boardHeight: 2.7,
@@ -481,10 +481,10 @@ export const BILLBOARD_LAYOUT = Object.freeze([
     id: 'billboard-estate',
     code: 'BB-03',
     name: 'Unity Court Transit Gateway Board',
-    corridor: 'Unity Court Avenue & Homes Hub',
+    corridor: 'Unity Court Residential Estate & Flyover',
     locationLabel: 'Unity Court Boulevard',
-    x: 27.2,
-    z: 12.6,
+    x: 47.0,
+    z: -12.0,
     facing: Math.PI,
     boardWidth: 5.4,
     boardHeight: 2.7,
@@ -507,10 +507,10 @@ export const BILLBOARD_LAYOUT = Object.freeze([
     id: 'billboard-circle',
     code: 'BB-04',
     name: 'Unity Circle Monumental Unipole',
-    corridor: 'Unity Circle Plaza & South Transit Hub',
+    corridor: 'Constitution Bridge & Unity Circle Plaza',
     locationLabel: 'Unity Circle Overlook',
-    x: 16.5,
-    z: -31.5,
+    x: 18.0,
+    z: -38.0,
     facing: -Math.PI * 0.72,
     boardWidth: 5.8,
     boardHeight: 2.85,
@@ -533,10 +533,10 @@ export const BILLBOARD_LAYOUT = Object.freeze([
     id: 'billboard-stadium',
     code: 'BB-05',
     name: 'Abuja Stadium Matchday Megaboard',
-    corridor: 'Abuja Community Stadium & West Hub',
+    corridor: 'Abuja Community Stadium & West Viaduct',
     locationLabel: 'Stadium Concourse Approach',
-    x: -46.8,
-    z: 16.2,
+    x: -42.5,
+    z: -16.0,
     facing: -Math.PI * 0.42,
     boardWidth: 6.2,
     boardHeight: 3.0,
@@ -556,4 +556,134 @@ export const BILLBOARD_LAYOUT = Object.freeze([
     }),
   }),
 ]);
+
+export const ABUJA_RIVER_WATERWAY_POINTS = Object.freeze([
+  Object.freeze([-2, 118]),
+  Object.freeze([-2, 60]),
+  Object.freeze([-4, 18]),
+  Object.freeze([-7, -18]),
+  Object.freeze([-10, -46]),
+  Object.freeze([-12, -118]),
+]);
+
+export const BRIDGES_AND_FLYOVERS_LAYOUT = Object.freeze([
+  Object.freeze({
+    id: 'cbd-flyover',
+    name: 'Maitama–CBD Commercial Flyover',
+    shortName: 'CBD Commercial Flyover',
+    kind: 'flyover',
+    connectsLabel: 'Residential Area (Unity Court) ↔ Business Area (Unity Grand Mall & Café)',
+    x: 38,
+    z: 16,
+    axis: 'z',
+    length: 40,
+    rampLength: 10,
+    deckWidth: 6.4,
+    deckHeight: 3.8,
+    signPositive: '↑ BUSINESS AREA · UNITY MALL & CAFÉ',
+    signNegative: '↑ RESIDENTIAL AREA · UNITY COURT',
+  }),
+  Object.freeze({
+    id: 'civic-bridge',
+    name: 'Three Arms Civic River Bridge',
+    shortName: 'Three Arms Civic Bridge',
+    kind: 'bridge',
+    connectsLabel: 'Business Area (Unity Mall & Café) ↔ Government Area (Governor’s Office)',
+    x: -2,
+    z: 60,
+    axis: 'x',
+    length: 40,
+    rampLength: 10,
+    deckWidth: 6.4,
+    deckHeight: 3.5,
+    signPositive: '→ BUSINESS AREA · UNITY GRAND MALL',
+    signNegative: '← GOVERNMENT AREA · GOVERNOR’S OFFICE',
+  }),
+  Object.freeze({
+    id: 'west-flyover',
+    name: 'Usuma West Viaduct Flyover',
+    shortName: 'Usuma West Flyover',
+    kind: 'flyover',
+    connectsLabel: 'Government Area (Three Arms Zone) ↔ Abuja Community Stadium',
+    x: -34,
+    z: 24,
+    axis: 'z',
+    length: 40,
+    rampLength: 10,
+    deckWidth: 6.4,
+    deckHeight: 3.6,
+    signPositive: '↑ GOVERNMENT AREA · COMMUNITY HALL',
+    signNegative: '↑ ABUJA COMMUNITY STADIUM',
+  }),
+  Object.freeze({
+    id: 'stadium-flyover',
+    name: 'Constitution Stadium Bridge & Flyover',
+    shortName: 'Constitution Stadium Bridge',
+    kind: 'bridge',
+    connectsLabel: 'Unity Circle & Residential Area ↔ Abuja Community Stadium',
+    x: -10,
+    z: -46,
+    axis: 'x',
+    length: 40,
+    rampLength: 10,
+    deckWidth: 6.4,
+    deckHeight: 3.5,
+    signPositive: '→ UNITY CIRCLE & RESIDENTIAL AREA',
+    signNegative: '← ABUJA COMMUNITY STADIUM',
+  }),
+]);
+
+export function getBridgeFlyoverAt(worldX, worldZ, extraMargin = 0) {
+  for (const structure of BRIDGES_AND_FLYOVERS_LAYOUT) {
+    const along = structure.axis === 'z' ? worldZ - structure.z : worldX - structure.x;
+    const across = structure.axis === 'z' ? worldX - structure.x : worldZ - structure.z;
+    const halfL = structure.length / 2;
+    const halfW = structure.deckWidth / 2 + extraMargin;
+    if (Math.abs(along) <= halfL && Math.abs(across) <= halfW) {
+      const distFromEnd = Math.max(0, halfL - Math.abs(along));
+      const rampT = Math.min(1, distFromEnd / structure.rampLength);
+      const smooth = rampT * rampT * (3 - 2 * rampT);
+      const elevation = structure.deckHeight * smooth;
+      return {
+        structure,
+        along,
+        across,
+        elevation,
+        onMainSpan: distFromEnd >= structure.rampLength,
+        onRamp: distFromEnd < structure.rampLength,
+      };
+    }
+  }
+  return null;
+}
+
+export function getBridgeFlyoverSurfaceHeight(worldX, worldZ, baseY = 0) {
+  const hit = getBridgeFlyoverAt(worldX, worldZ, 0.25);
+  if (!hit) return null;
+  return baseY + hit.elevation;
+}
+
+export function getBridgeFlyoverGuardrailColliders() {
+  const colliders = [];
+  for (const structure of BRIDGES_AND_FLYOVERS_LAYOUT) {
+    const halfL = structure.length / 2 - 0.8;
+    const guardrailOffset = structure.deckWidth / 2 + 0.22;
+    for (const side of [-1, 1]) {
+      const x = structure.axis === 'z' ? structure.x + side * guardrailOffset : structure.x;
+      const z = structure.axis === 'z' ? structure.z : structure.z + side * guardrailOffset;
+      colliders.push({
+        id: `${structure.id}-guardrail-${side < 0 ? 'left' : 'right'}`,
+        x,
+        z,
+        yaw: 0,
+        halfX: structure.axis === 'z' ? 0.24 : halfL,
+        halfZ: structure.axis === 'z' ? halfL : 0.24,
+        height: structure.deckHeight + 1.4,
+        onBridgeDeck: true,
+      });
+    }
+  }
+  return colliders;
+}
+
 

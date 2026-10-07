@@ -1,4 +1,4 @@
-export const WORLD_VIEW_RADIUS = 74;
+export const WORLD_VIEW_RADIUS = 114;
 export const WORLD_VIEW_FOV = 49;
 export const WORLD_VIEW_ANGLE = 65;
 export const WORLD_VIEW_MARGIN = 1.1;
