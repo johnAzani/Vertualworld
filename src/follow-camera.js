@@ -25,6 +25,20 @@ export function setBehindPlayerOffset(target, playerYaw, distance) {
   return target;
 }
 
+// Compute an aspect-aware vertical FOV so first-person ("eye view") stays wide
+// and comfortable on both landscape and narrow portrait screens.
+export function getGameplayCameraFov(cameraMode, aspect = 16 / 9) {
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? Math.max(0.35, Math.min(3, aspect)) : 16 / 9;
+  const portraitFactor = safeAspect < 1 ? Math.min(1, (1 - safeAspect) / 0.55) : 0;
+  if (cameraMode === 'first-person') {
+    return Math.round((84 + portraitFactor * 14) * 10) / 10;
+  }
+  if (cameraMode === 'overhead') {
+    return Math.round((54 + portraitFactor * 8) * 10) / 10;
+  }
+  return Math.round((49 + portraitFactor * 7) * 10) / 10;
+}
+
 // Use the on-screen joystick purely for navigation (turning/aiming the resident
 // and camera direction), while forward walking is triggered by the Walk button.
 export function stepJoystickNavigation({

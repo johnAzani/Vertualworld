@@ -88,6 +88,7 @@ import {
 } from './world-view.js';
 import {
   createThirdPersonMovementState,
+  getGameplayCameraFov,
   getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
@@ -3208,7 +3209,7 @@ function setCameraMode(nextMode) {
   cameraPitch = 0;
   drivingViewYawOffset = 0;
   getThirdPersonMovementYaw(thirdPersonMovementState, player.rotation.y, false);
-  camera.fov = isFirstPerson ? 68 : cameraMode === 'overhead' ? 54 : 49;
+  camera.fov = getGameplayCameraFov(cameraMode, window.innerWidth / Math.max(window.innerHeight, 1));
   camera.updateProjectionMatrix();
   avatarModel.visible = !isFirstPerson && !isDriving && !isRidingTransit;
   playerShadow.visible = !isFirstPerson && !isDriving && !isRidingTransit;
@@ -7099,17 +7100,18 @@ function animate(timestamp) {
     if (isDriving && playerCar) {
       seatOffset.set(-0.23, 0, -0.36).applyAxisAngle(animationScratch.yawAxis, playerCar.group.rotation.y);
     }
-    const eyePosition = animationScratch.eyePosition.set(
-      player.position.x + seatOffset.x,
-      player.position.y + (isDriving ? 1.31 : isRidingTransit ? 1.2 : avatarModel.position.y + 1.73),
-      player.position.z + seatOffset.z,
-    );
     const pitchCos = Math.cos(cameraPitch);
     const viewYaw = isDriving && playerCar ? -playerCar.group.rotation.y + drivingViewYawOffset : cameraYaw;
     const viewDirection = animationScratch.viewDirection.set(
       Math.sin(viewYaw) * pitchCos,
       Math.sin(cameraPitch),
       -Math.cos(viewYaw) * pitchCos,
+    );
+    const eyeBackOffset = isDriving || isRidingTransit ? 0 : isInsideHome ? 0.55 : 1.35;
+    const eyePosition = animationScratch.eyePosition.set(
+      player.position.x + seatOffset.x - Math.sin(viewYaw) * eyeBackOffset,
+      player.position.y + (isDriving ? 1.38 : isRidingTransit ? 1.25 : avatarModel.position.y + 1.92),
+      player.position.z + seatOffset.z + Math.cos(viewYaw) * eyeBackOffset,
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
     camera.lookAt(animationScratch.lookAtPosition.copy(eyePosition).addScaledVector(viewDirection, 18));
@@ -7195,6 +7197,9 @@ function resize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
   camera.aspect = width / height;
+  if (!isWorldView && !isWatchingMatch) {
+    camera.fov = getGameplayCameraFov(cameraMode, width / Math.max(height, 1));
+  }
   camera.updateProjectionMatrix();
   if (isWorldView) updateWorldViewProjection();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RENDER_PIXEL_RATIO_CAP));

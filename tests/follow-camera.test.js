@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   CAMERA_MODE_ORDER,
   createThirdPersonMovementState,
+  getGameplayCameraFov,
   getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
@@ -103,4 +104,14 @@ test('touch controls use the button next to jump to walk while the joystick only
   assert.match(mainSource, /accelerateButton\.addEventListener\('touchstart'/);
   assert.match(mainSource, /jumpButton\.addEventListener\('touchstart'/);
 });
+
+test('first-person eye view uses a wider aspect-aware FOV and steps back so objects are not too close', () => {
+  const landscapeFov = getGameplayCameraFov('first-person', 16 / 9);
+  const portraitFov = getGameplayCameraFov('first-person', 9 / 16);
+  assert.ok(landscapeFov >= 82, 'landscape first-person FOV is wide enough for comfortable eye view');
+  assert.ok(portraitFov > landscapeFov, 'portrait screens widen vertical FOV so horizontal view is not zoomed in');
+  assert.equal(getGameplayCameraFov('follow', 16 / 9), 49);
+  assert.match(mainSource, /const eyeBackOffset = isDriving \|\| isRidingTransit \? 0 : isInsideHome \? 0\.55 : 1\.35;/);
+});
+
 
