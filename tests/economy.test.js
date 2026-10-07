@@ -2,17 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   ECONOMY_STORAGE_KEY,
+  MALL_SHOP_SPACES,
   RENTAL_MONTH_MS,
   advanceRentalBilling,
+  collectMallShowcaseSales,
   consumeProduct,
+  createCustomVirtualGood,
   createDefaultEconomy,
   earnGameCredits,
+  endMallShopLease,
   endRentalLease,
+  getMallShopDisplayState,
   loadEconomy,
+  payMallShopRent,
   payRentalRent,
   purchaseProduct,
   saveEconomy,
+  signMallShopLease,
   signRentalLease,
+  toggleMallShopDisplayedGood,
+  updateMallShopDetails,
 } from '../src/economy.js';
 
 test('renting charges the deposit and first month, then prevents a second active lease', () => {
@@ -135,4 +144,61 @@ test('local bank account reference and recent wallet activity persist safely', (
   const loaded = loadEconomy(storage, 30_000);
   assert.equal(loaded.accountId, economy.accountId);
   assert.deepEqual(loaded.ledger, economy.ledger);
+});
+
+test('Unity Mall offers shop spaces of different sizes with matching virtual goods capacities', () => {
+  assert.deepEqual(
+    MALL_SHOP_SPACES.map((space) => ({
+      id: space.id,
+      sizeLabel: space.sizeLabel,
+      areaSqm: space.areaSqm,
+      maxDisplayItems: space.maxDisplayItems,
+    })),
+    [
+      { id: 'kiosk-s1', sizeLabel: 'Small', areaSqm: 12, maxDisplayItems: 2 },
+      { id: 'boutique-m2', sizeLabel: 'Medium', areaSqm: 28, maxDisplayItems: 3 },
+      { id: 'showroom-l3', sizeLabel: 'Large', areaSqm: 54, maxDisplayItems: 4 },
+      { id: 'anchor-xl4', sizeLabel: 'Anchor', areaSqm: 96, maxDisplayItems: 6 },
+    ],
+  );
+});
+
+test('residents can rent mall shop spaces, curate displayed virtual goods, create custom goods, and collect showcase sales', () => {
+  const economy = createDefaultEconomy();
+  const rentResult = signMallShopLease(economy, 'kiosk-s1', { shopName: 'Amina Atelier' }, 5_000);
+  assert.equal(rentResult.ok, true);
+  assert.equal(rentResult.moveInCost, 180);
+  assert.equal(economy.wallet, 1020);
+  assert.equal(economy.shopLeases['kiosk-s1'].shopName, 'Amina Atelier');
+  assert.equal(economy.shopLeases['kiosk-s1'].displayedGoods.length, 2);
+
+  assert.equal(
+    toggleMallShopDisplayedGood(economy, 'kiosk-s1', 'vgood-smart-drone').reason,
+    'display-full',
+  );
+  assert.equal(toggleMallShopDisplayedGood(economy, 'kiosk-s1', 'vgood-organic-hamper').displayed, false);
+
+  const customResult = createCustomVirtualGood(economy, {
+    name: 'Abuja Gold Cufflinks',
+    category: 'Fashion',
+    style: 'fashion',
+    price: 80,
+    spaceId: 'kiosk-s1',
+  });
+  assert.equal(customResult.ok, true);
+  assert.equal(customResult.autoDisplayed, true);
+  assert.equal(getMallShopDisplayState(economy, 'kiosk-s1').displayedGoods.length, 2);
+
+  assert.equal(updateMallShopDetails(economy, 'kiosk-s1', { shopName: 'Amina Luxury Kiosk', tagline: 'Handcrafted Abuja gifts' }).ok, true);
+  const sale = collectMallShowcaseSales(economy, 'kiosk-s1', 9_000);
+  assert.equal(sale.ok, true);
+  assert.ok(sale.payout > 18);
+
+  advanceRentalBilling(economy, 5_000 + RENTAL_MONTH_MS);
+  assert.equal(economy.shopLeases['kiosk-s1'].rentDue, 90);
+  assert.equal(payMallShopRent(economy, 'kiosk-s1', 5_000 + RENTAL_MONTH_MS).paid, 90);
+  const ended = endMallShopLease(economy, 'kiosk-s1', 5_000 + RENTAL_MONTH_MS);
+  assert.equal(ended.ok, true);
+  assert.equal(ended.refund, 90);
+  assert.equal(economy.shopLeases['kiosk-s1'], undefined);
 });

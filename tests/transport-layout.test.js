@@ -71,13 +71,14 @@ function getStaticBuildingBounds() {
     halfZ: ESTATE_HOUSE_SIZE.depth / 2 + ESTATE_HOUSE_COLLISION_MARGIN,
   }));
   const venues = COMMERCE_VENUE_LAYOUT.map((venue) => {
-    const center = localToWorld({ ...venue, yaw: venue.facing }, COMMERCE_VENUE_COLLIDER.localX, COMMERCE_VENUE_COLLIDER.localZ);
+    const collider = venue.collider ?? COMMERCE_VENUE_COLLIDER;
+    const center = localToWorld({ ...venue, yaw: venue.facing }, collider.localX, collider.localZ);
     return {
       id: venue.name,
       ...center,
       yaw: venue.facing,
-      halfX: COMMERCE_VENUE_COLLIDER.halfX,
-      halfZ: COMMERCE_VENUE_COLLIDER.halfZ,
+      halfX: collider.halfX,
+      halfZ: collider.halfZ,
     };
   });
   const hall = {

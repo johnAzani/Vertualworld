@@ -219,9 +219,9 @@
                     <span class="phone-app-icon app-icon-cafe"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 8h11v7.2A4.8 4.8 0 0 1 11.2 20h-1.4A4.8 4.8 0 0 1 5 15.2V8ZM16 10h1.4a2.6 2.6 0 1 1 0 5.2H16M7 4.5c0 1 .9 1 0 2M11 4.5c0 1 .9 1 0 2M15 4.5c0 1 .9 1 0 2" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                     <span>Café</span>
                   </button>
-                  <button class="phone-app-button" type="button" data-phone-app="market" aria-label="Open the Unity Market grocery shop">
+                  <button class="phone-app-button" type="button" data-phone-app="market" aria-label="Open Unity Mall shop spaces, virtual goods showcase, and anchor grocer">
                     <span class="phone-app-icon app-icon-market"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9h16l-1.4 11H5.4L4 9ZM3 9l2.2-5h13.6L21 9M8 9V4M16 9V4M9 20v-6h6v6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                    <span>Market</span>
+                    <span>Mall</span>
                   </button>
                   <button class="phone-app-button" type="button" data-phone-app="bank" aria-label="Open your local game bank account">
                     <span class="phone-app-icon app-icon-bank"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 8 9-4.5L21 8v1H3V8Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/><path d="M5 10v7m4-7v7m6-7v7m4-7v7M3 19h18M2 21h20" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -269,13 +269,21 @@
                 <p class="phone-help shop-help">Buy with game credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
               </section>
 
-              <section class="phone-page" data-phone-page="market" aria-label="Unity Market groceries" hidden>
-                <div class="shop-heading shop-heading--market"><span class="shop-avatar" aria-hidden="true">M</span><span><span class="phone-card-label">UNITY COURT · GROCERIES</span><strong>Unity Market</strong><small>Everyday goods from local growers.</small></span></div>
+              <section class="phone-page" data-phone-page="market" aria-label="Unity Mall shop spaces, virtual goods showcase, and groceries" hidden>
+                <div class="shop-heading shop-heading--market"><span class="shop-avatar" aria-hidden="true">M</span><span><span class="phone-card-label">UNITY COURT · SHOPPING MALL</span><strong>Unity Mall</strong><small>Rent shop spaces (Small to Anchor), display virtual goods in 3D, and shop the anchor grocer.</small></span></div>
                 <div class="economy-wallet"><span>YOUR GAME CREDITS</span><strong id="market-wallet-balance">1,200 GC</strong></div>
-                <p class="shop-proximity" id="market-proximity" aria-live="polite">Visit the market to shop.</p>
-                <div class="shop-items" id="market-shop-items"></div>
-                <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
-                <p class="phone-help shop-help">Buy with game credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
+                <p class="shop-proximity" id="market-proximity" aria-live="polite">Visit Unity Mall to shop or serve showcase visitors.</p>
+                <div class="mall-section-block">
+                  <div class="estate-roster-heading"><span>RENTABLE SHOP SPACES · 4 SIZES</span><strong>SMALL TO ANCHOR</strong></div>
+                  <div class="mall-spaces-list" id="mall-shop-spaces" aria-live="polite"></div>
+                </div>
+                <div id="mall-showcase-manager" aria-live="polite"></div>
+                <div class="mall-section-block">
+                  <div class="estate-roster-heading"><span>ANCHOR GROCER · UNITY MARKET HALL</span><strong>DAILY ESSENTIALS</strong></div>
+                  <div class="shop-items" id="market-shop-items"></div>
+                  <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
+                </div>
+                <p class="phone-help shop-help">Rent a Small kiosk, Medium boutique, Large showroom, or Anchor hall with game credits to display virtual goods in Unity Mall’s 3D windows. Payment previews are demo-only and never charge money.</p>
               </section>
 
               <section class="phone-page bank-page" data-phone-page="bank" aria-label="In-game bank account and Flutterwave demo" hidden>

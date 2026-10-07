@@ -11,6 +11,7 @@ import {
   ESTATE_HOUSE_COLLISION_MARGIN,
   ESTATE_HOUSE_LAYOUT,
   ESTATE_HOUSE_SIZE,
+  MALL_SHOP_BAY_LAYOUT,
 } from './world-layout.js';
 import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
 import {
@@ -29,19 +30,31 @@ import {
   updateTransportNetwork,
 } from './transport.js';
 import {
+  MALL_SHOP_SPACES,
   RENTAL_LISTINGS,
   RENTAL_MONTH_MS,
   SHOP_CATALOG,
+  VIRTUAL_GOOD_STYLES,
   advanceRentalBilling,
+  collectMallShowcaseSales,
   consumeProduct,
+  createCustomVirtualGood,
   earnGameCredits,
+  endMallShopLease,
   endRentalLease,
+  getAllVirtualGoods,
+  getMallShopDisplayState,
+  getMallShopSpace,
   getProduct,
   loadEconomy,
+  payMallShopRent,
   payRentalRent,
   purchaseProduct,
   saveEconomy,
+  signMallShopLease,
   signRentalLease,
+  toggleMallShopDisplayedGood,
+  updateMallShopDetails,
 } from './economy.js';
 import {
   LIFE_GOALS,
@@ -167,6 +180,8 @@ const cafeProximityElement = document.querySelector('#cafe-proximity');
 const marketProximityElement = document.querySelector('#market-proximity');
 const cafeInventoryElement = document.querySelector('#cafe-inventory');
 const marketInventoryElement = document.querySelector('#market-inventory');
+const mallShopSpacesElement = document.querySelector('#mall-shop-spaces');
+const mallShowcaseManagerElement = document.querySelector('#mall-showcase-manager');
 const residentForm = document.querySelector('#resident-form');
 const residentNameInput = document.querySelector('#resident-name-input');
 const residentOriginInput = document.querySelector('#resident-origin-input');
@@ -442,6 +457,12 @@ function isReservedSpot(x, z, extra = 0) {
   if (Math.hypot(x, z + 27) < 11 + extra) return true;
   if (Math.hypot(x, z - 12) < 7 + extra) return true;
   if (isInsideEstate(x, z, extra)) return true;
+  for (const venue of COMMERCE_VENUE_LAYOUT) {
+    const collider = venue.collider ?? COMMERCE_VENUE_COLLIDER;
+    const local = residenceWorldToLocal(venue, x, z);
+    if (Math.abs(local.x - collider.localX) < collider.halfX + 2.2 + extra
+      && Math.abs(local.z - collider.localZ) < collider.halfZ + 2.6 + extra) return true;
+  }
   if (Math.abs(x - COMMUNITY_HALL_LAYOUT.x) < COMMUNITY_HALL_LAYOUT.halfX + extra
     && Math.abs(z - COMMUNITY_HALL_LAYOUT.z) < COMMUNITY_HALL_LAYOUT.halfZ + extra) return true;
   if (Math.abs(x - STADIUM.x) < STADIUM.standHalfX + 2 + extra
@@ -1663,8 +1684,329 @@ function makeCommerceSignTexture(label, backgroundColor, foregroundColor) {
   return texture;
 }
 
-function createCommerceVenue({ id, name, sign, x, z, facing, wallColor, roofColor, awningColor }) {
-  const { width, depth } = COMMERCE_VENUE_SIZE;
+const mallShopBayRuntime = [];
+
+function makeMallBaySignTexture(displayState, accentHex) {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 152;
+  const context = signCanvas.getContext('2d');
+  context.fillStyle = accentHex;
+  context.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  context.strokeStyle = 'rgba(255, 248, 224, .82)';
+  context.lineWidth = 6;
+  context.strokeRect(7, 7, signCanvas.width - 14, signCanvas.height - 14);
+  const { space, isRented, shopName, displayedGoods } = displayState;
+  context.fillStyle = 'rgba(255, 248, 224, .92)';
+  context.font = '700 22px system-ui, sans-serif';
+  context.textAlign = 'left';
+  context.textBaseline = 'top';
+  context.fillText(`${space.code} · ${space.sizeLabel.toUpperCase()} · ${space.areaSqm}m²`, 24, 20, 310);
+  context.textAlign = 'right';
+  context.fillStyle = isRented ? '#d7f7c2' : '#ffe8b8';
+  context.fillText(isRented ? 'RENTED' : `${space.monthlyRent} GC/MO`, signCanvas.width - 24, 20, 165);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#fff9eb';
+  context.font = '700 36px system-ui, sans-serif';
+  context.fillText(shopName, signCanvas.width / 2, 82, 464);
+  context.font = '600 20px system-ui, sans-serif';
+  context.fillStyle = 'rgba(255, 246, 222, .88)';
+  context.fillText(
+    `${displayedGoods.length}/${space.maxDisplayItems} VIRTUAL GOODS ON DISPLAY`,
+    signCanvas.width / 2,
+    122,
+    464,
+  );
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function createVirtualGoodDisplayMesh(good) {
+  const itemGroup = new THREE.Group();
+  const pedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.25, 0.62, 12),
+    new THREE.MeshStandardMaterial({ color: 0xf2ead7, roughness: 0.68 }),
+  );
+  pedestal.position.y = 0.31;
+  itemGroup.add(pedestal);
+  const style = good?.style || 'craft';
+  if (style === 'fashion') {
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.15, 0.44, 10),
+      new THREE.MeshStandardMaterial({ color: 0xd96b43, roughness: 0.55 }),
+    );
+    torso.position.y = 0.88;
+    const shoulders = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.14, 0.18),
+      new THREE.MeshStandardMaterial({ color: 0xf2b84b, roughness: 0.5 }),
+    );
+    shoulders.position.y = 1.02;
+    itemGroup.add(torso, shoulders);
+  } else if (style === 'art') {
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.42, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0x5c4632, roughness: 0.6 }),
+    );
+    frame.position.y = 0.88;
+    const canvasMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.34, 0.06),
+      new THREE.MeshStandardMaterial({
+        color: 0xe68449,
+        emissive: 0x8a3d1b,
+        emissiveIntensity: 0.35,
+        roughness: 0.35,
+      }),
+    );
+    canvasMesh.position.y = 0.88;
+    itemGroup.add(frame, canvasMesh);
+  } else if (style === 'tech') {
+    const core = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.18, 0),
+      new THREE.MeshStandardMaterial({
+        color: 0x5ec2d6,
+        emissive: 0x1d6878,
+        emissiveIntensity: 0.42,
+        metalness: 0.35,
+        roughness: 0.25,
+      }),
+    );
+    core.position.y = 0.88;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.22, 0.025, 8, 18),
+      new THREE.MeshStandardMaterial({ color: 0xd8ecf2, metalness: 0.4, roughness: 0.3 }),
+    );
+    ring.position.y = 0.88;
+    ring.rotation.x = Math.PI / 3;
+    itemGroup.add(core, ring);
+  } else if (style === 'audio') {
+    const deck = new THREE.Mesh(
+      new THREE.BoxGeometry(0.36, 0.12, 0.26),
+      new THREE.MeshStandardMaterial({ color: 0x2f3b46, metalness: 0.3, roughness: 0.45 }),
+    );
+    deck.position.y = 0.7;
+    const speaker = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.11, 0.24, 12),
+      new THREE.MeshStandardMaterial({ color: 0xd49a45, roughness: 0.4 }),
+    );
+    speaker.position.set(0, 0.88, 0);
+    itemGroup.add(deck, speaker);
+  } else if (style === 'harvest') {
+    const crate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.2, 0.28),
+      new THREE.MeshStandardMaterial({ color: 0x9b6b43, roughness: 0.8 }),
+    );
+    crate.position.y = 0.72;
+    const jar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.1, 0.22, 10),
+      new THREE.MeshStandardMaterial({ color: 0x6ea85b, roughness: 0.45 }),
+    );
+    jar.position.set(0, 0.9, 0);
+    itemGroup.add(crate, jar);
+  } else {
+    const lantern = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 12, 10),
+      new THREE.MeshStandardMaterial({
+        color: 0xf4c76b,
+        emissive: 0x9c651c,
+        emissiveIntensity: 0.4,
+        roughness: 0.38,
+      }),
+    );
+    lantern.position.y = 0.84;
+    itemGroup.add(lantern);
+  }
+  return itemGroup;
+}
+
+function syncMallShopBays3D() {
+  for (const bayRuntime of mallShopBayRuntime) {
+    const displayState = getMallShopDisplayState(economy, bayRuntime.spaceId);
+    if (!displayState) continue;
+    const nextTexture = makeMallBaySignTexture(displayState, bayRuntime.accentHex);
+    if (bayRuntime.signMaterial.map) bayRuntime.signMaterial.map.dispose();
+    bayRuntime.signMaterial.map = nextTexture;
+    bayRuntime.signMaterial.needsUpdate = true;
+
+    while (bayRuntime.goodsGroup.children.length > 0) {
+      const child = bayRuntime.goodsGroup.children[0];
+      bayRuntime.goodsGroup.remove(child);
+    }
+    const { displayedGoods } = displayState;
+    for (let index = 0; index < displayedGoods.length && index < bayRuntime.pedestalOffsets.length; index += 1) {
+      const good = displayedGoods[index];
+      const [offsetX, offsetZ] = bayRuntime.pedestalOffsets[index];
+      const goodMesh = createVirtualGoodDisplayMesh(good);
+      goodMesh.position.set(offsetX, 0.16, offsetZ);
+      bayRuntime.goodsGroup.add(goodMesh);
+    }
+  }
+}
+
+function createShoppingMallVenue(venueLayout) {
+  const {
+    id,
+    name,
+    sign,
+    x,
+    z,
+    facing,
+    width = 14.2,
+    depth = 8.6,
+    collider = COMMERCE_VENUE_COLLIDER,
+    wallColor,
+    roofColor,
+    awningColor,
+  } = venueLayout;
+  const frontZ = -depth / 2;
+  const group = new THREE.Group();
+  group.name = name;
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.86 });
+  const upperWallMaterial = new THREE.MeshStandardMaterial({ color: 0xf5efe0, roughness: 0.82 });
+  const roofMaterial = new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.78 });
+  const awningMaterial = new THREE.MeshStandardMaterial({ color: awningColor, roughness: 0.76 });
+  const plinthMaterial = new THREE.MeshStandardMaterial({ color: 0xc8bfa8, roughness: 0.92 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xf7eed8, roughness: 0.68 });
+  const columnMaterial = new THREE.MeshStandardMaterial({ color: 0xd9cfb8, roughness: 0.8 });
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9ed0cb,
+    roughness: 0.2,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.56,
+    side: THREE.DoubleSide,
+  });
+  const signMaterial = new THREE.MeshBasicMaterial({
+    map: makeCommerceSignTexture(`${sign} · SHOPPING GALLERIA`, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8'),
+  });
+  const addBox = (dimensions, position, material, castShadow = true, receiveShadow = true) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
+    mesh.position.set(...position);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    group.add(mesh);
+    return mesh;
+  };
+
+  // Broad promenade deck and main multi-wing shopping mall body
+  addBox([width + 1.1, 0.24, depth + 2.1], [0, 0.12, -0.45], plinthMaterial, false, true);
+  addBox([width, 4.35, depth], [0, 2.3, 0.2], wallMaterial);
+  // Second-level central skylight atrium hall
+  addBox([6.4, 2.25, depth - 1.2], [0.8, 5.55, 0.15], upperWallMaterial);
+  addBox([6.8, 0.28, depth - 0.8], [0.8, 6.78, 0.15], roofMaterial);
+  addBox([5.6, 0.72, 0.12], [0.8, 5.65, frontZ + 0.68], glassMaterial, false, false);
+  addBox([width + 0.55, 0.3, depth + 0.45], [0, 4.55, 0.2], roofMaterial);
+  addBox([width - 0.5, 0.24, 1.35], [0, 3.55, frontZ - 0.35], awningMaterial);
+
+  for (const columnX of [-6.3, -3.55, -0.65, 2.75, 6.35]) {
+    addBox([0.28, 3.45, 0.28], [columnX, 1.85, frontZ - 0.85], columnMaterial);
+  }
+
+  for (const bay of MALL_SHOP_BAY_LAYOUT) {
+    const windowHeight = Math.min(2.35, bay.bayHeight - 0.65);
+    addBox([bay.bayWidth, windowHeight + 0.22, 0.12], [bay.localX, 1.48, frontZ + 0.16], trimMaterial, false, false);
+    addBox([bay.bayWidth - 0.22, windowHeight, 0.08], [bay.localX, 1.48, frontZ + 0.1], glassMaterial, false, false);
+    addBox([bay.bayWidth + 0.12, 0.16, 0.92], [bay.localX, 0.3, frontZ - 0.18], trimMaterial, false, true);
+  }
+
+  const mainSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.95), signMaterial);
+  mainSignBoard.position.set(0.8, 6.08, frontZ + 0.58);
+  mainSignBoard.rotation.y = Math.PI;
+  group.add(mainSignBoard);
+
+  batchStaticVenueMeshes(group);
+
+  const shopBays = [];
+  for (const bay of MALL_SHOP_BAY_LAYOUT) {
+    const bayGroup = new THREE.Group();
+    bayGroup.position.set(bay.localX, 0, bay.localZ);
+    const accentHex = `#${new THREE.Color(bay.accentColor).getHexString()}`;
+    const initialState = getMallShopDisplayState(economy, bay.spaceId);
+    const baySignMaterial = new THREE.MeshBasicMaterial({
+      map: makeMallBaySignTexture(initialState, accentHex),
+    });
+    const baySign = new THREE.Mesh(
+      new THREE.PlaneGeometry(Math.max(2.1, bay.bayWidth - 0.15), 0.64),
+      baySignMaterial,
+    );
+    baySign.position.set(0, 3.06, -0.02);
+    baySign.rotation.y = Math.PI;
+    bayGroup.add(baySign);
+
+    const goodsGroup = new THREE.Group();
+    goodsGroup.position.set(0, 0, -0.2);
+    bayGroup.add(goodsGroup);
+    group.add(bayGroup);
+
+    const worldPos = residenceLocalToWorld({ x, z, facing }, bay.localX, frontZ - 0.95);
+    const runtimeEntry = {
+      spaceId: bay.spaceId,
+      code: bay.code,
+      sizeLabel: bay.sizeLabel,
+      accentHex,
+      signMaterial: baySignMaterial,
+      goodsGroup,
+      pedestalOffsets: bay.pedestalOffsets,
+      interactionX: worldPos.x,
+      interactionZ: worldPos.z,
+    };
+    mallShopBayRuntime.push(runtimeEntry);
+    shopBays.push(runtimeEntry);
+  }
+  syncMallShopBays3D();
+
+  group.position.set(x, terrainHeight(x, z), z);
+  group.rotation.y = facing;
+  scene.add(group);
+  const doorPosition = residenceLocalToWorld({ x, z, facing }, 0, frontZ - 0.95);
+  const venue = {
+    id,
+    kind: 'mall',
+    name,
+    x,
+    z,
+    facing,
+    group,
+    interactionX: doorPosition.x,
+    interactionZ: doorPosition.z,
+    interactionRadius: 9.2,
+    shopBays,
+  };
+  const colliderCenter = residenceLocalToWorld(
+    { x, z, facing },
+    collider.localX,
+    collider.localZ,
+  );
+  commerceVenues.push(venue);
+  worldObstacleColliders.push({
+    x: colliderCenter.x,
+    z: colliderCenter.z,
+    yaw: facing,
+    halfX: collider.halfX,
+    halfZ: collider.halfZ,
+    height: collider.height,
+  });
+  return venue;
+}
+
+function createCommerceVenue(venueLayout) {
+  if (venueLayout.kind === 'mall') return createShoppingMallVenue(venueLayout);
+  const {
+    id,
+    name,
+    sign,
+    x,
+    z,
+    facing,
+    width = COMMERCE_VENUE_SIZE.width,
+    depth = COMMERCE_VENUE_SIZE.depth,
+    collider = COMMERCE_VENUE_COLLIDER,
+    wallColor,
+    roofColor,
+    awningColor,
+  } = venueLayout;
   const frontZ = -depth / 2;
   const group = new THREE.Group();
   const wallMaterial = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.88 });
@@ -1717,20 +2059,31 @@ function createCommerceVenue({ id, name, sign, x, z, facing, wallColor, roofColo
   group.rotation.y = facing;
   scene.add(group);
   const doorPosition = residenceLocalToWorld({ x, z, facing }, 0, frontZ - 0.58);
-  const venue = { id, name, x, z, facing, group, interactionX: doorPosition.x, interactionZ: doorPosition.z };
+  const venue = {
+    id,
+    kind: 'cafe',
+    name,
+    x,
+    z,
+    facing,
+    group,
+    interactionX: doorPosition.x,
+    interactionZ: doorPosition.z,
+    interactionRadius: 5.8,
+  };
   const colliderCenter = residenceLocalToWorld(
     { x, z, facing },
-    COMMERCE_VENUE_COLLIDER.localX,
-    COMMERCE_VENUE_COLLIDER.localZ,
+    collider.localX,
+    collider.localZ,
   );
   commerceVenues.push(venue);
   worldObstacleColliders.push({
     x: colliderCenter.x,
     z: colliderCenter.z,
     yaw: facing,
-    halfX: COMMERCE_VENUE_COLLIDER.halfX,
-    halfZ: COMMERCE_VENUE_COLLIDER.halfZ,
-    height: COMMERCE_VENUE_COLLIDER.height,
+    halfX: collider.halfX,
+    halfZ: collider.halfZ,
+    height: collider.height,
   });
   return venue;
 }
@@ -3283,12 +3636,31 @@ function getNearbyBusTerminal() {
   return getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6)?.terminal ?? null;
 }
 
-function getNearbyCommerceVenue(maxDistance = 5.8) {
+function getNearbyMallShopBay(maxDistance = 4.2) {
   let nearest = null;
   let nearestDistance = maxDistance;
-  for (const venue of commerceVenues) {
-    const distance = Math.hypot(player.position.x - venue.interactionX, player.position.z - venue.interactionZ);
+  for (const bay of mallShopBayRuntime) {
+    const distance = Math.hypot(player.position.x - bay.interactionX, player.position.z - bay.interactionZ);
     if (distance <= nearestDistance) {
+      nearest = bay;
+      nearestDistance = distance;
+    }
+  }
+  return nearest ? { bay: nearest, distance: nearestDistance } : null;
+}
+
+function getNearbyCommerceVenue(maxDistance = 5.8) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const venue of commerceVenues) {
+    const limit = venue.interactionRadius ?? maxDistance;
+    let distance = Math.hypot(player.position.x - venue.interactionX, player.position.z - venue.interactionZ);
+    if (Array.isArray(venue.shopBays)) {
+      for (const bay of venue.shopBays) {
+        distance = Math.min(distance, Math.hypot(player.position.x - bay.interactionX, player.position.z - bay.interactionZ));
+      }
+    }
+    if (distance <= limit && distance <= nearestDistance) {
       nearest = venue;
       nearestDistance = distance;
     }
@@ -3655,8 +4027,128 @@ function getInventorySummary() {
   return inventory.length ? inventory.join(' · ') : 'Nothing yet';
 }
 
+let selectedMallSpaceId = MALL_SHOP_SPACES[0].id;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function isPlayerAtCommerceVenue(venueId) {
   return getNearbyCommerceVenue()?.venue.id === venueId;
+}
+
+function renderMallSpacesSection(isNearbyMall) {
+  if (!mallShopSpacesElement || !mallShowcaseManagerElement) return;
+  if (!getMallShopSpace(selectedMallSpaceId)) {
+    const firstLeased = Object.keys(economy.shopLeases || {})[0];
+    selectedMallSpaceId = firstLeased || MALL_SHOP_SPACES[0].id;
+  }
+
+  mallShopSpacesElement.innerHTML = MALL_SHOP_SPACES.map((space) => {
+    const displayState = getMallShopDisplayState(economy, space.id);
+    const isRented = displayState.isRented;
+    const isSelected = space.id === selectedMallSpaceId;
+    const moveInCost = space.monthlyRent + space.deposit;
+    const canAfford = economy.wallet >= moveInCost;
+    const sizeClass = `mall-size-badge--${space.sizeLabel.toLowerCase()}`;
+    const goodsPills = displayState.displayedGoods.length
+      ? displayState.displayedGoods.map((good) => `<span class="mall-good-pill">${escapeHtml(good.name)} · ${formatCredits(good.price)}</span>`).join('')
+      : '<span class="mall-good-pill">No virtual goods displayed</span>';
+    return `<div class="mall-space-card ${isRented ? 'is-rented' : ''} ${isSelected ? 'is-selected' : ''}">
+      <div class="mall-space-header">
+        <span class="mall-space-title">
+          <strong>${escapeHtml(space.name)} · ${escapeHtml(displayState.shopName)}</strong>
+          <small>${escapeHtml(space.wing)} · Manager ${escapeHtml(space.manager)} · up to ${space.maxDisplayItems} virtual goods</small>
+        </span>
+        <span class="mall-size-badge ${sizeClass}">${escapeHtml(space.sizeLabel.toUpperCase())} · ${space.areaSqm} m²</span>
+      </div>
+      <div class="mall-space-meta">
+        <span>${formatCredits(space.monthlyRent)} / month · ${formatCredits(space.deposit)} deposit</span>
+        <strong>${isRented ? 'YOUR SHOP SPACE' : `AVAILABLE · ${formatCredits(moveInCost)} MOVE-IN`}</strong>
+      </div>
+      <div class="mall-goods-pills">${goodsPills}</div>
+      <div class="mall-space-actions">
+        ${isRented
+          ? `<button class="rental-action-button" type="button" data-select-mall-space="${space.id}">${isSelected ? 'MANAGING SHOWCASE BELOW' : 'MANAGE SHOWCASE & GOODS'}</button>`
+          : `<button class="rental-action-button" type="button" data-rent-mall-space="${space.id}" ${!canAfford ? 'disabled' : ''}>RENT ${escapeHtml(space.sizeLabel.toUpperCase())} SPACE · ${formatCredits(moveInCost)}</button>
+             <button class="rental-action-button rental-action-button--quiet" type="button" data-select-mall-space="${space.id}">${isSelected ? 'SELECTED' : 'INSPECT SPACE'}</button>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  const selectedState = getMallShopDisplayState(economy, selectedMallSpaceId);
+  if (!selectedState) {
+    mallShowcaseManagerElement.innerHTML = '';
+    return;
+  }
+  const { space, lease, isRented, displayedGoods } = selectedState;
+  if (!isRented) {
+    const moveInCost = space.monthlyRent + space.deposit;
+    mallShowcaseManagerElement.innerHTML = `<div class="mall-showcase-card">
+      <div class="rental-lease-heading">${escapeHtml(space.name)} (${escapeHtml(space.sizeLabel)} · ${space.areaSqm} m²) <small>AVAILABLE TO RENT</small></div>
+      <p>Rent this ${escapeHtml(space.sizeLabel.toLowerCase())} mall unit from ${escapeHtml(space.manager)} to name your shop, display up to <strong>${space.maxDisplayItems} virtual goods</strong> in Unity Mall’s 3D storefront window, and collect showcase sales from shoppers.</p>
+      <button class="rental-action-button" type="button" data-rent-mall-space="${space.id}" ${economy.wallet < moveInCost ? 'disabled' : ''}>SIGN SHOP LEASE · ${formatCredits(moveInCost)}</button>
+    </div>`;
+    return;
+  }
+
+  const allGoods = getAllVirtualGoods(economy);
+  const displayedSet = new Set(lease.displayedGoods);
+  const dueDate = new Date(lease.nextDueAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const catalogHtml = allGoods.map((good) => {
+    const isDisplayed = displayedSet.has(good.id);
+    const displayFull = !isDisplayed && lease.displayedGoods.length >= space.maxDisplayItems;
+    return `<div class="mall-catalog-item ${isDisplayed ? 'is-displayed' : ''}">
+      <span class="mall-catalog-copy">
+        <strong>${escapeHtml(good.name)} (${formatCredits(good.price)})</strong>
+        <small>${escapeHtml(good.category)} · ${isDisplayed ? 'Displayed in 3D window' : 'In virtual catalog'}</small>
+      </span>
+      <button class="rental-action-button ${isDisplayed ? 'rental-action-button--quiet' : ''}" type="button" data-toggle-mall-good="${good.id}" data-mall-space="${space.id}" ${displayFull ? 'disabled' : ''}>
+        ${isDisplayed ? 'REMOVE' : displayFull ? 'WINDOW FULL' : 'DISPLAY IN 3D'}
+      </button>
+    </div>`;
+  }).join('');
+
+  const styleOptions = VIRTUAL_GOOD_STYLES.map(
+    (style) => `<option value="${style.id}">${escapeHtml(style.label)}</option>`,
+  ).join('');
+
+  mallShowcaseManagerElement.innerHTML = `<div class="mall-showcase-card">
+    <div class="rental-lease-heading">${escapeHtml(lease.shopName)} · ${escapeHtml(space.code)} (${escapeHtml(space.sizeLabel)} · ${space.areaSqm} m²) <small>${displayedGoods.length}/${space.maxDisplayItems} DISPLAYED</small></div>
+    <p>${escapeHtml(lease.tagline)} · Total showcase sales: <strong>${formatCredits(lease.totalSales || 0)}</strong> · Next ${formatCredits(lease.monthlyRent)} rent due ${dueDate}.</p>
+    <form class="mall-showcase-form" data-mall-shop-form="${space.id}">
+      <div class="mall-form-row">
+        <input class="mall-input" name="shopName" type="text" maxlength="26" minlength="2" value="${escapeHtml(lease.shopName)}" placeholder="Shop name" aria-label="Shop name" required>
+        <input class="mall-input" name="tagline" type="text" maxlength="56" value="${escapeHtml(lease.tagline)}" placeholder="Window tagline" aria-label="Window tagline">
+      </div>
+      <button class="rental-action-button" type="submit">UPDATE 3D SHOP SIGN</button>
+    </form>
+    <div class="estate-roster-heading" style="margin-top:8px;"><span>VIRTUAL GOODS IN 3D WINDOW</span><strong>${displayedGoods.length} / ${space.maxDisplayItems} SLOTS</strong></div>
+    <div class="mall-catalog-grid">${catalogHtml}</div>
+    <form class="mall-custom-good-form" data-mall-custom-good-form="${space.id}">
+      <div class="estate-roster-heading" style="margin-top:6px;"><span>CREATE YOUR OWN VIRTUAL GOOD</span><strong>ADD TO CATALOG &amp; WINDOW</strong></div>
+      <div class="mall-form-row">
+        <input class="mall-input" name="goodName" type="text" maxlength="28" minlength="2" placeholder="New virtual item name" aria-label="New virtual item name" required>
+        <select class="mall-input" name="goodStyle" aria-label="3D display style">${styleOptions}</select>
+      </div>
+      <div class="mall-form-row">
+        <input class="mall-input" name="goodPrice" type="number" min="5" max="500" step="5" value="55" aria-label="Virtual item price in GC" required>
+        <button class="rental-action-button" type="submit">CREATE &amp; DISPLAY GOOD</button>
+      </div>
+    </form>
+    <div class="rental-actions" style="margin-top:8px;">
+      <button class="rental-action-button" type="button" data-mall-action="collect-sales" data-mall-space="${space.id}" ${!isNearbyMall || displayedGoods.length === 0 ? 'disabled' : ''}>
+        ${isNearbyMall ? 'SERVE SHOPPERS · EARN GC' : 'VISIT MALL TO COLLECT SALES'}
+      </button>
+      <button class="rental-action-button rental-action-button--quiet" type="button" data-mall-action="${lease.rentDue > 0 ? 'pay-rent' : 'end-lease'}" data-mall-space="${space.id}">
+        ${lease.rentDue > 0 ? `PAY SHOP RENT · ${formatCredits(lease.rentDue)}` : 'END SHOP LEASE'}
+      </button>
+    </div>
+  </div>`;
 }
 
 function renderCommercePage(venueId) {
@@ -3669,11 +4161,22 @@ function renderCommercePage(venueId) {
   const proximityElement = venueId === 'cafe' ? cafeProximityElement : marketProximityElement;
   const inventoryElement = venueId === 'cafe' ? cafeInventoryElement : marketInventoryElement;
   const itemsElement = venueId === 'cafe' ? cafeShopItemsElement : marketShopItemsElement;
-  proximityElement.textContent = isNearby
-    ? `Welcome to ${venue.name}. Buy with game credits or preview Flutterwave checkout.`
-    : `Visit ${venue.name} to buy or preview checkout. This menu can be browsed from anywhere.`;
+  if (venueId === 'market') {
+    const nearbyBay = getNearbyMallShopBay()?.bay;
+    const baySpace = nearbyBay ? getMallShopSpace(nearbyBay.spaceId) : null;
+    proximityElement.textContent = isNearby
+      ? baySpace
+        ? `At Unity Mall · standing by ${baySpace.name} (${baySpace.sizeLabel} · ${baySpace.areaSqm} m²). Rent shop spaces, curate 3D virtual goods, or shop groceries.`
+        : `Welcome to ${venue.name}. Rent shop spaces of different sizes, display virtual goods in 3D, or buy groceries.`
+      : `Visit ${venue.name} in person to buy groceries or collect showcase sales. You can rent shop spaces and arrange virtual goods from anywhere.`;
+  } else {
+    proximityElement.textContent = isNearby
+      ? `Welcome to ${venue.name}. Buy with game credits or preview Flutterwave checkout.`
+      : `Visit ${venue.name} to buy or preview checkout. This menu can be browsed from anywhere.`;
+  }
   proximityElement.classList.toggle('is-near', isNearby);
   proximityElement.classList.toggle('is-away', !isNearby);
+  if (venueId === 'market') renderMallSpacesSection(isNearby);
   inventoryElement.textContent = getInventorySummary();
   itemsElement.innerHTML = products.map((product) => {
     const count = economy.inventory[product.id] || 0;
@@ -3794,8 +4297,97 @@ function previewRentPayment() {
 
 function openCommercePage(venueId) {
   if (!SHOP_CATALOG[venueId]) return;
+  if (venueId === 'market') {
+    const nearbyBay = getNearbyMallShopBay()?.bay;
+    if (nearbyBay) selectedMallSpaceId = nearbyBay.spaceId;
+  }
   if (!isPhoneOpen()) openPhone();
   setPhonePage(venueId);
+}
+
+function rentMallShopFromPhone(spaceId) {
+  const result = signMallShopLease(
+    economy,
+    spaceId,
+    { residentName: life.profile?.created ? life.profile.name : '' },
+    Date.now(),
+  );
+  if (!result.ok) {
+    if (result.reason === 'space-already-leased') showToast('You already lease this mall shop space.');
+    else if (result.reason === 'insufficient-funds') showToast(`Move-in needs ${formatCredits(result.cost)} for the first month and deposit.`);
+    else showToast('That shop space could not be leased right now.');
+    renderCommercePage('market');
+    return;
+  }
+  selectedMallSpaceId = result.space.id;
+  persistEconomy();
+  syncMallShopBays3D();
+  renderCommercePage('market');
+  updateLocationAndMap();
+  showToast(
+    `Leased ${result.space.name} (${result.space.sizeLabel} · ${result.space.areaSqm} m²). Your virtual goods are now on display in Unity Mall’s 3D window!`,
+    4200,
+  );
+}
+
+function toggleMallGoodFromPhone(spaceId, goodId) {
+  const result = toggleMallShopDisplayedGood(economy, spaceId, goodId);
+  if (!result.ok) {
+    if (result.reason === 'display-full') {
+      showToast(`This shop window holds up to ${result.maxDisplayItems} virtual goods. Remove one or rent a larger mall unit.`);
+    } else showToast('Could not update that virtual good right now.');
+    return;
+  }
+  selectedMallSpaceId = spaceId;
+  persistEconomy();
+  syncMallShopBays3D();
+  renderCommercePage('market');
+  showToast(
+    result.displayed
+      ? `${result.good.name} placed in your 3D shop window.`
+      : `${result.good.name} removed from your shop window.`,
+    2600,
+  );
+}
+
+function handleMallActionFromPhone(action, spaceId) {
+  selectedMallSpaceId = spaceId;
+  if (action === 'collect-sales') {
+    if (!isPlayerAtCommerceVenue('market')) {
+      showToast('Walk to Unity Mall to serve shoppers and collect showcase sales.');
+      return;
+    }
+    const result = collectMallShowcaseSales(economy, spaceId, Date.now());
+    if (!result.ok) {
+      showToast('Display at least one virtual good in your window before collecting sales.');
+      return;
+    }
+    persistEconomy();
+    renderCommercePage('market');
+    showToast(`Showcase sales collected · +${formatCredits(result.payout)} from ${result.lease.shopName}!`, 3400);
+    return;
+  }
+  if (action === 'pay-rent') {
+    const result = payMallShopRent(economy, spaceId, Date.now());
+    persistEconomy();
+    renderCommercePage('market');
+    if (result.ok) showToast(`Shop rent paid · ${formatCredits(result.paid)} for ${result.space.name}.`);
+    else if (result.reason === 'insufficient-funds') showToast(`You need ${formatCredits(result.due)} to pay shop rent.`);
+    else showToast('No shop rent is due right now.');
+    return;
+  }
+  if (action === 'end-lease') {
+    const result = endMallShopLease(economy, spaceId, Date.now());
+    if (!result.ok) return;
+    persistEconomy();
+    syncMallShopBays3D();
+    renderCommercePage('market');
+    updateLocationAndMap();
+    showToast(
+      `Ended lease for ${result.space.name} · ${formatCredits(result.refund)} deposit returned to your wallet.`,
+      3400,
+    );
+  }
 }
 
 function rentHouseFromPhone(houseNumber) {
@@ -4093,7 +4685,7 @@ const phonePageCopy = {
   quests: { eyebrow: 'YOUR PROGRESS', title: 'Small things to do', subtitle: 'A gentle reason to keep wandering.' },
   property: { eyebrow: 'UNITY COURT · HOMES', title: 'Homes & rentals', subtitle: 'Meet local landlords and manage your lease.' },
   cafe: { eyebrow: 'CIVIC CAFÉ · ABUJA', title: 'A little something', subtitle: 'Fresh food and a warm drink for the road.' },
-  market: { eyebrow: 'UNITY MARKET · GROCERIES', title: 'Good things for home', subtitle: 'Stock up with your game credits.' },
+  market: { eyebrow: 'UNITY MALL · SHOPS & GROCERIES', title: 'Unity Mall', subtitle: 'Rent shop spaces, display virtual goods, and shop.' },
   bank: { eyebrow: 'ABUJA GAME WALLET · GAME ACCOUNT', title: 'Your game wallet', subtitle: 'Check your credits and preview payment flows.' },
   life: { eyebrow: 'YOUR RESIDENT · LOCAL SAVE', title: 'Life in Abuja', subtitle: 'Look after your needs, make your own routine.' },
   work: { eyebrow: 'NEIGHBOURHOOD JOB BOARD', title: 'Work & progression', subtitle: 'Pick a role, show up and help your neighbours.' },
@@ -4309,6 +4901,33 @@ phoneContent.addEventListener('click', (event) => {
     else if (rentalActionButton.dataset.rentalAction === 'end') endRentalFromPhone();
     return;
   }
+  const rentMallSpaceButton = event.target.closest('[data-rent-mall-space]');
+  if (rentMallSpaceButton) {
+    rentMallShopFromPhone(rentMallSpaceButton.dataset.rentMallSpace);
+    return;
+  }
+  const selectMallSpaceButton = event.target.closest('[data-select-mall-space]');
+  if (selectMallSpaceButton) {
+    selectedMallSpaceId = selectMallSpaceButton.dataset.selectMallSpace;
+    renderCommercePage('market');
+    return;
+  }
+  const toggleMallGoodButton = event.target.closest('[data-toggle-mall-good]');
+  if (toggleMallGoodButton) {
+    toggleMallGoodFromPhone(
+      toggleMallGoodButton.dataset.mallSpace || selectedMallSpaceId,
+      toggleMallGoodButton.dataset.toggleMallGood,
+    );
+    return;
+  }
+  const mallActionButton = event.target.closest('[data-mall-action]');
+  if (mallActionButton) {
+    handleMallActionFromPhone(
+      mallActionButton.dataset.mallAction,
+      mallActionButton.dataset.mallSpace || selectedMallSpaceId,
+    );
+    return;
+  }
   const foodButton = event.target.closest('[data-food-use]');
   if (foodButton) {
     useFoodFromBag(foodButton.dataset.foodUse);
@@ -4352,6 +4971,65 @@ phoneContent.addEventListener('click', (event) => {
   } else if (actionButton.dataset.phoneAction === 'continue') {
     closePhone();
     showToast('Back to exploring. The path is yours.', 2400);
+  }
+});
+
+phoneContent.addEventListener('submit', (event) => {
+  const shopForm = event.target.closest('[data-mall-shop-form]');
+  if (shopForm) {
+    event.preventDefault();
+    const spaceId = shopForm.dataset.mallShopForm;
+    const formData = new FormData(shopForm);
+    const result = updateMallShopDetails(economy, spaceId, {
+      shopName: String(formData.get('shopName') || ''),
+      tagline: String(formData.get('tagline') || ''),
+    });
+    if (!result.ok) {
+      showToast('Enter a shop name with at least two characters.');
+      return;
+    }
+    selectedMallSpaceId = spaceId;
+    persistEconomy();
+    syncMallShopBays3D();
+    renderCommercePage('market');
+    showToast(`3D shop sign updated to "${result.lease.shopName}".`);
+    return;
+  }
+
+  const customGoodForm = event.target.closest('[data-mall-custom-good-form]');
+  if (customGoodForm) {
+    event.preventDefault();
+    const spaceId = customGoodForm.dataset.mallCustomGoodForm;
+    const formData = new FormData(customGoodForm);
+    const styleId = String(formData.get('goodStyle') || 'fashion');
+    const styleObj = VIRTUAL_GOOD_STYLES.find((style) => style.id === styleId);
+    const result = createCustomVirtualGood(economy, {
+      name: String(formData.get('goodName') || ''),
+      category: styleObj?.defaultCategory || 'Showcase',
+      style: styleId,
+      price: Number(formData.get('goodPrice')),
+      spaceId,
+    });
+    if (!result.ok) {
+      showToast(
+        result.reason === 'invalid-price'
+          ? 'Choose a virtual good price from 1 to 500 GC.'
+          : result.reason === 'catalog-full'
+            ? 'Your custom virtual goods catalog is full.'
+            : 'Enter a virtual good name with at least two characters.',
+      );
+      return;
+    }
+    selectedMallSpaceId = spaceId;
+    persistEconomy();
+    syncMallShopBays3D();
+    renderCommercePage('market');
+    showToast(
+      result.autoDisplayed
+        ? `Created "${result.good.name}" and placed it in your 3D shop window!`
+        : `Created "${result.good.name}" in your virtual goods catalog.`,
+      3400,
+    );
   }
 });
 
@@ -4618,13 +5296,27 @@ function updateLocationAndMap() {
     setAttributeIfChanged(homeInteractionButton, 'aria-label', 'View Unity Court rental listings');
   } else if (hasCommercePrompt) {
     const venue = getNearbyCommerceVenue()?.venue;
-    const venueLabel = venue?.id === 'cafe' ? 'CAFÉ' : 'MARKET';
-    setTextIfChanged(homeInteractionEyebrow, `${venue?.name.toUpperCase() || 'LOCAL SHOP'} · CITY STREET`);
-    setTextIfChanged(homeInteractionMessage, venue?.id === 'cafe'
-      ? 'Fresh food and warm drinks · pay with game credits'
-      : 'Groceries and pantry goods · pay with game credits');
-    setTextIfChanged(homeInteractionAction, `OPEN ${venueLabel}`);
-    setAttributeIfChanged(homeInteractionButton, 'aria-label', `Open the ${venueLabel.toLowerCase()} shop`);
+    if (venue?.id === 'cafe') {
+      setTextIfChanged(homeInteractionEyebrow, `${venue.name.toUpperCase()} · CITY STREET`);
+      setTextIfChanged(homeInteractionMessage, 'Fresh food and warm drinks · pay with game credits');
+      setTextIfChanged(homeInteractionAction, 'OPEN CAFÉ');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open the café shop');
+    } else {
+      const nearbyBay = getNearbyMallShopBay()?.bay;
+      const bayState = nearbyBay ? getMallShopDisplayState(economy, nearbyBay.spaceId) : null;
+      const eyebrow = bayState
+        ? `UNITY MALL · ${bayState.space.code} (${bayState.space.sizeLabel.toUpperCase()} · ${bayState.space.areaSqm} M²)`
+        : `${venue?.name.toUpperCase() || 'UNITY MALL'} · SHOPPING GALLERIA`;
+      const message = bayState
+        ? bayState.isRented
+          ? `${bayState.shopName} · ${bayState.displayedGoods.length}/${bayState.space.maxDisplayItems} virtual goods displayed`
+          : `${bayState.space.name} available · ${formatCredits(bayState.space.monthlyRent)} / month · up to ${bayState.space.maxDisplayItems} virtual goods`
+        : '4 shop spaces (Small to Anchor) to rent & display virtual goods · anchor grocer';
+      setTextIfChanged(homeInteractionEyebrow, eyebrow);
+      setTextIfChanged(homeInteractionMessage, message);
+      setTextIfChanged(homeInteractionAction, 'OPEN MALL');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open Unity Mall shops and virtual goods showcase');
+    }
   } else if (home && hasHomePrompt) {
     const number = String(home.number).padStart(2, '0');
     const canReachHomeDoor = interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
