@@ -3634,7 +3634,12 @@ function resetVehicleTouchInputs() {
   vehicleTouchInput.accelerate = false;
   vehicleTouchInput.brake = false;
   vehicleAccelerateTapTimer = 0;
+  accelerateButton?.classList.remove('is-active');
+  jumpButton?.classList.remove('is-active');
 }
+joystick.addEventListener('touchstart', (event) => {
+  event.preventDefault();
+}, { passive: false });
 joystick.addEventListener('pointerdown', (event) => {
   if (joystickPointer !== null) return;
   event.preventDefault();
@@ -3661,10 +3666,39 @@ function requestJump() {
   jumpRequested = true;
 }
 
+const touchControls = document.querySelector('#touch-controls');
 const jumpButton = document.querySelector('#jump-button');
+
+for (const controlElement of [touchControls, joystick, jumpButton, accelerateButton]) {
+  if (!controlElement) continue;
+  for (const blockedEvent of ['contextmenu', 'selectstart', 'dragstart']) {
+    controlElement.addEventListener(blockedEvent, (event) => {
+      event.preventDefault();
+    });
+  }
+}
+
+jumpButton.addEventListener('touchstart', (event) => {
+  event.preventDefault();
+  if (isDriving) {
+    vehicleTouchInput.brake = true;
+    jumpButton.classList.add('is-active');
+    return;
+  }
+  jumpButton.classList.add('is-active');
+  requestJump();
+}, { passive: false });
+for (const touchEndEvent of ['touchend', 'touchcancel']) {
+  jumpButton.addEventListener(touchEndEvent, () => {
+    vehicleTouchInput.brake = false;
+    jumpButton.classList.remove('is-active');
+  });
+}
+
 jumpButton.addEventListener('pointerdown', (event) => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
+  jumpButton.classList.add('is-active');
   if (isDriving) {
     vehicleTouchInput.brake = true;
     jumpButton.setPointerCapture?.(event.pointerId);
@@ -3675,12 +3709,26 @@ jumpButton.addEventListener('pointerdown', (event) => {
 for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   jumpButton.addEventListener(eventName, () => {
     vehicleTouchInput.brake = false;
+    jumpButton.classList.remove('is-active');
   });
 }
 // detail === 0 covers keyboard and assistive-technology activation; pointer presses act while held above.
 jumpButton.addEventListener('click', (event) => {
   if (event.detail === 0) requestJump();
 });
+
+accelerateButton.addEventListener('touchstart', (event) => {
+  if (isRidingTransit || homeTransitionPending || isPhoneOpen()) return;
+  event.preventDefault();
+  vehicleTouchInput.accelerate = true;
+  accelerateButton.classList.add('is-active');
+}, { passive: false });
+for (const touchEndEvent of ['touchend', 'touchcancel']) {
+  accelerateButton.addEventListener(touchEndEvent, () => {
+    vehicleTouchInput.accelerate = false;
+    accelerateButton.classList.remove('is-active');
+  });
+}
 
 accelerateButton.addEventListener('pointerdown', (event) => {
   if (isRidingTransit || homeTransitionPending || isPhoneOpen() || (event.pointerType === 'mouse' && event.button !== 0)) return;

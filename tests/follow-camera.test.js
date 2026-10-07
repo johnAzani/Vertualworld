@@ -99,5 +99,8 @@ test('touch controls use the button next to jump to walk while the joystick only
 
   assert.match(mainSource, /accelerateButtonLabel\.textContent = isDriving \? 'ACCEL' : 'WALK'/);
   assert.match(mainSource, /touchLabel\.textContent = isDriving \? 'STEER' : isRidingTransit \? 'TRANSIT' : 'NAVIGATE'/);
+  assert.match(mainSource, /\['contextmenu', 'selectstart', 'dragstart'\]/);
+  assert.match(mainSource, /accelerateButton\.addEventListener\('touchstart'/);
+  assert.match(mainSource, /jumpButton\.addEventListener\('touchstart'/);
 });
 

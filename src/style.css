@@ -304,6 +304,14 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
   height: 112px;
   display: block;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-controls * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .joystick {
   position: absolute;
@@ -374,10 +382,20 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
   backdrop-filter: blur(8px);
   cursor: pointer;
   pointer-events: auto;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.jump-button span,
+.jump-button small {
+  pointer-events: none;
 }
 .jump-button span { font-size: 20px; line-height: 19px; }
 .jump-button small { font-size: 7px; letter-spacing: .12em; font-weight: 700; }
+.jump-button.is-active {
+  transform: scale(.96);
+}
 .accelerate-button {
   right: calc(clamp(19px, 3.2vw, 48px) + 76px);
   background: rgba(175, 131, 57, .88);
@@ -447,7 +465,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
   .joystick-stick { position: absolute; left: 50%; top: 50%; width: 43px; height: 43px; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: rgba(240,245,223,.86); box-shadow: 0 3px 12px rgba(23,57,44,.22); transform: translate(-50%,-50%); transition: background .16s; }
   .joystick.is-active .joystick-stick { background: #fff8db; }
   .touch-label { position: absolute; left: 79px; bottom: -15px; color: rgba(244,248,226,.9); font-size: 8px; font-weight: 700; letter-spacing: .18em; text-shadow: 0 1px 5px rgba(12,45,36,.65); }
-  .jump-button { position: absolute; right: 25px; bottom: 14px; width: 69px; height: 69px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border: 1px solid rgba(247,248,232,.76); border-radius: 50%; color: #fff9e8; background: rgba(44,110,83,.72); box-shadow: 0 8px 20px rgba(19,54,41,.18); backdrop-filter: blur(8px); pointer-events: auto; touch-action: manipulation; }
+  .jump-button { position: absolute; right: 25px; bottom: 14px; width: 69px; height: 69px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border: 1px solid rgba(247,248,232,.76); border-radius: 50%; color: #fff9e8; background: rgba(44,110,83,.72); box-shadow: 0 8px 20px rgba(19,54,41,.18); backdrop-filter: blur(8px); pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   .jump-button span { font-size: 21px; line-height: 20px; }
   .jump-button small { font-size: 7px; letter-spacing: .12em; font-weight: 700; }
   .accelerate-button { right: 104px; background: rgba(175, 131, 57, .88); }
@@ -915,7 +933,10 @@ kbd { font-size: 9px; }
     box-shadow: 0 8px 20px rgba(19,54,41,.18);
     backdrop-filter: blur(8px);
     pointer-events: auto;
-    touch-action: manipulation;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
   .jump-button span { font-size: 19px; line-height: 18px; }
   .touch-controls .jump-button small { font-size: 7px; letter-spacing: .1em; font-weight: 700; }
