@@ -18,7 +18,12 @@ import {
   ESTATE_HOUSE_COLLISION_MARGIN,
   ESTATE_HOUSE_LAYOUT,
   ESTATE_HOUSE_SIZE,
+  MALL_LOCKUP_SHOP_LAYOUT,
   MALL_SHOP_BAY_LAYOUT,
+  getMallIndoorWallColliders,
+  getMallLockupShopAt,
+  isInsideMallBuilding,
+  mallLocalToWorld,
 } from '../src/world-layout.js';
 
 function distanceToPolyline(x, z, points) {
@@ -301,10 +306,61 @@ test('strategic advertising billboards stay clear of every connected road surfac
 test('expanded Unity Grand Mall provides a larger footprint and wider storefront bays while staying inside the world boundary', () => {
   const mall = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
   assert.ok(mall, 'Unity Mall is present in COMMERCE_VENUE_LAYOUT');
-  assert.ok(mall.width >= 21, 'Unity Mall width is expanded to a grand multi-wing footprint');
-  assert.ok(mall.depth >= 13, 'Unity Mall depth is expanded');
-  assert.equal(MALL_SHOP_BAY_LAYOUT.length, 4, 'all 4 mall shop bays are laid out across the expanded facade');
+  assert.ok(mall.width >= 25, 'Unity Mall width is expanded to a big indoor mall footprint');
+  assert.ok(mall.depth >= 17, 'Unity Mall depth is expanded for indoor concourse and lockup shops');
+  assert.equal(MALL_SHOP_BAY_LAYOUT.length, 4, 'all 4 mall shop bays are laid out across the expanded mall');
   const totalBayWidth = MALL_SHOP_BAY_LAYOUT.reduce((sum, bay) => sum + bay.bayWidth, 0);
   assert.ok(totalBayWidth >= 17, 'storefront bays are widened across the larger mall facade');
 });
+
+test('indoor mall has an open front entrance portal, central concourse, and 6 walk-in lockup shops with wall colliders', () => {
+  const mall = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
+  assert.equal(MALL_LOCKUP_SHOP_LAYOUT.length, 6, '6 indoor lockup shops are defined');
+  const wallColliders = getMallIndoorWallColliders(mall);
+  assert.equal(wallColliders.length, 9, 'perimeter walls and interior lockup partition walls are generated');
+
+  // Walking straight through the 6.2m wide front entrance portal into the central concourse is unobstructed
+  for (const localZ of [-9.2, -8.6, -5.0, 0.0, 5.0]) {
+    const portalPoint = mallLocalToWorld(mall, 0, localZ);
+    for (const wall of wallColliders) {
+      const probe = { x: portalPoint.x, z: portalPoint.z };
+      const hit = resolveDiscAgainstOrientedBox(probe, wall, 0.42);
+      assert.equal(hit, null, `central concourse path at localZ=${localZ} should not hit wall ${wall.id}`);
+    }
+  }
+
+  // Walking inside the central concourse registers as inside the indoor mall building
+  const concourseCenter = mallLocalToWorld(mall, 0, 0);
+  assert.equal(isInsideMallBuilding(concourseCenter.x, concourseCenter.z, mall), true);
+
+  // Walking through each of the 6 lockup shop doorways and standing inside each lockup room works without hitting walls
+  for (const lockup of MALL_LOCKUP_SHOP_LAYOUT) {
+    const doorwayWorld = mallLocalToWorld(mall, lockup.doorLocalX, lockup.doorLocalZ);
+    for (const wall of wallColliders) {
+      const probe = { x: doorwayWorld.x, z: doorwayWorld.z };
+      assert.equal(
+        resolveDiscAgainstOrientedBox(probe, wall, 0.42),
+        null,
+        `doorway of ${lockup.code} should be open and unobstructed by ${wall.id}`,
+      );
+    }
+
+    const roomCenterWorld = mallLocalToWorld(mall, lockup.localX, lockup.localZ);
+    assert.equal(isInsideMallBuilding(roomCenterWorld.x, roomCenterWorld.z, mall), true);
+    const detected = getMallLockupShopAt(roomCenterWorld.x, roomCenterWorld.z, mall);
+    assert.ok(detected, `standing inside ${lockup.code} should detect the lockup shop`);
+    assert.equal(detected.shop.id, lockup.id);
+    assert.equal(detected.insideRoom, true);
+  }
+
+  // Exterior rear wall and interior partition walls block walking through solid walls
+  const rearWallProbe = mallLocalToWorld(mall, 0, mall.depth / 2 - 0.1);
+  const rearWall = wallColliders.find((wall) => wall.id === 'mall-wall-rear');
+  assert.ok(resolveDiscAgainstOrientedBox({ ...rearWallProbe }, rearWall, 0.42));
+
+  const partitionProbe = mallLocalToWorld(mall, -8.0, -2.6);
+  const partitionWall = wallColliders.find((wall) => wall.id === 'mall-partition-l1-l2');
+  assert.ok(resolveDiscAgainstOrientedBox({ ...partitionProbe }, partitionWall, 0.42));
+});
+
 

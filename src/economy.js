@@ -145,6 +145,69 @@ export const MALL_SHOP_SPACES = Object.freeze([
 
 export const MAX_CUSTOM_VIRTUAL_GOODS = 12;
 
+export const MALL_LOCKUP_SHOPS = Object.freeze([
+  Object.freeze({
+    id: 'lockup-l1',
+    code: 'L-01',
+    spaceId: 'kiosk-s1',
+    name: 'Zuma Artisan & Wellness Lockup',
+    category: 'Home Decor · Spa & Craft',
+    wing: 'North Concourse · Front Lockup',
+    merchant: 'Aisha Danjuma',
+    description: 'Hand-carved lanterns, shea butter spa kits, and framed Abuja holoprints.',
+  }),
+  Object.freeze({
+    id: 'lockup-l2',
+    code: 'L-02',
+    spaceId: 'boutique-m2',
+    name: 'Wuse Streetwear & Sneaker Lockup',
+    category: 'Fashion · Apparel & Footwear',
+    wing: 'North Concourse · Mid Lockup',
+    merchant: 'Chidi Okafor',
+    description: 'Tailored Ankara streetwear jackets, trail sneakers, and royal caps.',
+  }),
+  Object.freeze({
+    id: 'lockup-l3',
+    code: 'L-03',
+    spaceId: null,
+    name: 'Suya & Jollof Food Court Lockup',
+    category: 'Hot Meals · Suya, Jollof & Zobo',
+    wing: 'North Concourse · Rear Lockup',
+    merchant: 'Chef Musa Danladi',
+    description: 'Freshly grilled Abuja beef suya, smoky party jollof boxes, and chilled zobo.',
+  }),
+  Object.freeze({
+    id: 'lockup-l4',
+    code: 'L-04',
+    spaceId: 'showroom-l3',
+    name: 'Capital Tech & Audio Lockup',
+    category: 'Gadgets · Drones, Audio & Gear',
+    wing: 'South Concourse · Front Lockup',
+    merchant: 'Halima Yusuf',
+    description: 'Courier mini-drones, wireless studio earbuds, and portable Afrobeats synth decks.',
+  }),
+  Object.freeze({
+    id: 'lockup-l5',
+    code: 'L-05',
+    spaceId: null,
+    name: 'Abuja Pharmacy & Vitality Lockup',
+    category: 'Pharmacy · Vitamins, Cologne & Care',
+    wing: 'South Concourse · Mid Lockup',
+    merchant: 'Dr. Kemi Adewale',
+    description: 'Daily multivitamin packs, hydration boosters, and luxury oud & citrus cologne.',
+  }),
+  Object.freeze({
+    id: 'lockup-l6',
+    code: 'L-06',
+    spaceId: 'anchor-xl4',
+    name: 'Grand Harvest Supermarket Lockup',
+    category: 'Supermarket · Groceries & Staples',
+    wing: 'South Concourse · Anchor Hall',
+    merchant: 'Ibrahim Musa',
+    description: 'Fresh farm produce crates, rice & beans bundles, bakery bread, and pantry staples.',
+  }),
+]);
+
 export const SHOP_CATALOG = Object.freeze({
   cafe: Object.freeze([
     Object.freeze({ id: 'cafe-coffee', name: 'Fresh-brewed coffee', category: 'Food & drink', price: 12, description: 'A warm cup for the walk ahead.' }),
@@ -153,15 +216,37 @@ export const SHOP_CATALOG = Object.freeze({
     Object.freeze({ id: 'cafe-sandwich', name: 'Picnic sandwich', category: 'Fresh food', price: 22, description: 'A packed lunch for your afternoon out.' }),
   ]),
   market: Object.freeze([
-    Object.freeze({ id: 'market-produce', name: 'Fresh produce crate', category: 'Groceries', price: 34, description: 'Seasonal fruit and vegetables.' }),
-    Object.freeze({ id: 'market-rice-beans', name: 'Rice & beans', category: 'Pantry', price: 28, description: 'A staple bundle for the kitchen shelf.' }),
-    Object.freeze({ id: 'market-eggs-bread', name: 'Eggs & bread', category: 'Groceries', price: 24, description: 'Everyday essentials from local growers.' }),
-    Object.freeze({ id: 'market-pantry', name: 'Pantry staples', category: 'Groceries', price: 50, description: 'Oil, seasoning, and a few useful basics.' }),
+    // Lockup L-06 · Grand Harvest Supermarket
+    Object.freeze({ id: 'market-produce', lockupId: 'lockup-l6', lockupCode: 'L-06', name: 'Fresh produce crate', category: 'Groceries', price: 34, description: 'Seasonal fruit and vegetables from FCT farms.' }),
+    Object.freeze({ id: 'market-rice-beans', lockupId: 'lockup-l6', lockupCode: 'L-06', name: 'Rice & beans', category: 'Pantry', price: 28, description: 'A staple bundle for the kitchen shelf.' }),
+    Object.freeze({ id: 'market-eggs-bread', lockupId: 'lockup-l6', lockupCode: 'L-06', name: 'Eggs & bread', category: 'Groceries', price: 24, description: 'Everyday essentials from local growers.' }),
+    Object.freeze({ id: 'market-pantry', lockupId: 'lockup-l6', lockupCode: 'L-06', name: 'Pantry staples', category: 'Groceries', price: 50, description: 'Oil, seasoning, and a few useful basics.' }),
+    // Lockup L-01 · Zuma Artisan & Wellness Lockup
+    Object.freeze({ id: 'mall-calabash-lamp', lockupId: 'lockup-l1', lockupCode: 'L-01', name: 'Brass & Calabash Glow Lamp', category: 'Home & Craft', price: 38, description: 'Hand-carved warm table lantern that brightens your mood.' }),
+    Object.freeze({ id: 'mall-spa-kit', lockupId: 'lockup-l1', lockupCode: 'L-01', name: 'Shea Butter & Neem Spa Kit', category: 'Wellness', price: 26, description: 'Artisan bath and skincare bundle · restores freshness and mood.' }),
+    Object.freeze({ id: 'mall-aso-print', lockupId: 'lockup-l1', lockupCode: 'L-01', name: 'Aso Rock Sunset Holoprint', category: 'Art & Decor', price: 60, description: 'Luminous gallery collector print of Aso Rock at dusk.' }),
+    // Lockup L-02 · Wuse Streetwear & Sneaker Lockup
+    Object.freeze({ id: 'mall-ankara-jacket', lockupId: 'lockup-l2', lockupCode: 'L-02', name: 'Abuja Streetwear Jacket', category: 'Fashion', price: 45, description: 'Tailored woven Ankara bomber jacket · boosts social confidence.' }),
+    Object.freeze({ id: 'mall-sneakers', lockupId: 'lockup-l2', lockupCode: 'L-02', name: 'Maitama Trail Sneakers', category: 'Footwear', price: 38, description: 'Cushioned city runners built for exploring Abuja.' }),
+    Object.freeze({ id: 'mall-royal-cap', lockupId: 'lockup-l2', lockupCode: 'L-02', name: 'Aso Oke Royal Cap Set', category: 'Fashion', price: 30, description: 'Hand-woven ceremonial cap and scarf set.' }),
+    // Lockup L-03 · Suya & Jollof Food Court Lockup
+    Object.freeze({ id: 'mall-suya-platter', lockupId: 'lockup-l3', lockupCode: 'L-03', name: 'Smoky Abuja Beef Suya Platter', category: 'Hot Meals', price: 20, description: 'Spiced yaji grilled beef skewers with onions and tomatoes.' }),
+    Object.freeze({ id: 'mall-jollof-box', lockupId: 'lockup-l3', lockupCode: 'L-03', name: 'Party Jollof & Plantain Box', category: 'Hot Meals', price: 25, description: 'Firewood-style smoky jollof rice with sweet fried plantain.' }),
+    Object.freeze({ id: 'mall-zobo-drink', lockupId: 'lockup-l3', lockupCode: 'L-03', name: 'Chilled Zobo & Ginger Drink', category: 'Drinks', price: 10, description: 'Ice-cold hibiscus, pineapple, and ginger refresher.' }),
+    // Lockup L-04 · Capital Tech & Audio Lockup
+    Object.freeze({ id: 'mall-smart-drone', lockupId: 'lockup-l4', lockupCode: 'L-04', name: 'Savannah Courier Mini-Drone', category: 'Tech & Gadgets', price: 85, description: 'Compact quad-rotor camera drone for aerial city views.' }),
+    Object.freeze({ id: 'mall-earbuds', lockupId: 'lockup-l4', lockupCode: 'L-04', name: 'Abuja Pro Wireless Earbuds', category: 'Audio Gear', price: 42, description: 'Noise-cancelling earbuds tuned for Afrobeats on the move.' }),
+    Object.freeze({ id: 'mall-synth-deck', lockupId: 'lockup-l4', lockupCode: 'L-04', name: 'Maitama Beat Loop Synth Deck', category: 'Music & Audio', price: 70, description: 'Portable studio sampler and tabletop beatmaker rig.' }),
+    // Lockup L-05 · Abuja Pharmacy & Vitality Lockup
+    Object.freeze({ id: 'mall-vitamins', lockupId: 'lockup-l5', lockupCode: 'L-05', name: 'Abuja Vitality Multivitamin Pack', category: 'Pharmacy', price: 30, description: 'Daily energy and immunity pack · boosts energy and freshness.' }),
+    Object.freeze({ id: 'mall-electrolytes', lockupId: 'lockup-l5', lockupCode: 'L-05', name: 'Savannah Hydration & Electrolytes', category: 'Pharmacy', price: 16, description: 'Fast-acting electrolyte sachets for active days in the city.' }),
+    Object.freeze({ id: 'mall-oud-cologne', lockupId: 'lockup-l5', lockupCode: 'L-05', name: 'Luxury Oud & Citrus Cologne', category: 'Fragrance', price: 44, description: 'Long-lasting artisan fragrance · boosts freshness and social charm.' }),
   ]),
 });
 
 const rentalListingByHouse = new Map(RENTAL_LISTINGS.map((listing) => [listing.houseNumber, listing]));
 const mallSpaceById = new Map(MALL_SHOP_SPACES.map((space) => [space.id, space]));
+const mallLockupById = new Map(MALL_LOCKUP_SHOPS.map((shop) => [shop.id, shop]));
 const virtualGoodStyleById = new Map(VIRTUAL_GOOD_STYLES.map((style) => [style.id, style]));
 const builtInVirtualGoodsById = new Map(MALL_VIRTUAL_GOODS.map((good) => [good.id, good]));
 const productsById = new Map(Object.values(SHOP_CATALOG).flat().map((product) => [product.id, product]));
@@ -174,6 +259,15 @@ function sanitizeShortText(value, maxLength = 28, fallback = '') {
 
 export function getMallShopSpace(spaceId) {
   return mallSpaceById.get(spaceId) || null;
+}
+
+export function getMallLockupShop(lockupId) {
+  return mallLockupById.get(lockupId) || null;
+}
+
+export function getMallLockupProducts(lockupId) {
+  if (!lockupId || lockupId === 'all') return SHOP_CATALOG.market;
+  return SHOP_CATALOG.market.filter((product) => product.lockupId === lockupId);
 }
 
 export function getAllVirtualGoods(economy) {

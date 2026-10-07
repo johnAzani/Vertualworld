@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   ECONOMY_STORAGE_KEY,
+  MALL_LOCKUP_SHOPS,
   MALL_SHOP_SPACES,
   RENTAL_MONTH_MS,
   advanceRentalBilling,
@@ -12,6 +13,8 @@ import {
   earnGameCredits,
   endMallShopLease,
   endRentalLease,
+  getMallLockupProducts,
+  getMallLockupShop,
   getMallShopDisplayState,
   loadEconomy,
   payMallShopRent,
@@ -23,6 +26,7 @@ import {
   toggleMallShopDisplayedGood,
   updateMallShopDetails,
 } from '../src/economy.js';
+import { createDefaultLife, enjoyMeal } from '../src/life-sim.js';
 
 test('renting charges the deposit and first month, then prevents a second active lease', () => {
   const economy = createDefaultEconomy();
@@ -202,3 +206,33 @@ test('residents can rent mall shop spaces, curate displayed virtual goods, creat
   assert.equal(ended.refund, 90);
   assert.equal(economy.shopLeases['kiosk-s1'], undefined);
 });
+
+test('all 6 indoor lockup shops offer distinct counter catalogs that players can buy and use', () => {
+  assert.equal(MALL_LOCKUP_SHOPS.length, 6);
+  const economy = createDefaultEconomy();
+  earnGameCredits(economy, 'Mall shopping spree bonus', 1000, 12_000);
+  const life = createDefaultLife();
+  life.needs.hunger = 40;
+  life.needs.energy = 40;
+  life.needs.hygiene = 40;
+  life.needs.mood = 40;
+  life.needs.social = 40;
+
+  for (const lockup of MALL_LOCKUP_SHOPS) {
+    assert.ok(getMallLockupShop(lockup.id));
+    const products = getMallLockupProducts(lockup.id);
+    assert.ok(products.length >= 3, `${lockup.code} (${lockup.name}) should have at least 3 buyable products`);
+    for (const product of products) {
+      assert.equal(product.lockupId, lockup.id);
+      assert.equal(product.lockupCode, lockup.code);
+      const purchase = purchaseProduct(economy, product.id, 15_000);
+      assert.equal(purchase.ok, true, `should be able to buy ${product.name} from ${lockup.name}`);
+      assert.equal(economy.inventory[product.id], 1);
+      const consumed = consumeProduct(economy, product.id);
+      assert.equal(consumed.ok, true);
+      const used = enjoyMeal(life, product.id);
+      assert.equal(used.ok, true, `${product.name} should be usable by the resident`);
+    }
+  }
+});
+

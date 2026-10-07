@@ -13,7 +13,11 @@ import {
   ESTATE_HOUSE_COLLISION_MARGIN,
   ESTATE_HOUSE_LAYOUT,
   ESTATE_HOUSE_SIZE,
+  MALL_LOCKUP_SHOP_LAYOUT,
   MALL_SHOP_BAY_LAYOUT,
+  getMallIndoorWallColliders,
+  getMallLockupShopAt,
+  isInsideMallBuilding,
 } from './world-layout.js';
 import {
   createStadium,
@@ -41,6 +45,7 @@ import {
   updateTransportNetwork,
 } from './transport.js';
 import {
+  MALL_LOCKUP_SHOPS,
   MALL_SHOP_SPACES,
   RENTAL_LISTINGS,
   RENTAL_MONTH_MS,
@@ -54,6 +59,8 @@ import {
   endMallShopLease,
   endRentalLease,
   getAllVirtualGoods,
+  getMallLockupProducts,
+  getMallLockupShop,
   getMallShopDisplayState,
   getMallShopSpace,
   getProduct,
@@ -249,6 +256,8 @@ const cafeProximityElement = document.querySelector('#cafe-proximity');
 const marketProximityElement = document.querySelector('#market-proximity');
 const cafeInventoryElement = document.querySelector('#cafe-inventory');
 const marketInventoryElement = document.querySelector('#market-inventory');
+const mallLockupDirectoryElement = document.querySelector('#mall-lockup-directory');
+const mallActiveLockupHeadingElement = document.querySelector('#mall-active-lockup-heading');
 const mallShopSpacesElement = document.querySelector('#mall-shop-spaces');
 const mallShowcaseManagerElement = document.querySelector('#mall-showcase-manager');
 const governmentTreasuryBalanceElement = document.querySelector('#government-treasury-balance');
@@ -790,6 +799,10 @@ function groundHeightAt(x, z) {
   const stadiumSurface = getStadiumSurfaceHeight(x, z, terrainHeight(STADIUM.x, STADIUM.z), STADIUM);
   if (stadiumSurface !== null) {
     ground = Math.max(ground, stadiumSurface);
+  }
+  const mallLayout = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
+  if (mallLayout && isInsideMallBuilding(x, z, mallLayout)) {
+    ground = Math.max(ground, terrainHeight(mallLayout.x, mallLayout.z) + 0.16);
   }
 
   for (const surface of estateRoadSurfaces) {
@@ -1784,6 +1797,8 @@ function makeCommerceSignTexture(label, backgroundColor, foregroundColor) {
 }
 
 const mallShopBayRuntime = [];
+const mallLockupRuntime = [];
+let mallRoofGroup = null;
 
 function makeMallBaySignTexture(displayState, accentHex) {
   const signCanvas = document.createElement('canvas');
@@ -1816,6 +1831,46 @@ function makeMallBaySignTexture(displayState, accentHex) {
     signCanvas.width / 2,
     122,
     464,
+  );
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function makeMallLockupSignTexture(lockup, displayState, accentHex) {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 148;
+  const context = signCanvas.getContext('2d');
+  context.fillStyle = accentHex;
+  context.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  context.strokeStyle = 'rgba(255, 248, 224, .86)';
+  context.lineWidth = 6;
+  context.strokeRect(7, 7, signCanvas.width - 14, signCanvas.height - 14);
+  const isRented = Boolean(displayState?.isRented);
+  const titleText = isRented ? displayState.shopName : lockup.name;
+  context.fillStyle = 'rgba(255, 248, 224, .94)';
+  context.font = '700 21px system-ui, sans-serif';
+  context.textAlign = 'left';
+  context.textBaseline = 'top';
+  context.fillText(`LOCKUP ${lockup.code} · ${lockup.categoryLabel.toUpperCase()}`, 22, 18, 330);
+  context.textAlign = 'right';
+  context.fillStyle = isRented ? '#d7f7c2' : '#ffe8b8';
+  context.fillText(isRented ? 'LEASED & OPEN' : 'WALK IN & BUY', signCanvas.width - 22, 18, 160);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#fff9eb';
+  context.font = '700 34px system-ui, sans-serif';
+  context.fillText(titleText, signCanvas.width / 2, 78, 468);
+  context.font = '600 19px system-ui, sans-serif';
+  context.fillStyle = 'rgba(255, 246, 222, .9)';
+  const products = getMallLockupProducts(lockup.id);
+  context.fillText(
+    `${products.length} COUNTER ITEMS · STEP INSIDE & PRESS E TO BUY`,
+    signCanvas.width / 2,
+    118,
+    468,
   );
   const texture = new THREE.CanvasTexture(signCanvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -1942,6 +1997,19 @@ function syncMallShopBays3D() {
       bayRuntime.goodsGroup.add(goodMesh);
     }
   }
+  for (const lockupRuntime of mallLockupRuntime) {
+    const displayState = lockupRuntime.leaseSpaceId
+      ? getMallShopDisplayState(economy, lockupRuntime.leaseSpaceId)
+      : null;
+    const nextTexture = makeMallLockupSignTexture(
+      lockupRuntime.lockup,
+      displayState,
+      lockupRuntime.accentHex,
+    );
+    if (lockupRuntime.signMaterial.map) lockupRuntime.signMaterial.map.dispose();
+    lockupRuntime.signMaterial.map = nextTexture;
+    lockupRuntime.signMaterial.needsUpdate = true;
+  }
 }
 
 function createShoppingMallVenue(venueLayout) {
@@ -1952,14 +2020,15 @@ function createShoppingMallVenue(venueLayout) {
     x,
     z,
     facing,
-    width = 21.6,
-    depth = 13.6,
-    collider = COMMERCE_VENUE_COLLIDER,
+    width = 25.2,
+    depth = 17.2,
     wallColor,
     roofColor,
     awningColor,
   } = venueLayout;
   const frontZ = -depth / 2;
+  const rearZ = depth / 2;
+  const halfW = width / 2;
   const group = new THREE.Group();
   group.name = name;
   const wallMaterial = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.86 });
@@ -1967,6 +2036,13 @@ function createShoppingMallVenue(venueLayout) {
   const roofMaterial = new THREE.MeshStandardMaterial({ color: roofColor, roughness: 0.78 });
   const awningMaterial = new THREE.MeshStandardMaterial({ color: awningColor, roughness: 0.76 });
   const plinthMaterial = new THREE.MeshStandardMaterial({ color: 0xc8bfa8, roughness: 0.92 });
+  const concourseFloorMaterial = new THREE.MeshStandardMaterial({ color: 0xefe7d6, roughness: 0.58 });
+  const concourseRunnerMaterial = new THREE.MeshStandardMaterial({ color: 0xc89a4b, roughness: 0.52 });
+  const lockupFloorMaterial = new THREE.MeshStandardMaterial({ color: 0xe3d8c3, roughness: 0.7 });
+  const partitionMaterial = new THREE.MeshStandardMaterial({ color: 0xeae1ce, roughness: 0.82 });
+  const shutterMaterial = new THREE.MeshStandardMaterial({ color: 0x56646b, metalness: 0.42, roughness: 0.48 });
+  const counterMaterial = new THREE.MeshStandardMaterial({ color: 0x6f4e37, roughness: 0.68 });
+  const counterTopMaterial = new THREE.MeshStandardMaterial({ color: 0xf4ecdc, roughness: 0.46 });
   const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xf7eed8, roughness: 0.68 });
   const columnMaterial = new THREE.MeshStandardMaterial({ color: 0xd9cfb8, roughness: 0.8 });
   const glassMaterial = new THREE.MeshStandardMaterial({
@@ -1974,51 +2050,152 @@ function createShoppingMallVenue(venueLayout) {
     roughness: 0.2,
     metalness: 0.08,
     transparent: true,
-    opacity: 0.56,
+    opacity: 0.54,
     side: THREE.DoubleSide,
   });
   const signMaterial = new THREE.MeshBasicMaterial({
-    map: makeCommerceSignTexture(`${sign} · SHOPPING GALLERIA`, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8'),
+    map: makeCommerceSignTexture(`${sign} · 6 LOCKUP SHOPS`, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8'),
   });
-  const addBox = (dimensions, position, material, castShadow = true, receiveShadow = true) => {
+  const addBoxTo = (targetGroup, dimensions, position, material, castShadow = true, receiveShadow = true) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
     mesh.position.set(...position);
     mesh.castShadow = castShadow;
     mesh.receiveShadow = receiveShadow;
-    group.add(mesh);
+    targetGroup.add(mesh);
     return mesh;
   };
+  const addBox = (dimensions, position, material, castShadow = true, receiveShadow = true) =>
+    addBoxTo(group, dimensions, position, material, castShadow, receiveShadow);
 
-  // Broad promenade deck and main multi-wing shopping mall body
-  addBox([width + 1.8, 0.28, depth + 2.6], [0, 0.14, -0.55], plinthMaterial, false, true);
-  addBox([width, 4.75, depth], [0, 2.5, 0.2], wallMaterial);
-  // West & East mezzanine retail wings
-  addBox([width - 2.4, 1.85, depth - 1.8], [0, 5.75, 0.35], upperWallMaterial);
-  addBox([width - 1.9, 0.26, depth - 1.4], [0, 6.75, 0.35], roofMaterial);
-  // Grand central skylight atrium hall
-  addBox([10.4, 2.15, depth - 2.6], [0.9, 7.65, 0.15], upperWallMaterial);
-  addBox([10.9, 0.32, depth - 2.1], [0.9, 8.85, 0.15], roofMaterial);
-  addBox([9.2, 1.05, 0.12], [0.9, 7.65, frontZ + 1.38], glassMaterial, false, false);
-  addBox([width + 0.65, 0.32, depth + 0.55], [0, 4.95, 0.2], roofMaterial);
-  addBox([width - 0.5, 0.26, 1.65], [0, 3.65, frontZ - 0.45], awningMaterial);
+  // Exterior promenade deck, indoor marble concourse floor, and center brass runner
+  addBox([width + 2.2, 0.16, depth + 2.4], [0, 0.08, -0.4], plinthMaterial, false, true);
+  addBox([6.9, 0.18, depth - 0.5], [0, 0.09, 0], concourseFloorMaterial, false, true);
+  addBox([2.1, 0.19, depth - 1.4], [0, 0.095, 0], concourseRunnerMaterial, false, true);
 
-  for (const columnX of [-9.8, -5.8, -1.8, 2.8, 6.6, 9.8]) {
-    addBox([0.34, 3.55, 0.34], [columnX, 1.9, frontZ - 1.05], columnMaterial);
+  // Walkable perimeter walls with 6.2m wide Open Grand Entrance Portal at front center
+  addBox([width, 4.85, 0.42], [0, 2.5, rearZ - 0.21], wallMaterial);
+  addBox([0.42, 4.85, depth], [-halfW + 0.21, 2.5, 0], wallMaterial);
+  addBox([0.42, 4.85, depth], [halfW - 0.21, 2.5, 0], wallMaterial);
+  addBox([9.5, 4.85, 0.42], [-7.85, 2.5, frontZ + 0.21], wallMaterial);
+  addBox([9.5, 4.85, 0.42], [7.85, 2.5, frontZ + 0.21], wallMaterial);
+  // Grand Entrance Portal header lintel + swung-open glass entrance doors
+  addBox([6.6, 1.35, 0.48], [0, 4.25, frontZ + 0.21], upperWallMaterial);
+  addBox([6.8, 0.24, 1.55], [0, 3.62, frontZ - 0.45], awningMaterial);
+  addBox([0.12, 2.95, 1.35], [-2.95, 1.62, frontZ + 0.72], glassMaterial, false, false);
+  addBox([0.12, 2.95, 1.35], [2.95, 1.62, frontZ + 0.72], glassMaterial, false, false);
+
+  // Front colonnade and exterior display windows
+  for (const columnX of [-11.2, -7.2, -3.25, 3.25, 7.2, 11.2]) {
+    addBox([0.36, 3.65, 0.36], [columnX, 1.95, frontZ - 0.95], columnMaterial);
+  }
+  for (const frontWindowX of [-7.85, 7.85]) {
+    addBox([5.4, 2.35, 0.12], [frontWindowX, 1.65, frontZ + 0.06], trimMaterial, false, false);
+    addBox([5.0, 2.05, 0.08], [frontWindowX, 1.65, frontZ + 0.02], glassMaterial, false, false);
   }
 
-  for (const bay of MALL_SHOP_BAY_LAYOUT) {
-    const windowHeight = Math.min(2.45, bay.bayHeight - 0.65);
-    addBox([bay.bayWidth, windowHeight + 0.24, 0.12], [bay.localX, 1.52, frontZ + 0.16], trimMaterial, false, false);
-    addBox([bay.bayWidth - 0.24, windowHeight, 0.08], [bay.localX, 1.52, frontZ + 0.1], glassMaterial, false, false);
-    addBox([bay.bayWidth + 0.16, 0.16, 1.15], [bay.localX, 0.3, frontZ - 0.24], trimMaterial, false, true);
+  // Interior partition walls dividing the 6 walk-in lockup shops (3 on Left wing, 3 on Right wing)
+  for (const wingSign of [-1, 1]) {
+    for (const partitionZ of [-2.6, 2.6]) {
+      addBox([8.6, 3.85, 0.32], [wingSign * 8.05, 2.02, partitionZ], partitionMaterial);
+    }
   }
 
-  const mainSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(8.8, 1.32), signMaterial);
-  mainSignBoard.position.set(0.9, 7.95, frontZ + 1.24);
+  // Cutaway roof & skylight atrium group (auto-hides when player walks inside the mall)
+  const roofCutawayGroup = new THREE.Group();
+  roofCutawayGroup.name = 'UnityGrandMallRoof';
+  addBoxTo(roofCutawayGroup, [width + 0.6, 0.3, depth + 0.5], [0, 5.02, 0], roofMaterial);
+  addBoxTo(roofCutawayGroup, [width - 2.6, 1.75, depth - 2.0], [0, 5.95, 0.2], upperWallMaterial);
+  addBoxTo(roofCutawayGroup, [width - 2.1, 0.26, depth - 1.6], [0, 6.92, 0.2], roofMaterial);
+  addBoxTo(roofCutawayGroup, [10.8, 1.95, depth - 3.2], [0, 7.85, 0.1], upperWallMaterial);
+  addBoxTo(roofCutawayGroup, [11.3, 0.3, depth - 2.7], [0, 8.95, 0.1], roofMaterial);
+  addBoxTo(roofCutawayGroup, [9.4, 1.05, 0.12], [0, 7.8, frontZ + 1.55], glassMaterial, false, false);
+  group.add(roofCutawayGroup);
+  mallRoofGroup = roofCutawayGroup;
+
+  // Build each of the 6 Walk-In Lockup Shop Rooms (L-01 to L-06)
+  for (const lockup of MALL_LOCKUP_SHOP_LAYOUT) {
+    const side = lockup.side;
+    const frontWallX = side * 3.55;
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: lockup.accentColor, roughness: 0.58 });
+
+    // Lockup room tiled floor
+    addBox([8.2, 0.185, 4.88], [lockup.localX, 0.092, lockup.localZ], lockupFloorMaterial, false, true);
+
+    // Concourse-facing lockup shopfront piers + glass display panels leaving a 3.2m wide walk-in doorway
+    for (const pierDir of [-1, 1]) {
+      const pierZ = lockup.localZ + pierDir * 2.05;
+      addBox([0.26, 3.65, 0.92], [frontWallX, 1.95, pierZ], trimMaterial);
+      addBox([0.1, 2.2, 0.68], [frontWallX, 1.55, pierZ], glassMaterial, false, false);
+    }
+
+    // Rolled-up metallic security lockup shutter header above doorway
+    addBox([0.34, 0.44, 3.32], [frontWallX, 3.12, lockup.localZ], shutterMaterial);
+    addBox([0.28, 0.52, 5.0], [frontWallX, 3.62, lockup.localZ], accentMaterial);
+
+    // Merchant checkout counter & cash register terminal toward the back of the lockup shop
+    const counterX = side * 10.45;
+    addBox([1.05, 0.92, 2.45], [counterX, 0.62, lockup.localZ], counterMaterial);
+    addBox([1.16, 0.1, 2.56], [counterX, 1.12, lockup.localZ], counterTopMaterial);
+    addBox([0.38, 0.28, 0.44], [counterX - side * 0.12, 1.3, lockup.localZ - 0.55], shutterMaterial);
+
+    // Back-wall merchandise shelving unit with stocked 3D goods
+    const shelfX = side * 11.88;
+    addBox([0.46, 2.55, 3.6], [shelfX, 1.44, lockup.localZ], trimMaterial);
+    for (const shelfY of [0.85, 1.48, 2.1]) {
+      addBox([0.52, 0.08, 3.48], [shelfX - side * 0.04, shelfY, lockup.localZ], counterMaterial);
+      for (const boxZ of [-1.15, -0.38, 0.38, 1.15]) {
+        addBox(
+          [0.32, 0.34, 0.46],
+          [shelfX - side * 0.06, shelfY + 0.21, lockup.localZ + boxZ],
+          accentMaterial,
+        );
+      }
+    }
+  }
+
+  const mainSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 1.38), signMaterial);
+  mainSignBoard.position.set(0, 4.25, frontZ - 0.06);
   mainSignBoard.rotation.y = Math.PI;
   group.add(mainSignBoard);
 
   batchStaticVenueMeshes(group);
+  batchStaticVenueMeshes(roofCutawayGroup);
+
+  // Dynamic overhead lockup shop signboards & 3D merchandise pedestals inside each lockup shop
+  for (const lockup of MALL_LOCKUP_SHOP_LAYOUT) {
+    const accentHex = `#${new THREE.Color(lockup.accentColor).getHexString()}`;
+    const initialState = lockup.leaseSpaceId
+      ? getMallShopDisplayState(economy, lockup.leaseSpaceId)
+      : null;
+    const lockupSignMaterial = new THREE.MeshBasicMaterial({
+      map: makeMallLockupSignTexture(lockup, initialState, accentHex),
+    });
+    const lockupSign = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 0.78), lockupSignMaterial);
+    lockupSign.position.set(lockup.side * 3.36, 3.42, lockup.localZ);
+    lockupSign.rotation.y = lockup.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    group.add(lockupSign);
+
+    // Default signature 3D product display inside the lockup shop
+    const sampleMesh = createVirtualGoodDisplayMesh({
+      style:
+        lockup.id === 'lockup-l2'
+          ? 'fashion'
+          : lockup.id === 'lockup-l4'
+            ? 'tech'
+            : lockup.id === 'lockup-l6' || lockup.id === 'lockup-l3'
+              ? 'harvest'
+              : 'craft',
+    });
+    sampleMesh.position.set(lockup.localX - lockup.side * 0.65, 0.16, lockup.localZ + 1.35);
+    group.add(sampleMesh);
+
+    mallLockupRuntime.push({
+      lockup,
+      leaseSpaceId: lockup.leaseSpaceId,
+      accentHex,
+      signMaterial: lockupSignMaterial,
+    });
+  }
 
   const shopBays = [];
   for (const bay of MALL_SHOP_BAY_LAYOUT) {
@@ -2030,19 +2207,19 @@ function createShoppingMallVenue(venueLayout) {
       map: makeMallBaySignTexture(initialState, accentHex),
     });
     const baySign = new THREE.Mesh(
-      new THREE.PlaneGeometry(Math.max(2.6, bay.bayWidth - 0.15), 0.72),
+      new THREE.PlaneGeometry(Math.max(2.4, bay.bayWidth - 0.5), 0.68),
       baySignMaterial,
     );
-    baySign.position.set(0, 3.12, -0.02);
-    baySign.rotation.y = Math.PI;
+    baySign.position.set(bay.localX < 0 ? -3.9 : 3.9, 2.75, 0);
+    baySign.rotation.y = bay.localX < 0 ? Math.PI / 2 : -Math.PI / 2;
     bayGroup.add(baySign);
 
     const goodsGroup = new THREE.Group();
-    goodsGroup.position.set(0, 0, -0.25);
+    goodsGroup.position.set(0, 0, 0);
     bayGroup.add(goodsGroup);
     group.add(bayGroup);
 
-    const worldPos = residenceLocalToWorld({ x, z, facing }, bay.localX, frontZ - 1.1);
+    const worldPos = residenceLocalToWorld({ x, z, facing }, bay.localX, bay.localZ);
     const runtimeEntry = {
       spaceId: bay.spaceId,
       code: bay.code,
@@ -2073,23 +2250,11 @@ function createShoppingMallVenue(venueLayout) {
     group,
     interactionX: doorPosition.x,
     interactionZ: doorPosition.z,
-    interactionRadius: 13.5,
+    interactionRadius: 15.5,
     shopBays,
   };
-  const colliderCenter = residenceLocalToWorld(
-    { x, z, facing },
-    collider.localX,
-    collider.localZ,
-  );
   commerceVenues.push(venue);
-  worldObstacleColliders.push({
-    x: colliderCenter.x,
-    z: colliderCenter.z,
-    yaw: facing,
-    halfX: collider.halfX,
-    halfZ: collider.halfZ,
-    height: collider.height,
-  });
+  worldObstacleColliders.push(...getMallIndoorWallColliders(venueLayout));
   return venue;
 }
 
@@ -4179,6 +4344,13 @@ function getNearbyBusTerminal() {
   return getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6)?.terminal ?? null;
 }
 
+function getNearbyMallLockupShop() {
+  const hit = getMallLockupShopAt(player.position.x, player.position.z);
+  if (!hit) return null;
+  const shop = getMallLockupShop(hit.shop.id) || hit.shop;
+  return { shop, local: hit.local, insideRoom: hit.insideRoom };
+}
+
 function getNearbyMallShopBay(maxDistance = 4.2) {
   let nearest = null;
   let nearestDistance = maxDistance;
@@ -4198,6 +4370,9 @@ function getNearbyCommerceVenue(maxDistance = 5.8) {
   for (const venue of commerceVenues) {
     const limit = venue.interactionRadius ?? maxDistance;
     let distance = Math.hypot(player.position.x - venue.interactionX, player.position.z - venue.interactionZ);
+    if (venue.id === 'market' && isInsideMallBuilding(player.position.x, player.position.z)) {
+      distance = 0;
+    }
     if (Array.isArray(venue.shopBays)) {
       for (const bay of venue.shopBays) {
         distance = Math.min(distance, Math.hypot(player.position.x - bay.interactionX, player.position.z - bay.interactionZ));
@@ -4610,6 +4785,7 @@ function getInventorySummary() {
 }
 
 let selectedMallSpaceId = MALL_SHOP_SPACES[0].id;
+let selectedLockupShopId = 'all';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -4733,6 +4909,44 @@ function renderMallSpacesSection(isNearbyMall) {
   </div>`;
 }
 
+function renderMallLockupDirectory(nearbyLockup) {
+  if (!mallLockupDirectoryElement) return;
+  const activeLockup = selectedLockupShopId === 'all' ? null : getMallLockupShop(selectedLockupShopId);
+  if (selectedLockupShopId !== 'all' && !activeLockup) {
+    selectedLockupShopId = 'all';
+  }
+  const allProductsCount = (SHOP_CATALOG.market || []).length;
+  const allActive = selectedLockupShopId === 'all';
+  const allTabHtml = `<button class="mall-lockup-tab mall-lockup-tab--all ${allActive ? 'is-active' : ''}" type="button" data-select-lockup="all">
+    <strong>ALL 6 INDOOR LOCKUP SHOPS</strong>
+    <span class="mall-lockup-code">${allProductsCount} ITEMS</span>
+  </button>`;
+  const shopTabsHtml = MALL_LOCKUP_SHOPS.map((lockup) => {
+    const isSelected = selectedLockupShopId === lockup.id;
+    const isInside = nearbyLockup?.shop.id === lockup.id;
+    const count = getMallLockupProducts(lockup.id).length;
+    return `<button class="mall-lockup-tab ${isSelected ? 'is-active' : ''} ${isInside ? 'is-inside' : ''}" type="button" data-select-lockup="${escapeHtml(lockup.id)}">
+      <span class="mall-lockup-tab-top">
+        <span class="mall-lockup-code">${escapeHtml(lockup.code)}</span>
+        ${isInside ? '<span class="mall-lockup-inside-pill">INSIDE NOW</span>' : `<small>${count} items</small>`}
+      </span>
+      <strong>${escapeHtml(lockup.name)}</strong>
+      <small>${escapeHtml(lockup.categoryLabel)} · ${escapeHtml(lockup.merchant)}</small>
+    </button>`;
+  }).join('');
+  mallLockupDirectoryElement.innerHTML = allTabHtml + shopTabsHtml;
+
+  if (mallActiveLockupHeadingElement) {
+    const selectedShop = selectedLockupShopId === 'all' ? null : getMallLockupShop(selectedLockupShopId);
+    if (selectedShop) {
+      const items = getMallLockupProducts(selectedShop.id);
+      mallActiveLockupHeadingElement.innerHTML = `<span>LOCKUP ${escapeHtml(selectedShop.code)} · ${escapeHtml(selectedShop.name.toUpperCase())}</span><strong>${items.length} ITEMS · ${escapeHtml(selectedShop.merchant.toUpperCase())}</strong>`;
+    } else {
+      mallActiveLockupHeadingElement.innerHTML = `<span>ALL 6 WALK-IN LOCKUP SHOPS · COUNTER CATALOG</span><strong>${allProductsCount} ITEMS</strong>`;
+    }
+  }
+}
+
 function renderCommercePage(venueId) {
   refreshRentalBilling();
   updateWalletBalances();
@@ -4743,14 +4957,22 @@ function renderCommercePage(venueId) {
   const proximityElement = venueId === 'cafe' ? cafeProximityElement : marketProximityElement;
   const inventoryElement = venueId === 'cafe' ? cafeInventoryElement : marketInventoryElement;
   const itemsElement = venueId === 'cafe' ? cafeShopItemsElement : marketShopItemsElement;
+  let visibleProducts = products;
   if (venueId === 'market') {
+    const nearbyLockup = getNearbyMallLockupShop();
     const nearbyBay = getNearbyMallShopBay()?.bay;
     const baySpace = nearbyBay ? getMallShopSpace(nearbyBay.spaceId) : null;
     proximityElement.textContent = isNearby
-      ? baySpace
-        ? `At Unity Mall · standing by ${baySpace.name} (${baySpace.sizeLabel} · ${baySpace.areaSqm} m²). Rent shop spaces, curate 3D virtual goods, or shop groceries.`
-        : `Welcome to ${venue.name}. Rent shop spaces of different sizes, display virtual goods in 3D, or buy groceries.`
-      : `Visit ${venue.name} in person to buy groceries or collect showcase sales. You can rent shop spaces and arrange virtual goods from anywhere.`;
+      ? nearbyLockup
+        ? `Inside Unity Grand Indoor Mall · Lockup ${nearbyLockup.shop.code} (${nearbyLockup.shop.name}). Buy items from ${nearbyLockup.shop.merchant} right at this counter or switch lockup shops below.`
+        : baySpace
+          ? `Inside Unity Grand Indoor Mall · by ${baySpace.name} (${baySpace.sizeLabel} · ${baySpace.areaSqm} m²). Walk into any of the 6 lockup shops to buy what you want.`
+          : `Welcome inside ${venue.name}. Walk into any of the 6 indoor lockup shops (L-01 to L-06) to buy what you want or lease a shop bay.`
+      : `Walk through the open front entrance of ${venue.name} and step into any of the 6 indoor lockup shops to buy items in person.`;
+    renderMallLockupDirectory(nearbyLockup);
+    if (selectedLockupShopId !== 'all') {
+      visibleProducts = getMallLockupProducts(selectedLockupShopId);
+    }
   } else {
     proximityElement.textContent = isNearby
       ? `Welcome to ${venue.name}. Buy with game credits or preview Flutterwave checkout.`
@@ -4760,13 +4982,15 @@ function renderCommercePage(venueId) {
   proximityElement.classList.toggle('is-away', !isNearby);
   if (venueId === 'market') renderMallSpacesSection(isNearby);
   inventoryElement.textContent = getInventorySummary();
-  itemsElement.innerHTML = products.map((product) => {
+  itemsElement.innerHTML = visibleProducts.map((product) => {
     const count = economy.inventory[product.id] || 0;
     const cannotAfford = economy.wallet < product.price;
+    const lockupBadge = product.lockupCode ? `LOCKUP ${product.lockupCode} · ` : '';
     return `<div class="shop-item">
-      <span class="shop-item-copy"><strong>${product.name}</strong><small>${product.description}</small><em>${product.category}${count > 0 ? ` · IN BAG ×${count}` : ''}</em></span>
+      <span class="shop-item-copy"><strong>${product.name}</strong><small>${product.description}</small><em>${lockupBadge}${product.category}${count > 0 ? ` · IN BAG ×${count}` : ''}</em></span>
       <span class="shop-item-actions">
         <button class="shop-buy-button" type="button" data-shop-buy="${product.id}" ${!isNearby || cannotAfford ? 'disabled' : ''}><span>BUY · GAME</span><strong>${formatCredits(product.price)}</strong></button>
+        ${count > 0 ? `<button class="shop-use-button" type="button" data-food-use="${product.id}"><span>IN BAG ×${count}</span><strong>USE NOW</strong></button>` : ''}
         <button class="shop-flutterwave-button" type="button" data-bank-shop="${product.id}" aria-label="Preview demo Flutterwave payment for ${product.name}" ${!isNearby ? 'disabled' : ''}><span>PAY · DEMO</span><strong>${formatNaira(product.price)}</strong></button>
       </span>
     </div>`;
@@ -4880,6 +5104,13 @@ function previewRentPayment() {
 function openCommercePage(venueId) {
   if (!SHOP_CATALOG[venueId]) return;
   if (venueId === 'market') {
+    const nearbyLockup = getNearbyMallLockupShop();
+    if (nearbyLockup) {
+      selectedLockupShopId = nearbyLockup.shop.id;
+      if (nearbyLockup.shop.leaseSpaceId) {
+        selectedMallSpaceId = nearbyLockup.shop.leaseSpaceId;
+      }
+    }
     const nearbyBay = getNearbyMallShopBay()?.bay;
     if (nearbyBay) selectedMallSpaceId = nearbyBay.spaceId;
   }
@@ -5891,6 +6122,7 @@ function useFoodFromBag(productId) {
   if (!consumed.ok) {
     showToast(consumed.reason === 'not-in-inventory' ? 'That item is no longer in your bag.' : 'That item is not available.');
     renderLifePage();
+    if (activePhonePage === 'market' || activePhonePage === 'cafe') renderCommercePage(activePhonePage);
     return;
   }
   const meal = enjoyMeal(life, productId);
@@ -5898,13 +6130,15 @@ function useFoodFromBag(productId) {
     showToast('That item is not a meal.');
     persistEconomy();
     renderLifePage();
+    if (activePhonePage === 'market' || activePhonePage === 'cafe') renderCommercePage(activePhonePage);
     return;
   }
   notifyDailyActivity('eat-food');
   persistEconomy();
   persistLife();
   renderLifePage();
-  showToast(`You enjoyed ${consumed.product.name}. Fullness and mood refreshed.`);
+  if (activePhonePage === 'market' || activePhonePage === 'cafe') renderCommercePage(activePhonePage);
+  showToast(`Used ${consumed.product.name}. Resident needs and mood refreshed!`);
 }
 
 function beginSelectedWorkShift() {
@@ -6255,6 +6489,12 @@ phoneContent.addEventListener('click', (event) => {
   const rentMallSpaceButton = event.target.closest('[data-rent-mall-space]');
   if (rentMallSpaceButton) {
     rentMallShopFromPhone(rentMallSpaceButton.dataset.rentMallSpace);
+    return;
+  }
+  const selectLockupButton = event.target.closest('[data-select-lockup]');
+  if (selectLockupButton) {
+    selectedLockupShopId = selectLockupButton.dataset.selectLockup;
+    renderCommercePage('market');
     return;
   }
   const selectMallSpaceButton = event.target.closest('[data-select-mall-space]');
@@ -6694,6 +6934,8 @@ function updateLocationAndMap() {
       if (isPhoneOpen() && activePhonePage === 'life') renderLifePage();
     }
   }
+  const nearbyMallLockup = getNearbyMallLockupShop();
+  const insideMallBuilding = isInsideMallBuilding(x, z);
   if (isInsideHome && currentResidence) {
     const local = homeWorldToLocal(x, z);
     currentHomeRoom = local.z > 0.9
@@ -6705,6 +6947,8 @@ function updateLocationAndMap() {
   } else if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) location = 'Abuja Community Stadium';
   else if (Math.hypot(x, z + 27) < 10) location = 'Unity Circle';
   else if (Math.hypot(x - COMMUNITY_HALL_LAYOUT.x, z - COMMUNITY_HALL_LAYOUT.z) < 10) location = 'Unity Community Hall · Governor’s Office';
+  else if (nearbyMallLockup) location = `Unity Mall · ${nearbyMallLockup.shop.code} ${nearbyMallLockup.shop.name}`;
+  else if (insideMallBuilding) location = 'Unity Grand Indoor Mall · Concourse';
   else if (currentCommerceVenue) location = currentCommerceVenue.name;
   else if (isInsideEstate(x, z)) location = 'Unity Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Unity Court North';
@@ -6790,21 +7034,37 @@ function updateLocationAndMap() {
       setTextIfChanged(homeInteractionMessage, 'Fresh food and warm drinks · pay with game credits');
       setTextIfChanged(homeInteractionAction, 'OPEN CAFÉ');
       setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open the café shop');
+    } else if (nearbyMallLockup) {
+      const lockupItems = getMallLockupProducts(nearbyMallLockup.shop.id);
+      setTextIfChanged(
+        homeInteractionEyebrow,
+        `UNITY INDOOR MALL · LOCKUP ${nearbyMallLockup.shop.code} (${nearbyMallLockup.shop.categoryLabel.toUpperCase()})`,
+      );
+      setTextIfChanged(
+        homeInteractionMessage,
+        `Inside ${nearbyMallLockup.shop.name} · ${lockupItems.length} items at ${nearbyMallLockup.shop.merchant}’s counter`,
+      );
+      setTextIfChanged(homeInteractionAction, `SHOP ${nearbyMallLockup.shop.code}`);
+      setAttributeIfChanged(
+        homeInteractionButton,
+        'aria-label',
+        `Open ${nearbyMallLockup.shop.name} counter and buy items`,
+      );
     } else {
       const nearbyBay = getNearbyMallShopBay()?.bay;
       const bayState = nearbyBay ? getMallShopDisplayState(economy, nearbyBay.spaceId) : null;
       const eyebrow = bayState
         ? `UNITY MALL · ${bayState.space.code} (${bayState.space.sizeLabel.toUpperCase()} · ${bayState.space.areaSqm} M²)`
-        : `${venue?.name.toUpperCase() || 'UNITY MALL'} · SHOPPING GALLERIA`;
+        : `${venue?.name.toUpperCase() || 'UNITY MALL'} · 6 WALK-IN LOCKUP SHOPS`;
       const message = bayState
         ? bayState.isRented
           ? `${bayState.shopName} · ${bayState.displayedGoods.length}/${bayState.space.maxDisplayItems} virtual goods displayed`
           : `${bayState.space.name} available · ${formatCredits(bayState.space.monthlyRent)} / month · up to ${bayState.space.maxDisplayItems} virtual goods`
-        : '4 shop spaces (Small to Anchor) to rent & display virtual goods · anchor grocer';
+        : 'Walk inside the central concourse & step into 6 lockup shops (L-01 to L-06) to buy what you want';
       setTextIfChanged(homeInteractionEyebrow, eyebrow);
       setTextIfChanged(homeInteractionMessage, message);
       setTextIfChanged(homeInteractionAction, 'OPEN MALL');
-      setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open Unity Mall shops and virtual goods showcase');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open Unity Mall lockup shops and virtual goods showcase');
     }
   } else if (home && hasHomePrompt) {
     const number = String(home.number).padStart(2, '0');
@@ -7451,12 +7711,12 @@ function animate(timestamp) {
     }
 
     const planarDistance = Math.hypot(player.position.x, player.position.z);
-    if (!isRidingTransit && planarDistance > 70) {
-      const correction = 70 / planarDistance;
+    if (!isRidingTransit && planarDistance > 88) {
+      const correction = 88 / planarDistance;
       player.position.x *= correction;
       player.position.z *= correction;
-      const outwardX = player.position.x / 70;
-      const outwardZ = player.position.z / 70;
+      const outwardX = player.position.x / 88;
+      const outwardZ = player.position.z / 88;
       if (isDriving && playerCar) {
         const forwardX = -Math.sin(playerCar.group.rotation.y);
         const forwardZ = -Math.cos(playerCar.group.rotation.y);
@@ -7522,6 +7782,10 @@ function animate(timestamp) {
       }
     }
     if (!isRidingTransit) player.position.y = ground + jumpHeight;
+  }
+
+  if (mallRoofGroup) {
+    mallRoofGroup.visible = isWorldView || !isInsideMallBuilding(player.position.x, player.position.z);
   }
 
   if (!isDriving && !isRidingTransit && hasMovementInput) {

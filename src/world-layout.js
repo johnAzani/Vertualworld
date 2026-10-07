@@ -50,18 +50,18 @@ export const COMMERCE_VENUE_LAYOUT = Object.freeze([
     id: 'market',
     kind: 'mall',
     name: 'Unity Mall',
-    sign: 'UNITY GRAND MALL',
-    x: 61.2,
-    z: 36.6,
+    sign: 'UNITY GRAND INDOOR MALL',
+    x: 63.0,
+    z: 36.8,
     facing: Math.PI / 2,
-    width: 21.6,
-    depth: 13.6,
+    width: 25.2,
+    depth: 17.2,
     collider: Object.freeze({
       localX: 0,
-      localZ: -0.2,
-      halfX: 11.0,
-      halfZ: 7.0,
-      height: 9.6,
+      localZ: 0,
+      halfX: 12.6,
+      halfZ: 8.6,
+      height: 10.2,
     }),
     wallColor: 0xebe5d5,
     roofColor: 0x456b5c,
@@ -69,36 +69,157 @@ export const COMMERCE_VENUE_LAYOUT = Object.freeze([
   }),
 ]);
 
+export const MALL_LOCKUP_SHOP_LAYOUT = Object.freeze([
+  Object.freeze({
+    id: 'lockup-l1',
+    code: 'L-01',
+    spaceId: 'kiosk-s1',
+    name: 'Zuma Artisan & Wellness Lockup',
+    categoryLabel: 'Home Decor · Spa & Craft',
+    wing: 'North Concourse · Front Unit',
+    localX: -7.7,
+    localZ: -5.2,
+    doorLocalX: -3.5,
+    doorLocalZ: -5.2,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: -1,
+    accentColor: 0xc97b49,
+    floorColor: 0xdfd1bd,
+    pedestalOffsets: Object.freeze([[-1.2, -1.1], [1.2, -1.1]]),
+  }),
+  Object.freeze({
+    id: 'lockup-l2',
+    code: 'L-02',
+    spaceId: 'boutique-m2',
+    name: 'Wuse Streetwear & Sneaker Lockup',
+    categoryLabel: 'Fashion · Apparel & Footwear',
+    wing: 'North Concourse · Mid Unit',
+    localX: -7.7,
+    localZ: 0.0,
+    doorLocalX: -3.5,
+    doorLocalZ: 0.0,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: -1,
+    accentColor: 0x3f7a63,
+    floorColor: 0xd5e0d9,
+    pedestalOffsets: Object.freeze([[-1.4, -1.1], [0, -1.1], [1.4, -1.1]]),
+  }),
+  Object.freeze({
+    id: 'lockup-l3',
+    code: 'L-03',
+    spaceId: null,
+    name: 'Suya & Jollof Food Court Lockup',
+    categoryLabel: 'Hot Meals · Suya, Jollof & Zobo',
+    wing: 'North Concourse · Rear Unit',
+    localX: -7.7,
+    localZ: 5.2,
+    doorLocalX: -3.5,
+    doorLocalZ: 5.2,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: -1,
+    accentColor: 0xb8523b,
+    floorColor: 0xe4cfc5,
+    pedestalOffsets: Object.freeze([[-1.2, -1.1], [1.2, -1.1]]),
+  }),
+  Object.freeze({
+    id: 'lockup-l4',
+    code: 'L-04',
+    spaceId: 'showroom-l3',
+    name: 'Capital Tech & Audio Lockup',
+    categoryLabel: 'Gadgets · Drones, Audio & Gear',
+    wing: 'South Concourse · Front Unit',
+    localX: 7.7,
+    localZ: -5.2,
+    doorLocalX: 3.5,
+    doorLocalZ: -5.2,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: 1,
+    accentColor: 0x7b5c8e,
+    floorColor: 0xd9d3e2,
+    pedestalOffsets: Object.freeze([[-1.5, -1.1], [-0.5, -1.1], [0.5, -1.1], [1.5, -1.1]]),
+  }),
+  Object.freeze({
+    id: 'lockup-l5',
+    code: 'L-05',
+    spaceId: null,
+    name: 'Abuja Pharmacy & Vitality Lockup',
+    categoryLabel: 'Pharmacy · Vitamins, Cologne & Care',
+    wing: 'South Concourse · Mid Unit',
+    localX: 7.7,
+    localZ: 0.0,
+    doorLocalX: 3.5,
+    doorLocalZ: 0.0,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: 1,
+    accentColor: 0x2e8578,
+    floorColor: 0xd2e4e0,
+    pedestalOffsets: Object.freeze([[-1.2, -1.1], [1.2, -1.1]]),
+  }),
+  Object.freeze({
+    id: 'lockup-l6',
+    code: 'L-06',
+    spaceId: 'anchor-xl4',
+    name: 'Grand Harvest Supermarket Lockup',
+    categoryLabel: 'Supermarket · Groceries & Staples',
+    wing: 'South Concourse · Anchor Hall',
+    localX: 7.7,
+    localZ: 5.2,
+    doorLocalX: 3.5,
+    doorLocalZ: 5.2,
+    roomWidth: 8.2,
+    roomDepth: 4.8,
+    side: 1,
+    accentColor: 0x2f5e76,
+    floorColor: 0xd3dde4,
+    pedestalOffsets: Object.freeze([
+      [-1.75, -1.1],
+      [-1.05, -1.1],
+      [-0.35, -1.1],
+      [0.35, -1.1],
+      [1.05, -1.1],
+      [1.75, -1.1],
+    ]),
+  }),
+]);
+
 export const MALL_SHOP_BAY_LAYOUT = Object.freeze([
   Object.freeze({
     spaceId: 'kiosk-s1',
+    lockupId: 'lockup-l1',
     code: 'K1',
     sizeLabel: 'SMALL',
-    localX: -8.1,
-    localZ: -6.0,
-    bayWidth: 3.3,
-    bayHeight: 3.35,
+    localX: -7.7,
+    localZ: -5.2,
+    bayWidth: 3.8,
+    bayHeight: 3.4,
     accentColor: 0xc97b49,
-    pedestalOffsets: Object.freeze([[-0.65, 0], [0.65, 0]]),
+    pedestalOffsets: Object.freeze([[-1.1, 0], [1.1, 0]]),
   }),
   Object.freeze({
     spaceId: 'boutique-m2',
+    lockupId: 'lockup-l2',
     code: 'B2',
     sizeLabel: 'MEDIUM',
-    localX: -3.8,
-    localZ: -6.8,
-    bayWidth: 4.3,
+    localX: -7.7,
+    localZ: 0.0,
+    bayWidth: 4.4,
     bayHeight: 3.95,
     accentColor: 0x3f7a63,
-    pedestalOffsets: Object.freeze([[-1.1, 0.06], [0, -0.06], [1.1, 0.06]]),
+    pedestalOffsets: Object.freeze([[-1.2, 0.06], [0, -0.06], [1.2, 0.06]]),
   }),
   Object.freeze({
     spaceId: 'anchor-xl4',
+    lockupId: 'lockup-l6',
     code: 'A4',
     sizeLabel: 'ANCHOR',
-    localX: 1.5,
-    localZ: -6.8,
-    bayWidth: 5.4,
+    localX: 7.7,
+    localZ: 5.2,
+    bayWidth: 5.6,
     bayHeight: 6.2,
     accentColor: 0x2f5e76,
     pedestalOffsets: Object.freeze([
@@ -112,16 +233,110 @@ export const MALL_SHOP_BAY_LAYOUT = Object.freeze([
   }),
   Object.freeze({
     spaceId: 'showroom-l3',
+    lockupId: 'lockup-l4',
     code: 'S3',
     sizeLabel: 'LARGE',
-    localX: 7.2,
-    localZ: -6.8,
-    bayWidth: 4.7,
+    localX: 7.7,
+    localZ: -5.2,
+    bayWidth: 4.8,
     bayHeight: 4.5,
     accentColor: 0x7b5c8e,
     pedestalOffsets: Object.freeze([[-1.38, 0.08], [-0.46, -0.08], [0.46, -0.08], [1.38, 0.08]]),
   }),
 ]);
+
+export function mallLocalToWorld(mallLayout, localX, localZ) {
+  const cos = Math.cos(mallLayout.facing);
+  const sin = Math.sin(mallLayout.facing);
+  return {
+    x: mallLayout.x + localX * cos + localZ * sin,
+    z: mallLayout.z - localX * sin + localZ * cos,
+  };
+}
+
+export function mallWorldToLocal(mallLayout, worldX, worldZ) {
+  const dx = worldX - mallLayout.x;
+  const dz = worldZ - mallLayout.z;
+  const cos = Math.cos(mallLayout.facing);
+  const sin = Math.sin(mallLayout.facing);
+  return {
+    x: dx * cos - dz * sin,
+    z: dx * sin + dz * cos,
+  };
+}
+
+export function isInsideMallBuilding(worldX, worldZ, mallLayout = COMMERCE_VENUE_LAYOUT.find((v) => v.id === 'market')) {
+  if (!mallLayout) return false;
+  const local = mallWorldToLocal(mallLayout, worldX, worldZ);
+  return Math.abs(local.x) <= mallLayout.width / 2 + 0.3 && Math.abs(local.z) <= mallLayout.depth / 2 + 0.3;
+}
+
+export function getMallLockupShopAt(worldX, worldZ, mallLayout = COMMERCE_VENUE_LAYOUT.find((v) => v.id === 'market')) {
+  if (!mallLayout) return null;
+  const local = mallWorldToLocal(mallLayout, worldX, worldZ);
+  if (Math.abs(local.x) > mallLayout.width / 2 + 1.2 || Math.abs(local.z) > mallLayout.depth / 2 + 1.2) {
+    return null;
+  }
+  let best = null;
+  let bestDistance = Infinity;
+  for (const shop of MALL_LOCKUP_SHOP_LAYOUT) {
+    const insideRoom = Math.abs(local.x - shop.localX) <= shop.roomWidth / 2 + 0.35
+      && Math.abs(local.z - shop.localZ) <= shop.roomDepth / 2 + 0.25;
+    const distanceToCounter = Math.hypot(local.x - shop.localX, local.z - shop.localZ);
+    const distanceToDoor = Math.hypot(local.x - shop.doorLocalX, local.z - shop.doorLocalZ);
+    const effectiveDistance = insideRoom ? distanceToCounter * 0.5 : Math.min(distanceToCounter, distanceToDoor);
+    if (insideRoom || effectiveDistance <= 3.6) {
+      if (effectiveDistance < bestDistance) {
+        bestDistance = effectiveDistance;
+        best = {
+          shop,
+          insideRoom,
+          distance: effectiveDistance,
+        };
+      }
+    }
+  }
+  return best;
+}
+
+export function getMallIndoorWallColliders(mallLayout = COMMERCE_VENUE_LAYOUT.find((v) => v.id === 'market')) {
+  if (!mallLayout) return [];
+  const halfW = mallLayout.width / 2;
+  const halfD = mallLayout.depth / 2;
+  // Local wall segments that enclose the mall perimeter and separate the 6 lockup shops
+  // while leaving the 6.2m front entrance portal (localX in [-3.1, +3.1], localZ = -halfD)
+  // and each lockup shop doorway open for players to walk into!
+  const localSegments = [
+    // Rear perimeter wall
+    { id: 'mall-wall-rear', localX: 0, localZ: halfD - 0.28, halfX: halfW, halfZ: 0.34, height: 9.6 },
+    // North/Left perimeter wall
+    { id: 'mall-wall-left', localX: -halfW + 0.28, localZ: 0, halfX: 0.34, halfZ: halfD, height: 9.6 },
+    // South/Right perimeter wall
+    { id: 'mall-wall-right', localX: halfW - 0.28, localZ: 0, halfX: 0.34, halfZ: halfD, height: 9.6 },
+    // Front facade walls framing the open 6.2m Grand Main Entrance at localX in [-3.1, +3.1]
+    { id: 'mall-wall-front-left', localX: -7.85, localZ: -halfD + 0.28, halfX: 4.75, halfZ: 0.34, height: 9.6 },
+    { id: 'mall-wall-front-right', localX: 7.85, localZ: -halfD + 0.28, halfX: 4.75, halfZ: 0.34, height: 9.6 },
+    // Interior partition walls between Lockup L-01, L-02, and L-03 (Left wing)
+    { id: 'mall-partition-l1-l2', localX: -7.8, localZ: -2.6, halfX: 4.3, halfZ: 0.24, height: 4.5 },
+    { id: 'mall-partition-l2-l3', localX: -7.8, localZ: 2.6, halfX: 4.3, halfZ: 0.24, height: 4.5 },
+    // Interior partition walls between Lockup L-04, L-05, and L-06 (Right wing)
+    { id: 'mall-partition-l4-l5', localX: 7.8, localZ: -2.6, halfX: 4.3, halfZ: 0.24, height: 4.5 },
+    { id: 'mall-partition-l5-l6', localX: 7.8, localZ: 2.6, halfX: 4.3, halfZ: 0.24, height: 4.5 },
+  ];
+
+  return localSegments.map((seg) => {
+    const worldPos = mallLocalToWorld(mallLayout, seg.localX, seg.localZ);
+    return {
+      id: seg.id,
+      x: worldPos.x,
+      z: worldPos.z,
+      yaw: mallLayout.facing,
+      halfX: seg.halfX,
+      halfZ: seg.halfZ,
+      height: seg.height,
+    };
+  });
+}
 
 export const BILLBOARD_LAYOUT = Object.freeze([
   Object.freeze({

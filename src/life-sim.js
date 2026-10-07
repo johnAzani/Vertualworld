@@ -158,6 +158,26 @@ const FOOD_EFFECTS = Object.freeze({
   'market-rice-beans': Object.freeze({ hunger: 25, energy: 3 }),
   'market-eggs-bread': Object.freeze({ hunger: 19, energy: 3 }),
   'market-pantry': Object.freeze({ hunger: 14 }),
+  // Lockup L-01 · Zuma Artisan & Wellness Lockup
+  'mall-calabash-lamp': Object.freeze({ mood: 16, social: 6 }),
+  'mall-spa-kit': Object.freeze({ hygiene: 32, mood: 14, energy: 8 }),
+  'mall-aso-print': Object.freeze({ mood: 22, social: 10 }),
+  // Lockup L-02 · Wuse Streetwear & Sneaker Lockup
+  'mall-ankara-jacket': Object.freeze({ social: 20, mood: 16, hygiene: 6 }),
+  'mall-sneakers': Object.freeze({ energy: 18, mood: 14, social: 8 }),
+  'mall-royal-cap': Object.freeze({ social: 18, mood: 12 }),
+  // Lockup L-03 · Suya & Jollof Food Court Lockup
+  'mall-suya-platter': Object.freeze({ hunger: 32, mood: 12, energy: 6 }),
+  'mall-jollof-box': Object.freeze({ hunger: 36, energy: 12, mood: 10 }),
+  'mall-zobo-drink': Object.freeze({ hunger: 14, energy: 16, mood: 8, hygiene: 4 }),
+  // Lockup L-04 · Capital Tech & Audio Lockup
+  'mall-smart-drone': Object.freeze({ mood: 26, social: 14, energy: 10 }),
+  'mall-earbuds': Object.freeze({ mood: 18, energy: 10 }),
+  'mall-synth-deck': Object.freeze({ mood: 24, social: 16 }),
+  // Lockup L-05 · Abuja Pharmacy & Vitality Lockup
+  'mall-vitamins': Object.freeze({ energy: 28, hygiene: 18, mood: 8 }),
+  'mall-electrolytes': Object.freeze({ energy: 24, hunger: 10, hygiene: 8 }),
+  'mall-oud-cologne': Object.freeze({ hygiene: 34, social: 18, mood: 12 }),
 });
 
 const DEFAULT_NEEDS = Object.freeze({ energy: 84, hunger: 74, hygiene: 82, mood: 72, social: 58 });
