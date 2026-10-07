@@ -14,11 +14,29 @@ import {
   ESTATE_HOUSE_LAYOUT,
   ESTATE_HOUSE_SIZE,
   MALL_LOCKUP_SHOP_LAYOUT,
+  MALL_PARKING_BAYS,
+  MALL_PARKING_LOT_LAYOUT,
   MALL_SHOP_BAY_LAYOUT,
   getMallIndoorWallColliders,
   getMallLockupShopAt,
+  getMallParkingSurfaceHeight,
   isInsideMallBuilding,
 } from './world-layout.js';
+import {
+  PRIVATE_TAXI_DESTINATIONS,
+  PRIVATE_TAXI_DRIVER,
+  boardPrivateTaxi,
+  cancelPrivateTaxi,
+  completePrivateTaxiRide,
+  createPrivateTaxiMesh,
+  createPrivateTaxiState,
+  getPrivateTaxiDestination,
+  getPrivateTaxiQuote,
+  isPlayerNearPrivateTaxi,
+  orderPrivateTaxi,
+  syncPrivateTaxiMesh,
+  updatePrivateTaxi,
+} from './private-taxi.js';
 import {
   createStadium,
   getNearestStadiumSeat,
@@ -260,6 +278,11 @@ const mallLockupDirectoryElement = document.querySelector('#mall-lockup-director
 const mallActiveLockupHeadingElement = document.querySelector('#mall-active-lockup-heading');
 const mallShopSpacesElement = document.querySelector('#mall-shop-spaces');
 const mallShowcaseManagerElement = document.querySelector('#mall-showcase-manager');
+const taxiWalletBalanceElement = document.querySelector('#taxi-wallet-balance');
+const taxiStatusBannerElement = document.querySelector('#taxi-status-banner');
+const taxiPickupSummaryElement = document.querySelector('#taxi-pickup-summary');
+const taxiDestinationsListElement = document.querySelector('#taxi-destinations-list');
+const taxiActionPanelElement = document.querySelector('#taxi-action-panel');
 const governmentTreasuryBalanceElement = document.querySelector('#government-treasury-balance');
 const governmentProximityElement = document.querySelector('#government-proximity');
 const governmentOfficeCardElement = document.querySelector('#government-office-card');
@@ -801,8 +824,15 @@ function groundHeightAt(x, z) {
     ground = Math.max(ground, stadiumSurface);
   }
   const mallLayout = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
-  if (mallLayout && isInsideMallBuilding(x, z, mallLayout)) {
-    ground = Math.max(ground, terrainHeight(mallLayout.x, mallLayout.z) + 0.16);
+  if (mallLayout) {
+    const mallBaseY = terrainHeight(mallLayout.x, mallLayout.z);
+    if (isInsideMallBuilding(x, z, mallLayout)) {
+      ground = Math.max(ground, mallBaseY + 0.16);
+    }
+    const mallParkingSurface = getMallParkingSurfaceHeight(x, z, mallBaseY, mallLayout);
+    if (mallParkingSurface !== null) {
+      ground = Math.max(ground, mallParkingSurface);
+    }
   }
 
   for (const surface of estateRoadSurfaces) {
@@ -2158,6 +2188,56 @@ function createShoppingMallVenue(venueLayout) {
   mainSignBoard.rotation.y = Math.PI;
   group.add(mainSignBoard);
 
+  // Unity Mall Customer & VIP Parking ("Packing") Lot + Front Private Taxi Drop-Off Forecourt
+  const asphaltMaterial = new THREE.MeshStandardMaterial({ color: 0x383d40, roughness: 0.9 });
+  const bayLineMaterial = new THREE.MeshStandardMaterial({ color: 0xf6efe0, roughness: 0.55 });
+  const vipGoldLineMaterial = new THREE.MeshStandardMaterial({ color: 0xdfb24c, roughness: 0.48 });
+  const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x2c4d41, metalness: 0.18, roughness: 0.62 });
+  const tireDarkMaterial = new THREE.MeshStandardMaterial({ color: 0x202423, roughness: 0.92 });
+  const lot = MALL_PARKING_LOT_LAYOUT;
+
+  // Front Private Taxi & VIP Drop-Off Forecourt outside the 6.2m Grand Entrance Portal
+  addBox([13.6, 0.12, 3.2], [0, 0.06, frontZ - 2.3], asphaltMaterial, false, true);
+  addBox([6.4, 0.13, 0.18], [0, 0.066, frontZ - 1.15], vipGoldLineMaterial, false, true);
+  addBox([6.4, 0.13, 0.18], [0, 0.066, frontZ - 3.45], vipGoldLineMaterial, false, true);
+
+  // Paved 6-Bay Unity Mall Customer & VIP Parking Lot alongside the North Wing
+  addBox([lot.width + 0.8, 0.1, lot.depth + 0.8], [lot.localX, 0.05, lot.localZ], plinthMaterial, false, true);
+  addBox([lot.width, 0.13, lot.depth], [lot.localX, 0.065, lot.localZ], asphaltMaterial, false, true);
+  // Center drive aisle divider & solar shade canopies
+  for (const canopyX of [15.5, 20.7]) {
+    addBox([3.2, 0.14, lot.depth - 1.8], [canopyX, 2.75, lot.localZ], canopyMaterial);
+    for (const postZ of [-4.6, 0.6, 5.8]) {
+      addBox([0.16, 2.7, 0.16], [canopyX + (canopyX < lot.localX ? -1.1 : 1.1), 1.38, postZ], shutterMaterial);
+    }
+  }
+
+  for (const bay of MALL_PARKING_BAYS) {
+    const lineMat = bay.isVip ? vipGoldLineMaterial : bayLineMaterial;
+    for (const borderZ of [-1.75, 1.75]) {
+      addBox([3.4, 0.14, 0.12], [bay.localX, 0.072, bay.localZ + borderZ], lineMat, false, true);
+    }
+    const stopperX = bay.localX + (bay.localX < lot.localX ? -1.25 : 1.25);
+    addBox([0.22, 0.18, 1.85], [stopperX, 0.12, bay.localZ], lineMat);
+
+    if (bay.hasParkedCar) {
+      const carMat = new THREE.MeshStandardMaterial({ color: bay.carColor, roughness: 0.46, metalness: 0.14 });
+      addBox([3.2, 0.46, 1.58], [bay.localX, 0.44, bay.localZ], carMat);
+      addBox([1.75, 0.42, 1.38], [bay.localX - 0.1, 0.84, bay.localZ], upperWallMaterial);
+      for (const [wx, wz] of [[-0.95, -0.76], [0.95, -0.76], [-0.95, 0.76], [0.95, 0.76]]) {
+        addBox([0.52, 0.48, 0.24], [bay.localX + wx, 0.3, bay.localZ + wz], tireDarkMaterial);
+      }
+    }
+  }
+
+  const parkingSignMaterial = new THREE.MeshBasicMaterial({
+    map: makeCommerceSignTexture('UNITY MALL PARKING · VIP & TAXI ZONE', '#275946', '#fff8e6'),
+  });
+  const parkingSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 0.92), parkingSignMaterial);
+  parkingSignBoard.position.set(lot.localX, 3.35, lot.localZ - lot.depth / 2 + 0.35);
+  parkingSignBoard.rotation.y = Math.PI;
+  group.add(parkingSignBoard);
+
   batchStaticVenueMeshes(group);
   batchStaticVenueMeshes(roofCutawayGroup);
 
@@ -2816,6 +2896,16 @@ for (const [x, z] of [[11.8, 10.3], [29.35, -5], [29.35, 21], [42.5, 10.3]]) cre
 // A small paved bay places your car just off the porch walk, facing out toward the lane.
 addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
 playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
+const privateTaxiState = createPrivateTaxiState();
+const privateTaxiMesh = createPrivateTaxiMesh();
+syncPrivateTaxiMesh(
+  privateTaxiState,
+  privateTaxiMesh,
+  0,
+  (tx, tz) => groundHeightAt(tx, tz) - PLAYER_FOOT_OFFSET,
+);
+scene.add(privateTaxiMesh.group);
+let isRidingPrivateTaxi = false;
 const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
 worldObstacleColliders.push(...getStadiumWallColliders(STADIUM));
@@ -4421,6 +4511,7 @@ function getNearbyRentalHouse(maxDistance = 4.6) {
 }
 
 function getNearbyInteractionTarget() {
+  if (isRidingPrivateTaxi) return 'complete-private-taxi';
   if (isRidingTransit) return 'request-transit-stop';
   if (isDriving) return 'exit-car';
 
@@ -4428,6 +4519,13 @@ function getNearbyInteractionTarget() {
     if (!getCurrentResidence()) return null;
     const local = homeWorldToLocal(player.position.x, player.position.z);
     return Math.hypot(local.x, local.z + 3.35) <= 2.1 ? 'exit-home' : null;
+  }
+
+  if (
+    (privateTaxiState.status === 'arrived' || privateTaxiState.status === 'approaching')
+    && isPlayerNearPrivateTaxi(privateTaxiState, player.position.x, player.position.z, 6.2)
+  ) {
+    return 'board-private-taxi';
   }
 
   const residence = getCurrentResidence();
@@ -4439,6 +4537,12 @@ function getNearbyInteractionTarget() {
     : Infinity;
   if (homeDistance <= HOME_INTERACTION_PRIORITY_RADIUS) return 'enter-home';
   if (vehicleInteractionCooldown <= 0 && carDistance <= CAR_INTERACTION_RADIUS) return 'enter-car';
+  if (
+    privateTaxiState.status === 'idle'
+    && isPlayerNearPrivateTaxi(privateTaxiState, player.position.x, player.position.z, 4.4)
+  ) {
+    return 'open-taxi-app';
+  }
   if (homeDistance <= 4.2) return 'enter-home';
   if (getNearbyRentalHouse()) return 'view-rentals';
   const nearbyVenue = getNearbyCommerceVenue();
@@ -4455,6 +4559,91 @@ function getNearbyInteractionTarget() {
   const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
   if (stadiumDistance <= 21) return 'watch-match';
   return null;
+}
+
+function enterOrderedPrivateTaxi() {
+  if (isDriving || isRidingTransit || isRidingPrivateTaxi || isInsideHome) return false;
+  if (privateTaxiState.status !== 'arrived' && privateTaxiState.status !== 'approaching') {
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('taxi');
+    return false;
+  }
+  const boardResult = boardPrivateTaxi(privateTaxiState, economy, Date.now());
+  if (!boardResult.ok) return false;
+  if (isWorldView) toggleWorldView();
+  if (isPhoneOpen()) closePhone();
+  isRidingPrivateTaxi = true;
+  persistEconomy();
+  updateWalletBalances();
+  const tx = privateTaxiState.x;
+  const tz = privateTaxiState.z;
+  player.position.set(tx, groundHeightAt(tx, tz) + 0.45, tz);
+  player.rotation.y = privateTaxiState.yaw;
+  cameraYaw = privateTaxiState.yaw;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  avatarModel.visible = false;
+  playerShadow.visible = false;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  const fareMsg = boardResult.courtesyRide
+    ? 'Courtesy ride'
+    : `Fare ${formatCredits(boardResult.chargedFare)}`;
+  showToast(
+    `Boarded Abuja Private Taxi (${fareMsg}) · Driving you to ${boardResult.destination.name}!`,
+    4000,
+  );
+  return true;
+}
+
+function finishPrivateTaxiRide(precomputedCompletion = null) {
+  if (!isRidingPrivateTaxi && privateTaxiState.status !== 'en-route') return false;
+  const completion = precomputedCompletion || completePrivateTaxiRide(privateTaxiState);
+  if (!completion.ok) return false;
+  isRidingPrivateTaxi = false;
+  syncPrivateTaxiMesh(
+    privateTaxiState,
+    privateTaxiMesh,
+    0,
+    (tx, tz) => groundHeightAt(tx, tz) - PLAYER_FOOT_OFFSET,
+  );
+  player.position.set(
+    completion.exitX,
+    groundHeightAt(completion.exitX, completion.exitZ),
+    completion.exitZ,
+  );
+  player.rotation.y = completion.exitYaw;
+  cameraYaw = completion.exitYaw;
+  cameraPitch = 0;
+  velocity.set(0, 0, 0);
+  jumpHeight = 0;
+  jumpVelocity = 0;
+  isGrounded = true;
+  jumpRequested = false;
+  jumpBufferTimer = 0;
+  coyoteTimer = 0;
+  avatarModel.visible = !isFirstPerson;
+  playerShadow.visible = !isFirstPerson;
+  pressedKeys.clear();
+  resetJoystick();
+  resetVehicleTouchInputs();
+  updateVehicleControlUi();
+  updateLocationAndMap();
+  if (isPhoneOpen() && activePhonePage === 'taxi') renderTaxiPage();
+  showToast(
+    `Arrived at ${completion.destination.name}! Step out and explore.`,
+    3600,
+  );
+  return true;
 }
 
 function enterParkedCar() {
@@ -4551,6 +4740,19 @@ function handleNearbyInteraction() {
   }
   if (target === 'watch-match') {
     enterMatchView();
+    return true;
+  }
+  if (target === 'board-private-taxi') {
+    enterOrderedPrivateTaxi();
+    return true;
+  }
+  if (target === 'complete-private-taxi') {
+    finishPrivateTaxiRide();
+    return true;
+  }
+  if (target === 'open-taxi-app') {
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('taxi');
     return true;
   }
   if (target === 'request-transit-stop') {
@@ -4692,6 +4894,7 @@ function updateWalletBalances() {
   setTextIfChanged(cafeWalletBalanceElement, balance);
   setTextIfChanged(marketWalletBalanceElement, balance);
   setTextIfChanged(billboardsWalletBalanceElement, balance);
+  setTextIfChanged(taxiWalletBalanceElement, balance);
   if (dailyWalletBalanceElement) {
     const shields = dailyReturn.streakShields || 0;
     setTextIfChanged(dailyWalletBalanceElement, `${balance} · ${shields} ${shields === 1 ? 'Shield' : 'Shields'}`);
@@ -6222,9 +6425,156 @@ function performLifeAction(action) {
   }
 }
 
+function renderTaxiPage() {
+  if (!taxiDestinationsListElement || !taxiActionPanelElement) return;
+  updateWalletBalances();
+  const px = player.position.x;
+  const pz = player.position.z;
+  const locText = document.querySelector('#location-name')?.textContent || 'Abuja';
+  if (taxiPickupSummaryElement) {
+    taxiPickupSummaryElement.innerHTML = `<span>YOUR PICKUP LOCATION</span><strong>${escapeHtml(locText)} · X ${Math.round(px)}, Z ${Math.round(pz)}</strong>`;
+  }
+
+  const selectedDest = getPrivateTaxiDestination(privateTaxiState.selectedDestinationId);
+  const selectedQuote = getPrivateTaxiQuote(px, pz, selectedDest.id);
+  const taxiDistToPlayer = Math.round(Math.hypot(privateTaxiState.x - px, privateTaxiState.z - pz));
+
+  if (taxiStatusBannerElement) {
+    if (privateTaxiState.status === 'approaching') {
+      taxiStatusBannerElement.textContent = `${PRIVATE_TAXI_DRIVER.name} (${PRIVATE_TAXI_DRIVER.plateNumber}) is driving to meet you at ${locText} (${taxiDistToPlayer}m away).`;
+    } else if (privateTaxiState.status === 'arrived') {
+      taxiStatusBannerElement.textContent = `${PRIVATE_TAXI_DRIVER.name} has arrived right beside you! Tap ENTER TAXI below or press E outside to ride to ${selectedDest.name}.`;
+    } else if (privateTaxiState.status === 'en-route') {
+      const distToDest = Math.round(Math.hypot(selectedDest.x - privateTaxiState.x, selectedDest.z - privateTaxiState.z));
+      taxiStatusBannerElement.textContent = `Riding in Abuja Private Taxi to ${selectedDest.name} (${distToDest}m remaining).`;
+    } else {
+      taxiStatusBannerElement.textContent = `Choose where you want to go below and order your private car taxi to meet you at ${locText}.`;
+    }
+  }
+
+  taxiDestinationsListElement.innerHTML = PRIVATE_TAXI_DESTINATIONS.map((dest) => {
+    const isSelected = dest.id === selectedDest.id;
+    const quote = getPrivateTaxiQuote(px, pz, dest.id);
+    return `<button class="taxi-destination-card ${isSelected ? 'is-selected' : ''}" type="button" data-select-taxi-dest="${escapeHtml(dest.id)}">
+      <span class="taxi-destination-copy">
+        <strong>${escapeHtml(dest.name)}</strong>
+        <small>${escapeHtml(dest.category)} · ${escapeHtml(dest.summary)}</small>
+      </span>
+      <span class="taxi-destination-meta">
+        <span class="taxi-fare-badge">${formatCredits(quote.fare)}</span>
+        <span class="taxi-eta-label">${quote.distanceMeters}m · ~${quote.etaSeconds}s</span>
+      </span>
+    </button>`;
+  }).join('');
+
+  const driverHeaderHtml = `<div class="taxi-driver-row">
+    <span><strong>${escapeHtml(PRIVATE_TAXI_DRIVER.name)}</strong> · ${escapeHtml(PRIVATE_TAXI_DRIVER.plateNumber)} (${escapeHtml(PRIVATE_TAXI_DRIVER.rating)})</span>
+    <strong>${escapeHtml(selectedDest.shortName)} · ${formatCredits(selectedQuote.fare)}</strong>
+  </div>`;
+
+  if (privateTaxiState.status === 'idle') {
+    taxiActionPanelElement.innerHTML = `${driverHeaderHtml}
+      <button class="rental-action-button" type="button" data-taxi-action="order">
+        ORDER PRIVATE TAXI TO MY LOCATION · ${formatCredits(selectedQuote.fare)}
+      </button>`;
+  } else if (privateTaxiState.status === 'approaching') {
+    taxiActionPanelElement.innerHTML = `${driverHeaderHtml}
+      <div class="rental-actions">
+        <button class="rental-action-button" type="button" data-taxi-action="board">
+          ENTER TAXI &amp; GO TO ${escapeHtml(selectedDest.shortName.toUpperCase())}
+        </button>
+        <button class="rental-action-button rental-action-button--quiet" type="button" data-taxi-action="cancel">
+          CANCEL
+        </button>
+      </div>`;
+  } else if (privateTaxiState.status === 'arrived') {
+    taxiActionPanelElement.innerHTML = `${driverHeaderHtml}
+      <div class="rental-actions">
+        <button class="rental-action-button" type="button" data-taxi-action="board">
+          ENTER TAXI NOW · RIDE TO ${escapeHtml(selectedDest.shortName.toUpperCase())}
+        </button>
+        <button class="rental-action-button rental-action-button--quiet" type="button" data-taxi-action="cancel">
+          CANCEL
+        </button>
+      </div>`;
+  } else {
+    taxiActionPanelElement.innerHTML = `${driverHeaderHtml}
+      <button class="rental-action-button" type="button" data-taxi-action="arrive-now">
+        ARRIVE AT ${escapeHtml(selectedDest.shortName.toUpperCase())} NOW
+      </button>`;
+  }
+}
+
+function handleTaxiActionFromPhone(action) {
+  if (action === 'order') {
+    if (isInsideHome) {
+      showToast('Step outside your front door so your Private Taxi can meet you curbside.');
+      return;
+    }
+    if (isDriving || isRidingTransit) {
+      showToast('Exit your current vehicle before ordering a Private Taxi.');
+      return;
+    }
+    const locText = document.querySelector('#location-name')?.textContent || 'Current Location';
+    const result = orderPrivateTaxi(privateTaxiState, {
+      playerX: player.position.x,
+      playerZ: player.position.z,
+      destinationId: privateTaxiState.selectedDestinationId,
+      locationLabel: locText,
+    });
+    if (!result.ok) {
+      showToast('Your Private Taxi is already en route.');
+      return;
+    }
+    syncPrivateTaxiMesh(
+      privateTaxiState,
+      privateTaxiMesh,
+      0,
+      (tx, tz) => groundHeightAt(tx, tz) - PLAYER_FOOT_OFFSET,
+    );
+    renderTaxiPage();
+    updateLocationAndMap();
+    showToast(
+      result.status === 'arrived'
+        ? `${PRIVATE_TAXI_DRIVER.name} is right beside you! Tap ENTER TAXI or press E to ride to ${result.destination.shortName}.`
+        : `Private Taxi ordered! ${PRIVATE_TAXI_DRIVER.name} is driving to meet you at ${locText}.`,
+      3800,
+    );
+    return;
+  }
+  if (action === 'board') {
+    if (privateTaxiState.status === 'approaching') {
+      // Pull up right beside the player immediately so they can hop straight in
+      privateTaxiState.x = player.position.x + 2.4;
+      privateTaxiState.z = player.position.z + 1.2;
+      privateTaxiState.status = 'arrived';
+      privateTaxiState.speed = 0;
+      syncPrivateTaxiMesh(
+        privateTaxiState,
+        privateTaxiMesh,
+        0,
+        (tx, tz) => groundHeightAt(tx, tz) - PLAYER_FOOT_OFFSET,
+      );
+    }
+    enterOrderedPrivateTaxi();
+    return;
+  }
+  if (action === 'cancel') {
+    cancelPrivateTaxi(privateTaxiState);
+    renderTaxiPage();
+    updateLocationAndMap();
+    showToast('Private Taxi order cancelled.', 2400);
+    return;
+  }
+  if (action === 'arrive-now') {
+    finishPrivateTaxiRide();
+  }
+}
+
 const phonePageCopy = {
   home: { eyebrow: 'YOUR POCKET GUIDE', title: 'Abuja, your neighbourhood', subtitle: 'Useful things for wherever the path takes you.' },
   daily: { eyebrow: 'DAILY ABUJA PULSE · 7-DAY STREAK', title: 'Reasons to return', subtitle: 'Lock in your daily streak, complete 3 contracts, and collect your city dividend.' },
+  taxi: { eyebrow: 'ABUJA PRIVATE TAXI · DOOR-TO-DOOR', title: 'Private Car Taxi', subtitle: 'Order a private car taxi to meet you at your location and drive you to your destination.' },
   map: { eyebrow: 'ABUJA · FCT · LIVE', title: 'Field map', subtitle: 'Find your place and see what’s close.' },
   messages: { eyebrow: 'YOUR NEIGHBOURHOOD', title: 'Messages', subtitle: 'A small check-in from someone nearby.' },
   journal: { eyebrow: 'FIELD NOTES · PRIVATE', title: 'Journal', subtitle: 'A note to keep, just for you.' },
@@ -6266,6 +6616,7 @@ function setPhonePage(pageName) {
   phoneBackButton.hidden = page === 'home';
   phoneContent.scrollTop = 0;
   if (page === 'daily') renderDailyPage();
+  else if (page === 'taxi') renderTaxiPage();
   else if (page === 'property') renderPropertyPage();
   else if (page === 'cafe' || page === 'market') renderCommercePage(page);
   else if (page === 'government') renderGovernmentPage();
@@ -6307,6 +6658,7 @@ function openPhone() {
   phoneScrim.classList.add('is-open');
   phoneCloseButton.focus({ preventScroll: true });
   if (activePhonePage === 'daily') renderDailyPage();
+  else if (activePhonePage === 'taxi') renderTaxiPage();
   else if (activePhonePage === 'map') drawMap();
   else if (activePhonePage === 'life') renderLifePage();
   else if (activePhonePage === 'work') renderWorkPage();
@@ -6440,6 +6792,17 @@ phoneContent.addEventListener('click', (event) => {
   const appButton = event.target.closest('[data-phone-app]');
   if (appButton) {
     setPhonePage(appButton.dataset.phoneApp);
+    return;
+  }
+  const selectTaxiDestButton = event.target.closest('[data-select-taxi-dest]');
+  if (selectTaxiDestButton) {
+    privateTaxiState.selectedDestinationId = selectTaxiDestButton.dataset.selectTaxiDest;
+    renderTaxiPage();
+    return;
+  }
+  const taxiActionButton = event.target.closest('[data-taxi-action]');
+  if (taxiActionButton) {
+    handleTaxiActionFromPhone(taxiActionButton.dataset.taxiAction);
     return;
   }
   const dailyActionButton = event.target.closest('[data-daily-action]');
@@ -6936,6 +7299,7 @@ function updateLocationAndMap() {
   }
   const nearbyMallLockup = getNearbyMallLockupShop();
   const insideMallBuilding = isInsideMallBuilding(x, z);
+  const onMallParkingLot = !insideMallBuilding && getMallParkingSurfaceHeight(x, z, 0) !== null;
   if (isInsideHome && currentResidence) {
     const local = homeWorldToLocal(x, z);
     currentHomeRoom = local.z > 0.9
@@ -6949,6 +7313,7 @@ function updateLocationAndMap() {
   else if (Math.hypot(x - COMMUNITY_HALL_LAYOUT.x, z - COMMUNITY_HALL_LAYOUT.z) < 10) location = 'Unity Community Hall · Governor’s Office';
   else if (nearbyMallLockup) location = `Unity Mall · ${nearbyMallLockup.shop.code} ${nearbyMallLockup.shop.name}`;
   else if (insideMallBuilding) location = 'Unity Grand Indoor Mall · Concourse';
+  else if (onMallParkingLot) location = 'Unity Mall · Customer & VIP Parking Lot';
   else if (currentCommerceVenue) location = currentCommerceVenue.name;
   else if (isInsideEstate(x, z)) location = 'Unity Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Unity Court North';
@@ -6971,18 +7336,53 @@ function updateLocationAndMap() {
   const interactionTarget = getNearbyInteractionTarget();
   const hasHomePrompt = isInsideHome || interactionTarget === 'enter-home' || interactionTarget === 'exit-home';
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
+  const hasTaxiPrompt = ['board-private-taxi', 'complete-private-taxi', 'open-taxi-app'].includes(interactionTarget);
   const hasStadiumPrompt = interactionTarget === 'watch-match';
   const hasTransitPrompt = ['board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
   const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market' || interactionTarget === 'open-government' || interactionTarget === 'open-billboard';
   const hasPropertyPrompt = interactionTarget === 'view-rentals';
-  homeInteraction.hidden = isWorldView || isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt || hasCommercePrompt || hasPropertyPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market', 'open-government', 'open-billboard'].includes(interactionTarget);
+  homeInteraction.hidden = isWorldView || isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasTaxiPrompt || hasStadiumPrompt || hasTransitPrompt || hasCommercePrompt || hasPropertyPrompt) || isPhoneOpen();
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'board-private-taxi', 'complete-private-taxi', 'open-taxi-app', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market', 'open-government', 'open-billboard'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop, billboard, and civic controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasTaxiPrompt ? 'Private taxi controls' : hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop, billboard, and civic controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
-  if (hasCarPrompt && playerCar) {
+  if (hasTaxiPrompt) {
+    const dest = getPrivateTaxiDestination(privateTaxiState.selectedDestinationId);
+    if (interactionTarget === 'complete-private-taxi') {
+      const distLeft = Math.max(1, Math.round(Math.hypot(dest.x - privateTaxiState.x, dest.z - privateTaxiState.z)));
+      setTextIfChanged(
+        homeInteractionEyebrow,
+        `ABUJA PRIVATE TAXI · EN ROUTE TO ${dest.shortName.toUpperCase()}`,
+      );
+      setTextIfChanged(
+        homeInteractionMessage,
+        `${PRIVATE_TAXI_DRIVER.name} is driving you to ${dest.name} · ${distLeft}m remaining`,
+      );
+      setTextIfChanged(homeInteractionAction, 'ARRIVE NOW');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', `Arrive at ${dest.name} now`);
+    } else if (interactionTarget === 'board-private-taxi') {
+      setTextIfChanged(
+        homeInteractionEyebrow,
+        `ABUJA PRIVATE TAXI · ${PRIVATE_TAXI_DRIVER.plateNumber} (ARRIVED)`,
+      );
+      setTextIfChanged(
+        homeInteractionMessage,
+        `${PRIVATE_TAXI_DRIVER.name} has met you at your location · Ready for ${dest.name}`,
+      );
+      setTextIfChanged(homeInteractionAction, 'ENTER TAXI');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', `Enter Private Taxi to ${dest.name}`);
+    } else {
+      setTextIfChanged(homeInteractionEyebrow, `ABUJA PRIVATE TAXI · ${PRIVATE_TAXI_DRIVER.plateNumber}`);
+      setTextIfChanged(
+        homeInteractionMessage,
+        'Choose your destination on the phone and ride door-to-door across Abuja',
+      );
+      setTextIfChanged(homeInteractionAction, 'ORDER TAXI');
+      setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open Abuja Private Taxi app');
+    }
+  } else if (hasCarPrompt && playerCar) {
     setTextIfChanged(homeInteractionEyebrow, isDriving ? 'UNITY COURT · YOUR CAR' : 'YOUR CAR · UNITY COURT');
     const speed = Math.round(Math.abs(playerCar.speed) * 5);
     const touchDriving = Boolean(navigator.maxTouchPoints);
@@ -7457,6 +7857,18 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
+  if (privateTaxiState) {
+    const tx = mapX(privateTaxiState.x);
+    const ty = mapY(privateTaxiState.z);
+    ctx.beginPath();
+    ctx.arc(tx, ty, Math.max(3.6, radius * 0.028), 0, Math.PI * 2);
+    ctx.fillStyle = privateTaxiState.status === 'idle' ? '#d8b24c' : '#1f6e54';
+    ctx.fill();
+    ctx.strokeStyle = '#fff6d6';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
   const px = mapX(player.position.x);
   const py = mapY(player.position.z);
   ctx.save();
@@ -7610,6 +8022,32 @@ function animate(timestamp) {
     player.rotation.y = vehicle.rotation.y;
     if (!isFirstPerson && !pointerDragging) cameraYaw = vehicle.rotation.y;
   }
+  const taxiUpdate = updatePrivateTaxi(privateTaxiState, delta, {
+    playerX: player.position.x,
+    playerZ: player.position.z,
+    groundHeightAt: (tx, tz) => groundHeightAt(tx, tz) - PLAYER_FOOT_OFFSET,
+    taxiMesh: privateTaxiMesh,
+  });
+  if (taxiUpdate.event === 'arrived-at-pickup') {
+    const dest = getPrivateTaxiDestination(privateTaxiState.selectedDestinationId);
+    updateLocationAndMap();
+    if (isPhoneOpen() && activePhonePage === 'taxi') renderTaxiPage();
+    showToast(
+      `Your Abuja Private Taxi (${PRIVATE_TAXI_DRIVER.plateNumber}) has arrived at your location! Press E to enter and ride to ${dest.shortName}.`,
+      4200,
+    );
+  } else if (taxiUpdate.event === 'arrived-at-destination') {
+    finishPrivateTaxiRide(taxiUpdate.completion);
+  }
+  if (isRidingPrivateTaxi) {
+    player.position.set(
+      privateTaxiMesh.group.position.x,
+      privateTaxiMesh.group.position.y + 0.55,
+      privateTaxiMesh.group.position.z,
+    );
+    player.rotation.y = privateTaxiMesh.group.rotation.y;
+    if (!isFirstPerson && !pointerDragging) cameraYaw = privateTaxiMesh.group.rotation.y;
+  }
   if (homeDoorPivot) {
     if (prefersReducedMotion) homeDoorPivot.rotation.y = homeDoorTargetAngle;
     else {
@@ -7632,7 +8070,7 @@ function animate(timestamp) {
   if (pressedKeys.has('s') || pressedKeys.has('arrowdown')) forwardInput -= 1;
   if (pressedKeys.has('d') || pressedKeys.has('arrowright')) sideInput += 1;
   if (pressedKeys.has('a') || pressedKeys.has('arrowleft')) sideInput -= 1;
-  if (isRidingTransit) {
+  if (isRidingTransit || isRidingPrivateTaxi) {
     forwardInput = 0;
     sideInput = 0;
   } else if (isDriving) {
@@ -7676,7 +8114,7 @@ function animate(timestamp) {
   const hasMovementInput = inputMagnitude > 0.08;
   const isRunning = !isDriving && pressedKeys.has('shift');
   const desiredDirection = animationScratch.desiredDirection.set(0, 0, 0);
-  const followsResident = !isFirstPerson && !isDriving && !isRidingTransit && !isWorldView
+  const followsResident = !isFirstPerson && !isDriving && !isRidingTransit && !isRidingPrivateTaxi && !isWorldView
     && !isWatchingMatch && cameraMode !== 'orbit';
   const followMovementYaw = getThirdPersonMovementYaw(
     thirdPersonMovementState,
@@ -7684,7 +8122,7 @@ function animate(timestamp) {
     followsResident && hasMovementInput,
   );
   const movementYaw = followsResident ? followMovementYaw : cameraYaw;
-  if (!isDriving && !isRidingTransit) {
+  if (!isDriving && !isRidingTransit && !isRidingPrivateTaxi) {
     const forward = animationScratch.forward.set(Math.sin(movementYaw), 0, -Math.cos(movementYaw));
     const right = animationScratch.right.set(Math.cos(movementYaw), 0, Math.sin(movementYaw));
     desiredDirection.copy(forward).multiplyScalar(forwardInput).addScaledVector(right, sideInput);
@@ -7693,7 +8131,7 @@ function animate(timestamp) {
   let isMoving = false;
   for (let movementStep = 0; movementStep < movementSteps; movementStep += 1) {
     isMoving = false;
-    if (isRidingTransit) {
+    if (isRidingTransit || isRidingPrivateTaxi) {
       isMoving = false;
     } else if (isDriving) {
       updateVehicleMovement(movementStepDelta, forwardInput, sideInput);
@@ -7711,7 +8149,7 @@ function animate(timestamp) {
     }
 
     const planarDistance = Math.hypot(player.position.x, player.position.z);
-    if (!isRidingTransit && planarDistance > 88) {
+    if (!isRidingTransit && !isRidingPrivateTaxi && planarDistance > 88) {
       const correction = 88 / planarDistance;
       player.position.x *= correction;
       player.position.z *= correction;
@@ -7729,7 +8167,7 @@ function animate(timestamp) {
         }
       }
     }
-    if (!isRidingTransit) {
+    if (!isRidingTransit && !isRidingPrivateTaxi) {
       resolveHouseCollisions();
       resolveWorldObstacleCollisions();
       resolveHouseCollisions();
@@ -7739,7 +8177,7 @@ function animate(timestamp) {
     const ground = isInsideHome && residence
       ? residence.group.position.y + HOME_FLOOR_TOP + PLAYER_FOOT_OFFSET
       : groundHeightAt(player.position.x, player.position.z);
-    if (isRidingTransit) {
+    if (isRidingTransit || isRidingPrivateTaxi) {
       jumpHeight = 0;
       jumpVelocity = 0;
       jumpRequested = false;
@@ -7781,14 +8219,14 @@ function animate(timestamp) {
         }
       }
     }
-    if (!isRidingTransit) player.position.y = ground + jumpHeight;
+    if (!isRidingTransit && !isRidingPrivateTaxi) player.position.y = ground + jumpHeight;
   }
 
   if (mallRoofGroup) {
     mallRoofGroup.visible = isWorldView || !isInsideMallBuilding(player.position.x, player.position.z);
   }
 
-  if (!isDriving && !isRidingTransit && hasMovementInput) {
+  if (!isDriving && !isRidingTransit && !isRidingPrivateTaxi && hasMovementInput) {
     const targetYaw = Math.atan2(-desiredDirection.x, -desiredDirection.z);
     const angleDelta = Math.atan2(Math.sin(targetYaw - player.rotation.y), Math.cos(targetYaw - player.rotation.y));
     player.rotation.y += angleDelta * (1 - Math.exp(-12 * delta));

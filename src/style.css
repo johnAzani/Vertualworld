@@ -1234,5 +1234,23 @@ kbd { font-size: 9px; }
 .shop-use-button strong { font-size: 8px; }
 .shop-use-button:hover { background: #fff9e5; }
 
+.app-icon-taxi { color: #235942; background: linear-gradient(145deg,#fae8b4,#d8b24c); }
+.shop-heading--taxi { background: linear-gradient(125deg,#f8ebc4,#e4c678); }
+.shop-heading--taxi .shop-avatar { background: #1f6e54; color: #fff8e6; }
+.taxi-destinations-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.taxi-destination-card { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid rgba(56,112,86,.18); border-radius: 11px; color: #2d4e3d; background: rgba(255,255,255,.8); text-align: left; cursor: pointer; transition: background .16s, border-color .16s, transform .16s; }
+.taxi-destination-card:hover { border-color: rgba(56,112,86,.45); background: #fff; transform: translateY(-1px); }
+.taxi-destination-card.is-selected { border-color: #1f6e54; background: linear-gradient(135deg,#e4f4ec,#fdf9eb); box-shadow: 0 2px 8px rgba(31,110,84,.14); }
+.taxi-destination-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.taxi-destination-copy strong { color: #244736; font-size: 9.5px; line-height: 1.25; }
+.taxi-destination-copy small { color: #677d6f; font-size: 8px; line-height: 1.25; }
+.taxi-destination-meta { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.taxi-fare-badge { padding: 2px 7px; border-radius: 999px; color: #4e360d; background: #f6dfa4; font-size: 8px; font-weight: 800; letter-spacing: .05em; }
+.taxi-eta-label { color: #5b7565; font-size: 7.5px; font-weight: 700; }
+.taxi-action-panel { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; padding: 9px 10px; border: 1px solid rgba(31,110,84,.22); border-radius: 12px; background: linear-gradient(135deg,rgba(255,251,238,.92),rgba(235,246,239,.88)); }
+.taxi-driver-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 8.5px; color: #395c49; }
+.taxi-driver-row strong { color: #1d4231; font-size: 9.5px; }
+
+
 
 

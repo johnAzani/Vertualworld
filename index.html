@@ -205,11 +205,15 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">12</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">13</span></div>
                 <div class="phone-app-grid">
                   <button class="phone-app-button" type="button" data-phone-app="daily" aria-label="Open Daily Abuja Pulse, 7-day check-in streak, and daily contracts">
                     <span class="phone-app-icon app-icon-daily"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.65"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg><span class="phone-app-badge" id="phone-daily-badge" hidden></span></span>
                     <span>Daily</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="taxi" aria-label="Order an Abuja Private Car Taxi to meet you at your location">
+                    <span class="phone-app-icon app-icon-taxi"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 11.5 6.8 6.8A2 2 0 0 1 8.7 5.5h6.6a2 2 0 0 1 1.9 1.3l1.8 4.7v5.5a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5V16H9v1a1.5 1.5 0 0 1-1.5 1.5h-1A1.5 1.5 0 0 1 5 17v-5.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.5 3.5h5v2h-5v-2ZM5.5 11.5h13M8 14h1.5M14.5 14H16" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg></span>
+                    <span>Taxi</span>
                   </button>
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
@@ -491,6 +495,23 @@
                   <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-3">3</span><span>Glow seed three</span><strong id="phone-seed-status-3">TO FIND</strong></div>
                 </div>
                 <button class="phone-primary-button" type="button" data-phone-action="continue">Back to exploring <span aria-hidden="true">↗</span></button>
+              </section>
+
+              <section class="phone-page" data-phone-page="taxi" aria-label="Abuja Private Car Taxi ride-hail service" hidden>
+                <div class="shop-heading shop-heading--taxi">
+                  <span class="shop-avatar" aria-hidden="true">TX</span>
+                  <div>
+                    <span class="phone-card-label">ABUJA EXECUTIVE RIDE-HAIL · ABJ-804-TX</span>
+                    <h3>Abuja Private Taxi</h3>
+                    <small>Order a private car taxi · meets you at your location &amp; drives you to your destination</small>
+                  </div>
+                </div>
+                <div class="economy-wallet"><span>YOUR GAME CREDITS</span><strong id="taxi-wallet-balance">1,200 GC</strong></div>
+                <p class="shop-proximity is-near" id="taxi-status-banner">Select your destination below and order a private taxi to meet you at your exact location.</p>
+                <div class="shop-inventory" id="taxi-pickup-summary"><span>YOUR PICKUP LOCATION</span><strong>Unity Court · X 00, Z 12</strong></div>
+                <div class="estate-roster-heading"><span>CHOOSE DESTINATION · DOOR-TO-DOOR</span><strong>7 STOPS</strong></div>
+                <div class="taxi-destinations-list" id="taxi-destinations-list" aria-label="Private taxi destinations"></div>
+                <div class="taxi-action-panel" id="taxi-action-panel" aria-live="polite"></div>
               </section>
             </div>
             <div class="phone-home-indicator" aria-hidden="true"><span></span></div>

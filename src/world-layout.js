@@ -338,6 +338,92 @@ export function getMallIndoorWallColliders(mallLayout = COMMERCE_VENUE_LAYOUT.fi
   });
 }
 
+export const MALL_PARKING_LOT_LAYOUT = Object.freeze({
+  localX: 18.0,
+  localZ: 0.6,
+  width: 10.4,
+  depth: 15.6,
+  taxiDropOffLocalX: 0.0,
+  taxiDropOffLocalZ: -11.2,
+});
+
+export const MALL_PARKING_BAYS = Object.freeze([
+  Object.freeze({
+    id: 'mall-vip-p1',
+    code: 'VIP P-01',
+    isVip: true,
+    hasParkedCar: true,
+    carColor: 0x243b4a,
+    localX: 15.6,
+    localZ: -4.8,
+  }),
+  Object.freeze({
+    id: 'mall-vip-p2',
+    code: 'VIP P-02',
+    isVip: true,
+    hasParkedCar: false,
+    carColor: 0xc89a4b,
+    localX: 15.6,
+    localZ: 0.0,
+  }),
+  Object.freeze({
+    id: 'mall-vip-p3',
+    code: 'VIP P-03',
+    isVip: true,
+    hasParkedCar: true,
+    carColor: 0x7a3b2e,
+    localX: 15.6,
+    localZ: 4.8,
+  }),
+  Object.freeze({
+    id: 'mall-cust-p4',
+    code: 'P-04',
+    isVip: false,
+    hasParkedCar: true,
+    carColor: 0x3b6e5c,
+    localX: 20.6,
+    localZ: -4.8,
+  }),
+  Object.freeze({
+    id: 'mall-cust-p5',
+    code: 'P-05',
+    isVip: false,
+    hasParkedCar: false,
+    carColor: 0xd8a148,
+    localX: 20.6,
+    localZ: 0.0,
+  }),
+  Object.freeze({
+    id: 'mall-cust-p6',
+    code: 'P-06',
+    isVip: false,
+    hasParkedCar: true,
+    carColor: 0x5c5346,
+    localX: 20.6,
+    localZ: 4.8,
+  }),
+]);
+
+export function getMallParkingSurfaceHeight(
+  worldX,
+  worldZ,
+  baseY = 0,
+  mallLayout = COMMERCE_VENUE_LAYOUT.find((v) => v.id === 'market'),
+) {
+  if (!mallLayout) return null;
+  const local = mallWorldToLocal(mallLayout, worldX, worldZ);
+  const lot = MALL_PARKING_LOT_LAYOUT;
+  const insideParkingLot = Math.abs(local.x - lot.localX) <= lot.width / 2 + 0.4
+    && Math.abs(local.z - lot.localZ) <= lot.depth / 2 + 0.4;
+  const onTaxiForecourt = Math.abs(local.x) <= mallLayout.width / 2 + 0.4
+    && local.z >= -mallLayout.depth / 2 - 4.2
+    && local.z <= -mallLayout.depth / 2 + 0.2;
+  if (insideParkingLot || onTaxiForecourt) {
+    return baseY + 0.12;
+  }
+  return null;
+}
+
 export const BILLBOARD_LAYOUT = Object.freeze([
   Object.freeze({
     id: 'billboard-mall',
