@@ -193,7 +193,7 @@
                   <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
                 </div>
 
-                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">10</span></div>
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">11</span></div>
                 <div class="phone-app-grid">
                   <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
                     <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
@@ -238,6 +238,10 @@
                   <button class="phone-app-button" type="button" data-phone-app="government" aria-label="Open the Unity Court Governor’s Office and civic government">
                     <span class="phone-app-icon app-icon-government"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 4 8h16l-8-4.5ZM6 10v7m4-7v7m4-7v7m4-7v7M3.5 19.5h17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                     <span>Governor</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="billboards" aria-label="Open Abuja strategic billboard advertising network">
+                    <span class="phone-app-icon app-icon-billboards"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="18" height="10" rx="1.8" stroke="currentColor" stroke-width="1.6"/><path d="M9 14.5v5.5M15 14.5v5.5M6.5 20h11M7 8.5h10M7 11.2h6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg></span>
+                    <span>Billboards</span>
                   </button>
                 </div>
 
@@ -381,14 +385,31 @@
                 <p class="life-demo-disclaimer">Shift rewards are fictional game credits only. No real payments or wages are involved.</p>
               </section>
 
+              <section class="phone-page" data-phone-page="billboards" aria-label="Abuja strategic billboard advertising network" hidden>
+                <div class="shop-heading shop-heading--billboards">
+                  <div>
+                    <span class="phone-card-label">STRATEGIC AD NETWORK · 5 CORRIDORS</span>
+                    <h3>Abuja Billboards</h3>
+                    <p>Lease high-visibility 3D billboards at key junctions, promote your Unity Mall shop or Governor campaign, and collect ad revenue.</p>
+                  </div>
+                  <div class="shop-wallet-pill">
+                    <span>WALLET</span>
+                    <strong id="billboards-wallet-balance">160 GC</strong>
+                  </div>
+                </div>
+                <p class="shop-proximity-note" id="billboards-proximity">5 strategic billboards live across Unity Mall, Civic Boulevard, Unity Court, Unity Circle, and Abuja Stadium.</p>
+                <div class="mall-spaces-section" id="billboards-studio-section" aria-label="Selected billboard campaign studio"></div>
+                <div class="mall-spaces-section" id="billboards-directory-section" aria-label="Strategic billboard locations"></div>
+              </section>
+
               <section class="phone-page" data-phone-page="map" aria-label="Abuja neighbourhood map" hidden>
                 <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
-                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, community stadium, glow seeds and civic plaza">Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, community stadium, glow seeds and civic plaza.</canvas></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, strategic billboards, community stadium, glow seeds and civic plaza">Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, strategic billboards, community stadium, glow seeds and civic plaza.</canvas></div>
                 <div class="phone-map-details">
                   <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Unity Court North</strong></div>
                   <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
                 </div>
-                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-civic"></i>Community hall</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Abuja City Rail</span><span><i class="legend-bus"></i>Bus terminal</span><span><i class="legend-shop"></i>Café &amp; market</span></div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-civic"></i>Community hall</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Abuja City Rail</span><span><i class="legend-bus"></i>Bus terminal</span><span><i class="legend-shop"></i>Café &amp; market</span><span><i class="legend-billboard"></i>Billboard</span></div>
                 <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
                 <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">The map shows the connected street grid and bus route. Gold circles mark rail terminals; orange squares mark bus terminals at all three hubs.</p>
               </section>

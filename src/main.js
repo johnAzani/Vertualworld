@@ -4,6 +4,7 @@ import { resolveDiscAgainstOrientedBox } from './collision.js';
 import { getFrameTiming } from './frame-timing.js';
 import { createAbujaLandscape } from './abuja-world.js';
 import {
+  BILLBOARD_LAYOUT,
   COMMUNITY_HALL_LAYOUT,
   COMMERCE_VENUE_COLLIDER,
   COMMERCE_VENUE_LAYOUT,
@@ -108,6 +109,20 @@ import {
   setGovernorTaxRate,
   updateCampaignPlatform,
 } from './government.js';
+import {
+  BILLBOARD_CAMPAIGN_TYPES,
+  BILLBOARD_THEMES,
+  applyQuickBillboardPreset,
+  collectBillboardRevenue,
+  endBillboardLease,
+  getBillboardBonuses,
+  getBillboardById,
+  getBillboardDisplayState,
+  loadBillboardState,
+  rentBillboard,
+  saveBillboardState,
+  updateBillboardCampaign,
+} from './billboards.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -204,6 +219,10 @@ const governmentProximityElement = document.querySelector('#government-proximity
 const governmentOfficeCardElement = document.querySelector('#government-office-card');
 const governmentPolicySectionElement = document.querySelector('#government-policy-section');
 const governmentProjectsSectionElement = document.querySelector('#government-projects-section');
+const billboardsWalletBalanceElement = document.querySelector('#billboards-wallet-balance');
+const billboardsProximityElement = document.querySelector('#billboards-proximity');
+const billboardsStudioSectionElement = document.querySelector('#billboards-studio-section');
+const billboardsDirectorySectionElement = document.querySelector('#billboards-directory-section');
 const residentForm = document.querySelector('#resident-form');
 const residentNameInput = document.querySelector('#resident-name-input');
 const residentOriginInput = document.querySelector('#resident-origin-input');
@@ -231,6 +250,9 @@ const economy = loadEconomy(economyStorage);
 saveEconomy(economyStorage, economy);
 const government = loadGovernment(economyStorage);
 saveGovernment(economyStorage, government);
+const billboards = loadBillboardState(economyStorage);
+saveBillboardState(billboards, economyStorage);
+let selectedBillboardId = BILLBOARD_LAYOUT[0].id;
 const lifeStorage = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -489,6 +511,7 @@ function isReservedSpot(x, z, extra = 0) {
   }
   if (Math.abs(x - COMMUNITY_HALL_LAYOUT.x) < COMMUNITY_HALL_LAYOUT.halfX + extra
     && Math.abs(z - COMMUNITY_HALL_LAYOUT.z) < COMMUNITY_HALL_LAYOUT.halfZ + extra) return true;
+  if (BILLBOARD_LAYOUT.some((item) => Math.hypot(x - item.x, z - item.z) < 4.2 + extra)) return true;
   if (Math.abs(x - STADIUM.x) < STADIUM.standHalfX + 2 + extra
     && Math.abs(z - STADIUM.z) < STADIUM.standHalfZ + 2 + extra) return true;
   if (transitNetwork && isReservedTransportSpot(transitNetwork, x, z, extra)) return true;
@@ -2236,6 +2259,200 @@ function createCommunityHall() {
   return group;
 }
 
+const billboard3DEntries = new Map();
+
+function makeBillboardCanvasTexture(billboardId) {
+  const display = getBillboardDisplayState(billboards, billboardId);
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 640;
+  signCanvas.height = 320;
+  const ctx = signCanvas.getContext('2d');
+  const { theme, billboard } = display;
+
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, signCanvas.height);
+  bgGradient.addColorStop(0, theme.bgTop);
+  bgGradient.addColorStop(1, theme.bgBottom);
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, signCanvas.width, signCanvas.height);
+
+  // Subtle geometric corner glow & outer frame
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(10, 10, signCanvas.width - 20, signCanvas.height - 20);
+  ctx.strokeStyle = 'rgba(255, 255, 255, .22)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(20, 20, signCanvas.width - 40, signCanvas.height - 40);
+
+  // Top badge pill
+  ctx.fillStyle = theme.badgeBg;
+  ctx.fillRect(32, 30, signCanvas.width - 64, 44);
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(32, 30, signCanvas.width - 64, 44);
+
+  ctx.fillStyle = theme.accent;
+  ctx.font = '800 20px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(display.badge.toUpperCase(), 48, 52, 420);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255, 255, 255, .88)';
+  ctx.font = '700 17px system-ui, sans-serif';
+  ctx.fillText(`${billboard.code} · ${display.isLeased ? 'LEASED AD' : 'ABUJA MEDIA'}`, signCanvas.width - 48, 52, 160);
+
+  // Main headline
+  ctx.textAlign = 'center';
+  ctx.fillStyle = theme.text;
+  ctx.font = '900 40px system-ui, sans-serif';
+  ctx.fillText(display.headline.toUpperCase(), signCanvas.width / 2, 134, signCanvas.width - 68);
+
+  // Subline
+  ctx.fillStyle = 'rgba(255, 250, 236, .92)';
+  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.fillText(display.subline, signCanvas.width / 2, 188, signCanvas.width - 76);
+
+  // Bottom CTA bar & Advertiser stamp
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(42, 232, 260, 50);
+  ctx.fillStyle = '#18241d';
+  ctx.font = '900 21px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(display.cta.toUpperCase(), 172, 258, 236);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = theme.accent;
+  ctx.font = '700 18px system-ui, sans-serif';
+  ctx.fillText(
+    `SPONSOR: ${display.advertiserName.toUpperCase()}`,
+    signCanvas.width - 42,
+    247,
+    280,
+  );
+  ctx.fillStyle = 'rgba(255, 255, 255, .78)';
+  ctx.font = '600 15px system-ui, sans-serif';
+  ctx.fillText(
+    `${billboard.dailyImpressions.toLocaleString()} DAILY VIEWS · PRESS E TO LEASE`,
+    signCanvas.width - 42,
+    271,
+    280,
+  );
+
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function syncBillboards3D() {
+  for (const [billboardId, entry] of billboard3DEntries.entries()) {
+    const nextTexture = makeBillboardCanvasTexture(billboardId);
+    if (entry.screenMaterial.map) entry.screenMaterial.map.dispose();
+    entry.screenMaterial.map = nextTexture;
+    entry.screenMaterial.needsUpdate = true;
+    const display = getBillboardDisplayState(billboards, billboardId);
+    entry.trimMaterial.color.set(display.theme.accent);
+  }
+}
+
+function createStrategicBillboards() {
+  const steelMaterial = new THREE.MeshStandardMaterial({ color: 0x323d3a, roughness: 0.56, metalness: 0.42 });
+  const plinthMaterial = new THREE.MeshStandardMaterial({ color: 0x8f8875, roughness: 0.92 });
+  const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x222b28, roughness: 0.48, metalness: 0.36 });
+  const lampGlowMaterial = new THREE.MeshStandardMaterial({
+    color: 0xfff0c2,
+    emissive: 0xffd27d,
+    emissiveIntensity: 0.9,
+    roughness: 0.25,
+  });
+
+  for (const spec of BILLBOARD_LAYOUT) {
+    const group = new THREE.Group();
+    group.name = spec.name;
+    const display = getBillboardDisplayState(billboards, spec.id);
+    const trimMaterial = new THREE.MeshStandardMaterial({
+      color: display.theme.accent,
+      roughness: 0.42,
+      metalness: 0.24,
+    });
+    const screenMaterial = new THREE.MeshBasicMaterial({
+      map: makeBillboardCanvasTexture(spec.id),
+      toneMapped: false,
+    });
+
+    const addPart = (dimensions, position, material, castShadow = true, receiveShadow = true) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
+      mesh.position.set(...position);
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+      group.add(mesh);
+      return mesh;
+    };
+
+    // Heavy stone & steel foundation plinth
+    addPart([2.5, 0.34, 1.3], [0, 0.17, 0], plinthMaterial);
+    addPart([1.9, 0.22, 0.94], [0, 0.42, 0], steelMaterial);
+
+    // Twin steel support columns up to the board
+    const columnHeight = spec.towerHeight;
+    for (const side of [-1, 1]) {
+      addPart([0.28, columnHeight, 0.28], [side * 0.72, columnHeight / 2 + 0.35, 0], steelMaterial);
+    }
+    // Cross-brace beam
+    addPart([1.8, 0.18, 0.22], [0, columnHeight * 0.56, 0], steelMaterial);
+
+    const boardCenterY = columnHeight + spec.boardHeight / 2 + 0.15;
+    // Main cabinet frame & accent trim border
+    addPart([spec.boardWidth + 0.36, spec.boardHeight + 0.34, 0.36], [0, boardCenterY, 0], frameMaterial);
+    addPart([spec.boardWidth + 0.16, spec.boardHeight + 0.16, 0.4], [0, boardCenterY, 0], trimMaterial);
+
+    // Catwalk maintenance ledge below the billboard
+    addPart([spec.boardWidth + 0.2, 0.1, 0.86], [0, columnHeight + 0.02, 0], steelMaterial);
+
+    // Overhead floodlight bar & 3 lamp heads on each side
+    const topY = boardCenterY + spec.boardHeight / 2 + 0.24;
+    addPart([spec.boardWidth * 0.84, 0.1, 0.16], [0, topY, 0], steelMaterial);
+    for (const lampX of [-spec.boardWidth * 0.3, 0, spec.boardWidth * 0.3]) {
+      for (const side of [-1, 1]) {
+        addPart([0.1, 0.08, 0.48], [lampX, topY + 0.04, side * 0.24], steelMaterial, false, false);
+        addPart([0.34, 0.1, 0.18], [lampX, topY - 0.02, side * 0.44], lampGlowMaterial, false, false);
+      }
+    }
+
+    // Double-sided high-contrast display planes
+    const planeGeo = new THREE.PlaneGeometry(spec.boardWidth, spec.boardHeight);
+    const frontScreen = new THREE.Mesh(planeGeo, screenMaterial);
+    frontScreen.position.set(0, boardCenterY, 0.21);
+    group.add(frontScreen);
+
+    const backScreen = new THREE.Mesh(planeGeo, screenMaterial);
+    backScreen.position.set(0, boardCenterY, -0.21);
+    backScreen.rotation.y = Math.PI;
+    group.add(backScreen);
+
+    const groundY = terrainHeight(spec.x, spec.z);
+    group.position.set(spec.x, groundY, spec.z);
+    group.rotation.y = spec.facing;
+    scene.add(group);
+
+    worldObstacleColliders.push({
+      x: spec.x,
+      z: spec.z,
+      yaw: spec.facing,
+      halfX: spec.halfX,
+      halfZ: spec.halfZ,
+      height: columnHeight + spec.boardHeight + 0.5,
+    });
+
+    billboard3DEntries.set(spec.id, {
+      group,
+      screenMaterial,
+      trimMaterial,
+      spec,
+    });
+  }
+}
+
 function createParkedCar(x, z, heading) {
   const group = new THREE.Group();
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8069, roughness: 0.58, metalness: 0.08 });
@@ -2383,6 +2600,7 @@ const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
 transitNetwork = createTransportNetwork(scene, terrainHeight);
 createCommunityHall();
+createStrategicBillboards();
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 3.25, height: 2.55 });
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.bus.group, radius: 2.9, height: 2.55 });
 
@@ -3755,6 +3973,19 @@ function isPlayerAtCommunityHall(maxDistance = 6.2) {
   return Math.min(entranceDistance, centerDistance) <= maxDistance;
 }
 
+function getNearbyBillboard(maxDistance = 6.8) {
+  let nearest = null;
+  let nearestDistance = maxDistance;
+  for (const billboard of BILLBOARD_LAYOUT) {
+    const distance = Math.hypot(player.position.x - billboard.x, player.position.z - billboard.z);
+    if (distance <= nearestDistance) {
+      nearest = billboard;
+      nearestDistance = distance;
+    }
+  }
+  return nearest ? { billboard: nearest, distance: nearestDistance } : null;
+}
+
 function getNearbyRentalHouse(maxDistance = 4.6) {
   let nearest = null;
   let nearestDistance = maxDistance;
@@ -3793,6 +4024,7 @@ function getNearbyInteractionTarget() {
   const nearbyVenue = getNearbyCommerceVenue();
   if (nearbyVenue) return `open-${nearbyVenue.venue.id}`;
   if (isPlayerAtCommunityHall()) return 'open-government';
+  if (getNearbyBillboard()) return 'open-billboard';
 
   const railStop = getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6);
   const busStop = getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6);
@@ -3888,6 +4120,13 @@ function handleNearbyInteraction() {
   if (target === 'open-government') {
     if (!isPhoneOpen()) openPhone();
     setPhonePage('government');
+    return true;
+  }
+  if (target === 'open-billboard') {
+    const nearby = getNearbyBillboard()?.billboard;
+    if (nearby) selectedBillboardId = nearby.id;
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('billboards');
     return true;
   }
   if (target === 'watch-match') {
@@ -4032,6 +4271,7 @@ function updateWalletBalances() {
   setTextIfChanged(walletBalanceElement, balance);
   setTextIfChanged(cafeWalletBalanceElement, balance);
   setTextIfChanged(marketWalletBalanceElement, balance);
+  setTextIfChanged(billboardsWalletBalanceElement, balance);
   setTextIfChanged(bankAccountIdElement, economy.accountId);
   setTextIfChanged(bankWalletBalanceElement, balance);
 }
@@ -4447,6 +4687,10 @@ function persistGovernment() {
   return saveGovernment(economyStorage, government);
 }
 
+function persistBillboards() {
+  return saveBillboardState(billboards, economyStorage);
+}
+
 function handleMallActionFromPhone(action, spaceId) {
   selectedMallSpaceId = spaceId;
   if (action === 'collect-sales') {
@@ -4460,17 +4704,26 @@ function handleMallActionFromPhone(action, spaceId) {
       return;
     }
     const activePolicy = getActiveGovernorPolicy(government);
-    const bonusMultiplier = activePolicy.mallSalesMultiplier || 1;
-    const policyBonus = bonusMultiplier > 1 ? Math.round(result.payout * (bonusMultiplier - 1)) : 0;
-    if (policyBonus > 0) {
-      earnGameCredits(economy, `${activePolicy.title} · Governor showcase bonus`, policyBonus, Date.now());
-      result.lease.totalSales += policyBonus;
+    const policyMultiplier = activePolicy.mallSalesMultiplier || 1;
+    const billboardBonuses = getBillboardBonuses(billboards);
+    const adMultiplier = billboardBonuses.mallSalesBonusMultiplier || 1;
+    const policyBonus = policyMultiplier > 1 ? Math.round(result.payout * (policyMultiplier - 1)) : 0;
+    const adBonus = adMultiplier > 1 ? Math.round(result.payout * (adMultiplier - 1)) : 0;
+    const totalBonus = policyBonus + adBonus;
+    if (totalBonus > 0) {
+      earnGameCredits(
+        economy,
+        `${result.lease.shopName} · Governor & Billboard promo bonus`,
+        totalBonus,
+        Date.now(),
+      );
+      result.lease.totalSales += totalBonus;
     }
     persistEconomy();
     renderCommercePage('market');
     showToast(
-      `Showcase sales collected · +${formatCredits(result.payout + policyBonus)} from ${result.lease.shopName}${policyBonus > 0 ? ` (includes +${formatCredits(policyBonus)} Governor policy bonus)` : ''}!`,
-      3600,
+      `Showcase sales collected · +${formatCredits(result.payout + totalBonus)} from ${result.lease.shopName}${totalBonus > 0 ? ` (includes +${formatCredits(totalBonus)} policy & billboard ad bonus)` : ''}!`,
+      3800,
     );
     return;
   }
@@ -4715,6 +4968,222 @@ function fundProjectFromPhone(projectId) {
   syncCommunityHall3D();
   renderGovernmentPage();
   showToast(`Commissioned ${result.project.name}! Citizen approval rose to ${result.approval}%.`, 3800);
+}
+
+function getPlayerFirstMallShop() {
+  const leasedSpaceIds = Object.keys(economy.shopLeases || {});
+  if (!leasedSpaceIds.length) return null;
+  const space = getMallShopSpace(leasedSpaceIds[0]);
+  const lease = economy.shopLeases[leasedSpaceIds[0]];
+  return space && lease ? { space, lease } : null;
+}
+
+function renderBillboardsPage() {
+  if (!billboardsStudioSectionElement || !billboardsDirectorySectionElement) return;
+  updateWalletBalances();
+  if (!getBillboardById(selectedBillboardId)) {
+    selectedBillboardId = BILLBOARD_LAYOUT[0].id;
+  }
+  const nearby = getNearbyBillboard()?.billboard;
+  const bonuses = getBillboardBonuses(billboards);
+  const display = getBillboardDisplayState(billboards, selectedBillboardId);
+  const { billboard, isLeased, lease, theme } = display;
+
+  billboardsProximityElement.textContent = nearby
+    ? `Standing by ${nearby.name} (${nearby.code} · ${nearby.locationLabel}). Customize your 3D billboard ad or collect campaign revenue.`
+    : `Active Leases: ${bonuses.activeLeaseCount} / ${BILLBOARD_LAYOUT.length} · Mall Sales Bonus: +${Math.round((bonuses.mallSalesBonusMultiplier - 1) * 100)}% · Total Ad Revenue: ${formatCredits(billboards.totalRevenueCollected || 0)}.`;
+  billboardsProximityElement.classList.toggle('is-near', Boolean(nearby));
+  billboardsProximityElement.classList.toggle('is-away', !nearby);
+
+  const themeOptions = BILLBOARD_THEMES.map(
+    (item) => `<option value="${item.id}" ${theme.id === item.id ? 'selected' : ''}>${escapeHtml(item.label)}</option>`,
+  ).join('');
+  const campaignTypeOptions = BILLBOARD_CAMPAIGN_TYPES.map(
+    (item) => `<option value="${item.id}" ${display.campaignType.id === item.id ? 'selected' : ''}>${escapeHtml(item.label)}</option>`,
+  ).join('');
+
+  billboardsStudioSectionElement.innerHTML = `<div class="mall-showcase-card">
+    <div class="rental-lease-heading">
+      <span>${escapeHtml(billboard.code)} · ${escapeHtml(billboard.name)}</span>
+      <small>${isLeased ? `LEASED BY YOU · ${billboard.dailyImpressions.toLocaleString()} VIEWS/DAY` : `AVAILABLE · ${formatCredits(billboard.leaseCost)}`}</small>
+    </div>
+    <p><strong>Strategic Corridor:</strong> ${escapeHtml(billboard.corridor)} (${escapeHtml(billboard.locationLabel)}) · Est. Payout: <strong>+${formatCredits(billboard.payoutPerCollection)}</strong> / collection.</p>
+    <div class="billboard-live-preview" style="background:linear-gradient(160deg, ${theme.bgTop}, ${theme.bgBottom});border-color:${theme.accent};color:${theme.text};">
+      <span class="billboard-live-preview-badge" style="background:${theme.badgeBg};color:${theme.accent};">${escapeHtml(display.badge)}</span>
+      <strong>${escapeHtml(display.headline)}</strong>
+      <p>${escapeHtml(display.subline)}</p>
+      <span class="billboard-live-preview-cta" style="background:${theme.accent};">${escapeHtml(display.cta)}</span>
+    </div>
+    ${isLeased
+      ? `<div class="estate-roster-heading" style="margin-top:8px;"><span>ONE-CLICK CAMPAIGN PRESETS</span><strong>SYNC 3D BOARD</strong></div>
+        <div class="billboard-preset-row">
+          <button class="rental-action-button rental-action-button--quiet" type="button" data-billboard-preset="mall" data-billboard-id="${billboard.id}">MALL SHOP AD</button>
+          <button class="rental-action-button rental-action-button--quiet" type="button" data-billboard-preset="civic" data-billboard-id="${billboard.id}">GOVERNOR AD</button>
+          <button class="rental-action-button rental-action-button--quiet" type="button" data-billboard-preset="brand" data-billboard-id="${billboard.id}">BRAND SPOTLIGHT</button>
+        </div>
+        <form class="mall-showcase-form" data-billboard-campaign-form="${billboard.id}">
+          <div class="mall-form-row">
+            <input class="mall-input" name="headline" type="text" maxlength="46" minlength="2" value="${escapeHtml(lease.headline)}" placeholder="Billboard headline" aria-label="Billboard headline" required>
+            <input class="mall-input" name="badge" type="text" maxlength="38" minlength="2" value="${escapeHtml(lease.badge)}" placeholder="Top badge label" aria-label="Top badge label" required>
+          </div>
+          <div class="mall-form-row">
+            <input class="mall-input" name="subline" type="text" maxlength="68" minlength="2" value="${escapeHtml(lease.subline)}" placeholder="Subheadline message" aria-label="Subheadline message" required>
+            <input class="mall-input" name="cta" type="text" maxlength="28" minlength="2" value="${escapeHtml(lease.cta)}" placeholder="Call to action" aria-label="Call to action" required>
+          </div>
+          <div class="mall-form-row">
+            <select class="mall-input" name="theme" aria-label="Billboard color theme">${themeOptions}</select>
+            <select class="mall-input" name="campaignType" aria-label="Campaign focus">${campaignTypeOptions}</select>
+          </div>
+          <button class="rental-action-button" type="submit">PUBLISH LIVE TO 3D BILLBOARD</button>
+        </form>
+        <div class="rental-actions" style="margin-top:8px;">
+          <button class="rental-action-button" type="button" data-billboard-action="collect" data-billboard-id="${billboard.id}">
+            COLLECT AD REVENUE (+${formatCredits(billboard.payoutPerCollection)}+)
+          </button>
+          <button class="rental-action-button rental-action-button--quiet" type="button" data-billboard-action="end-lease" data-billboard-id="${billboard.id}">
+            END BILLBOARD LEASE
+          </button>
+        </div>`
+      : `<div class="rental-actions" style="margin-top:8px;">
+          <button class="rental-action-button" type="button" data-rent-billboard="${billboard.id}" ${economy.wallet < billboard.leaseCost ? 'disabled' : ''}>
+            ${economy.wallet < billboard.leaseCost
+              ? `NEED ${formatCredits(billboard.leaseCost)} TO LEASE`
+              : `LEASE ${escapeHtml(billboard.code)} BILLBOARD · ${formatCredits(billboard.leaseCost)}`}
+          </button>
+        </div>`}
+  </div>`;
+
+  billboardsDirectorySectionElement.innerHTML = `<div class="estate-roster-heading"><span>STRATEGIC LOCATIONS · 5 CORRIDORS</span><strong>${bonuses.activeLeaseCount} LEASED</strong></div>
+    <div class="mall-spaces-list">
+      ${BILLBOARD_LAYOUT.map((spec) => {
+        const specDisplay = getBillboardDisplayState(billboards, spec.id);
+        const isSelected = spec.id === selectedBillboardId;
+        const canAfford = economy.wallet >= spec.leaseCost;
+        return `<div class="mall-space-card ${specDisplay.isLeased ? 'is-rented' : ''} ${isSelected ? 'is-selected' : ''}">
+          <div class="mall-space-header">
+            <span class="mall-space-title">
+              <strong>${escapeHtml(spec.code)} · ${escapeHtml(spec.name)}</strong>
+              <small>${escapeHtml(spec.corridor)} · ${spec.dailyImpressions.toLocaleString()} daily views</small>
+            </span>
+            <span class="mall-size-badge ${specDisplay.isLeased ? 'mall-size-badge--medium' : 'mall-size-badge--small'}">
+              ${specDisplay.isLeased ? 'YOUR AD LIVE' : formatCredits(spec.leaseCost)}
+            </span>
+          </div>
+          <div class="mall-space-meta">
+            <span>Ad: “${escapeHtml(specDisplay.headline)}”</span>
+            <strong>+${formatCredits(spec.payoutPerCollection)} / payout</strong>
+          </div>
+          <div class="mall-space-actions">
+            <button class="rental-action-button ${isSelected ? '' : 'rental-action-button--quiet'}" type="button" data-select-billboard="${spec.id}">
+              ${isSelected ? 'SELECTED IN STUDIO' : 'OPEN IN STUDIO'}
+            </button>
+            ${specDisplay.isLeased
+              ? `<button class="rental-action-button" type="button" data-billboard-action="collect" data-billboard-id="${spec.id}">COLLECT REVENUE</button>`
+              : `<button class="rental-action-button" type="button" data-rent-billboard="${spec.id}" ${!canAfford ? 'disabled' : ''}>LEASE · ${formatCredits(spec.leaseCost)}</button>`}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function rentBillboardFromPhone(billboardId) {
+  const residentName = life.profile?.created ? life.profile.name : 'Abuja Resident';
+  const firstShop = getPlayerFirstMallShop();
+  const result = rentBillboard(billboards, economy, billboardId, {
+    advertiserName: residentName,
+    badge: firstShop ? `UNITY MALL · ${firstShop.space.code}` : `${residentName.toUpperCase()} · ABUJA`,
+    headline: firstShop ? firstShop.lease.shopName.toUpperCase() : `${residentName.toUpperCase()} LIVE IN ABUJA`,
+    subline: firstShop ? firstShop.lease.tagline : undefined,
+    cta: firstShop ? 'VISIT UNITY MALL' : 'OPEN PHONE',
+    campaignType: firstShop ? 'mall' : undefined,
+  });
+  if (!result.ok) {
+    if (result.reason === 'already-leased') showToast('You already lease this strategic billboard.');
+    else if (result.reason === 'insufficient-funds') showToast(`You need ${formatCredits(result.needed)} to lease this billboard.`);
+    else showToast('Could not lease that billboard right now.');
+    return;
+  }
+  selectedBillboardId = result.billboard.id;
+  persistEconomy();
+  persistBillboards();
+  syncBillboards3D();
+  renderBillboardsPage();
+  drawMap();
+  updateLocationAndMap();
+  showToast(
+    `Leased ${result.billboard.name} (${result.billboard.code})! Your 3D billboard ad is now live at ${result.billboard.locationLabel}.`,
+    4000,
+  );
+}
+
+function applyBillboardPresetFromPhone(billboardId, presetType) {
+  const residentName = life.profile?.created ? life.profile.name : 'Abuja Resident';
+  const residentOrigin = life.profile?.created ? life.profile.origin : 'Abuja';
+  const firstShop = getPlayerFirstMallShop();
+  const result = applyQuickBillboardPreset(billboards, billboardId, presetType, {
+    residentName,
+    residentOrigin,
+    shopName: firstShop?.lease.shopName,
+    shopTagline: firstShop?.lease.tagline,
+    shopCode: firstShop?.space.code,
+    campaignSlogan: government.campaignSlogan,
+    isPlayerGovernor: government.isPlayerGovernor,
+  });
+  if (!result.ok) {
+    showToast('Lease this billboard first to apply a campaign preset.');
+    return;
+  }
+  selectedBillboardId = billboardId;
+  if (presetType === 'civic') {
+    canvassNeighboursForCampaign(government, { atCommunityHall: false });
+    persistGovernment();
+    syncCommunityHall3D();
+  }
+  persistBillboards();
+  syncBillboards3D();
+  renderBillboardsPage();
+  showToast(
+    presetType === 'mall'
+      ? `3D Billboard updated to promote "${result.lease.headline}" (+15% Unity Mall showcase sales)!`
+      : presetType === 'civic'
+        ? `3D Billboard updated with your Governor campaign (+7% voter support)!`
+        : `3D Billboard updated with "${result.lease.headline}"!`,
+    3600,
+  );
+}
+
+function handleBillboardActionFromPhone(action, billboardId) {
+  selectedBillboardId = billboardId;
+  if (action === 'collect') {
+    const activePolicy = getActiveGovernorPolicy(government);
+    const hasMallShop = Boolean(getPlayerFirstMallShop());
+    const result = collectBillboardRevenue(billboards, economy, billboardId, {
+      hasMallShop,
+      policyMultiplier: activePolicy.mallSalesMultiplier || 1,
+    });
+    if (!result.ok) {
+      showToast('Lease this billboard first to collect ad revenue.');
+      return;
+    }
+    persistEconomy();
+    persistBillboards();
+    renderBillboardsPage();
+    showToast(
+      `Collected +${formatCredits(result.payout)} ad revenue from ${result.billboard.code} (${result.impressions.toLocaleString()} daily views)!`,
+      3600,
+    );
+    return;
+  }
+  if (action === 'end-lease') {
+    const result = endBillboardLease(billboards, billboardId);
+    if (!result.ok) return;
+    persistBillboards();
+    syncBillboards3D();
+    renderBillboardsPage();
+    drawMap();
+    updateLocationAndMap();
+    showToast(`Ended billboard lease for ${result.billboard.name} (${result.billboard.code}).`, 3000);
+  }
 }
 
 function rentHouseFromPhone(houseNumber) {
@@ -5016,6 +5485,7 @@ const phonePageCopy = {
   cafe: { eyebrow: 'CIVIC CAFÉ · ABUJA', title: 'A little something', subtitle: 'Fresh food and a warm drink for the road.' },
   market: { eyebrow: 'UNITY MALL · SHOPS & GROCERIES', title: 'Unity Mall', subtitle: 'Rent shop spaces, display virtual goods, and shop.' },
   government: { eyebrow: 'UNITY COURT · CIVIC SEAT', title: 'Governor’s Office', subtitle: 'Run for Governor, enact policies, and fund public works.' },
+  billboards: { eyebrow: 'ABUJA MEDIA · 5 CORRIDORS', title: 'Strategic Billboards', subtitle: 'Lease high-visibility 3D billboards and run live ad campaigns.' },
   bank: { eyebrow: 'ABUJA GAME WALLET · GAME ACCOUNT', title: 'Your game wallet', subtitle: 'Check your credits and preview payment flows.' },
   life: { eyebrow: 'YOUR RESIDENT · LOCAL SAVE', title: 'Life in Abuja', subtitle: 'Look after your needs, make your own routine.' },
   work: { eyebrow: 'NEIGHBOURHOOD JOB BOARD', title: 'Work & progression', subtitle: 'Pick a role, show up and help your neighbours.' },
@@ -5043,6 +5513,7 @@ function setPhonePage(pageName) {
   if (page === 'property') renderPropertyPage();
   else if (page === 'cafe' || page === 'market') renderCommercePage(page);
   else if (page === 'government') renderGovernmentPage();
+  else if (page === 'billboards') renderBillboardsPage();
   else if (page === 'bank') renderBankPage();
   else if (page === 'life') renderLifePage();
   else if (page === 'work') renderWorkPage();
@@ -5084,6 +5555,7 @@ function openPhone() {
   else if (activePhonePage === 'work') renderWorkPage();
   else if (activePhonePage === 'cafe' || activePhonePage === 'market') renderCommercePage(activePhonePage);
   else if (activePhonePage === 'government') renderGovernmentPage();
+  else if (activePhonePage === 'billboards') renderBillboardsPage();
   else if (activePhonePage === 'property') renderPropertyPage();
 }
 
@@ -5280,6 +5752,33 @@ phoneContent.addEventListener('click', (event) => {
     fundProjectFromPhone(fundProjectButton.dataset.fundProject);
     return;
   }
+  const selectBillboardButton = event.target.closest('[data-select-billboard]');
+  if (selectBillboardButton) {
+    selectedBillboardId = selectBillboardButton.dataset.selectBillboard;
+    renderBillboardsPage();
+    return;
+  }
+  const rentBillboardButton = event.target.closest('[data-rent-billboard]');
+  if (rentBillboardButton) {
+    rentBillboardFromPhone(rentBillboardButton.dataset.rentBillboard);
+    return;
+  }
+  const billboardPresetButton = event.target.closest('[data-billboard-preset]');
+  if (billboardPresetButton) {
+    applyBillboardPresetFromPhone(
+      billboardPresetButton.dataset.billboardId || selectedBillboardId,
+      billboardPresetButton.dataset.billboardPreset,
+    );
+    return;
+  }
+  const billboardActionButton = event.target.closest('[data-billboard-action]');
+  if (billboardActionButton) {
+    handleBillboardActionFromPhone(
+      billboardActionButton.dataset.billboardAction,
+      billboardActionButton.dataset.billboardId || selectedBillboardId,
+    );
+    return;
+  }
   const foodButton = event.target.closest('[data-food-use]');
   if (foodButton) {
     useFoodFromBag(foodButton.dataset.foodUse);
@@ -5402,6 +5901,38 @@ phoneContent.addEventListener('submit', (event) => {
     syncCommunityHall3D();
     renderGovernmentPage();
     showToast(`Campaign platform updated · voter support rose to ${result.campaignSupport}%!`, 3200);
+    return;
+  }
+
+  const billboardForm = event.target.closest('[data-billboard-campaign-form]');
+  if (billboardForm) {
+    event.preventDefault();
+    const billboardId = billboardForm.dataset.billboardCampaignForm;
+    const formData = new FormData(billboardForm);
+    const campaignType = String(formData.get('campaignType') || 'mall');
+    const result = updateBillboardCampaign(billboards, billboardId, {
+      advertiserName: life.profile?.created ? life.profile.name : 'Abuja Resident',
+      headline: String(formData.get('headline') || ''),
+      badge: String(formData.get('badge') || ''),
+      subline: String(formData.get('subline') || ''),
+      cta: String(formData.get('cta') || ''),
+      theme: String(formData.get('theme') || 'emerald'),
+      campaignType,
+    });
+    if (!result.ok) {
+      showToast('Enter a billboard headline with at least two characters.');
+      return;
+    }
+    selectedBillboardId = billboardId;
+    if (campaignType === 'civic') {
+      canvassNeighboursForCampaign(government, { atCommunityHall: false });
+      persistGovernment();
+      syncCommunityHall3D();
+    }
+    persistBillboards();
+    syncBillboards3D();
+    renderBillboardsPage();
+    showToast(`Published "${result.lease.headline}" live to ${result.billboard.code} in 3D!`, 3400);
   }
 });
 
@@ -5639,12 +6170,12 @@ function updateLocationAndMap() {
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
   const hasStadiumPrompt = interactionTarget === 'watch-match';
   const hasTransitPrompt = ['board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
-  const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market' || interactionTarget === 'open-government';
+  const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market' || interactionTarget === 'open-government' || interactionTarget === 'open-billboard';
   const hasPropertyPrompt = interactionTarget === 'view-rentals';
   homeInteraction.hidden = isWorldView || isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt || hasCommercePrompt || hasPropertyPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market', 'open-government'].includes(interactionTarget);
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market', 'open-government', 'open-billboard'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop and civic controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop, billboard, and civic controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -5676,6 +6207,23 @@ function updateLocationAndMap() {
     );
     setTextIfChanged(homeInteractionAction, 'OPEN GOVERNMENT');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open the Governor’s Office and civic government');
+  } else if (interactionTarget === 'open-billboard') {
+    const nearbyBoard = getNearbyBillboard()?.billboard;
+    const display = nearbyBoard ? getBillboardDisplayState(billboards, nearbyBoard.id) : null;
+    setTextIfChanged(
+      homeInteractionEyebrow,
+      nearbyBoard ? `STRATEGIC BILLBOARD · ${nearbyBoard.code} ${nearbyBoard.locationLabel.toUpperCase()}` : 'STRATEGIC BILLBOARD',
+    );
+    setTextIfChanged(
+      homeInteractionMessage,
+      display
+        ? display.isLeased
+          ? `Your live ad: “${display.headline}” · ${nearbyBoard.dailyImpressions.toLocaleString()} daily views`
+          : `${nearbyBoard.name} · Lease for ${formatCredits(nearbyBoard.leaseCost)} (${nearbyBoard.dailyImpressions.toLocaleString()} daily views)`
+        : 'Lease and customize this 3D advertising billboard.',
+    );
+    setTextIfChanged(homeInteractionAction, display?.isLeased ? 'MANAGE AD' : 'LEASE BILLBOARD');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open strategic billboard advertising studio');
   } else if (hasCommercePrompt) {
     const venue = getNearbyCommerceVenue()?.venue;
     if (venue?.id === 'cafe') {
@@ -5993,6 +6541,24 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('H', hallX, hallY + 0.2);
+
+  for (const board of BILLBOARD_LAYOUT) {
+    const boardX = mapX(board.x);
+    const boardY = mapY(board.z);
+    const w = Math.max(3.6, radius * 0.038);
+    const h = Math.max(2.5, radius * 0.026);
+    const isLeased = Boolean(billboards.leases?.[board.id]);
+    ctx.fillStyle = isLeased ? '#e5a93c' : '#8c5328';
+    ctx.strokeStyle = '#fff9ec';
+    ctx.lineWidth = 1;
+    ctx.fillRect(boardX - w, boardY - h, w * 2, h * 2);
+    ctx.strokeRect(boardX - w, boardY - h, w * 2, h * 2);
+    ctx.fillStyle = '#fff9ec';
+    ctx.font = `700 ${Math.max(3.8, radius * 0.04)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('AD', boardX, boardY + 0.2);
+  }
 
   ctx.beginPath();
   PATH_POINTS_XZ.forEach(([x, z], index) => {

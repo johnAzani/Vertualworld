@@ -11,6 +11,7 @@ import {
   STATION_LAYOUT,
 } from '../src/transport.js';
 import {
+  BILLBOARD_LAYOUT,
   COMMUNITY_HALL_LAYOUT,
   COMMERCE_VENUE_COLLIDER,
   COMMERCE_VENUE_LAYOUT,
@@ -89,7 +90,15 @@ function getStaticBuildingBounds() {
     halfX: COMMUNITY_HALL_LAYOUT.halfX,
     halfZ: COMMUNITY_HALL_LAYOUT.halfZ,
   };
-  return [...houses, ...venues, hall];
+  const billboards = BILLBOARD_LAYOUT.map((billboard) => ({
+    id: billboard.name,
+    x: billboard.x,
+    z: billboard.z,
+    yaw: billboard.facing,
+    halfX: billboard.halfX,
+    halfZ: billboard.halfZ,
+  }));
+  return [...houses, ...venues, hall, ...billboards];
 }
 
 function boxAxes(yaw) {
@@ -262,3 +271,29 @@ test('walking collision also blocks the Unity Community Hall walls', () => {
   assert.ok(contact, 'Unity Community Hall corner should contact the player collider');
   assert.ok(distanceFromBox(worldToLocal(box, position.x, position.z), box) >= 0.42 - 1e-6);
 });
+
+test('strategic advertising billboards stay clear of every connected road surface and building', () => {
+  assert.equal(BILLBOARD_LAYOUT.length, 5);
+  for (const billboard of BILLBOARD_LAYOUT) {
+    const box = {
+      x: billboard.x,
+      z: billboard.z,
+      yaw: billboard.facing,
+      halfX: billboard.halfX,
+      halfZ: billboard.halfZ,
+    };
+    for (const road of ROAD_NETWORK_LAYOUT) {
+      const curve = createPlanarCurve(road.points);
+      const sampleCount = Math.ceil(curve.getLength() / 0.2);
+      for (let index = 0; index <= sampleCount; index += 1) {
+        const point = curve.getPointAt(index / sampleCount);
+        const clearance = distanceFromBox(worldToLocal(box, point.x, point.z), box);
+        assert.ok(
+          clearance >= road.halfWidth + 0.25,
+          `${billboard.name} is too close to a road surface (${clearance.toFixed(2)} units)`,
+        );
+      }
+    }
+  }
+});
+
