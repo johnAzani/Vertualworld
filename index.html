@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#d7eee6">
+    <meta name="description" content="Create a resident, find work, build a home and meet neighbours in a stylised Abuja life-simulation world.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=DM+Serif+Display:ital@0;1&amp;display=swap" media="print" onload="this.media='all'">
+    <title>Abuja Life — a Vertualworld neighbourhood story</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world-canvas" tabindex="0" role="img" aria-label="An interactive, stylised Abuja neighbourhood. Use WASD or the arrow keys to move. The third-person camera follows behind your resident; drag to look in first-person or orbit World View.">Your browser does not support the 3D canvas.</canvas>
+      <div class="world-wash" aria-hidden="true"></div>
+      <div class="home-transition" id="home-transition" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Abuja Life home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36" fill="none">
+              <path d="M5.5 10.5 15.9 27h4.2l10.4-16.5" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="m12.5 10.5 5.5 8.7 5.5-8.7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".58" />
+              <circle cx="18" cy="29" r="2" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">ABUJA LIFE</span>
+            <span class="brand-caption">A neighbourhood story by Vertualworld</span>
+          </span>
+        </a>
+
+        <div class="topbar-center" role="group" aria-label="Current world">
+          <span class="live-dot"></span>
+          <span>ABUJA · FCT</span>
+          <span class="topbar-divider"></span>
+          <span class="world-time" id="world-time">09:42</span>
+          <span class="time-label" id="world-period">AM</span>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="seed-counter" role="group" aria-label="Glow seeds collected">
+            <span class="seed-counter-icon" aria-hidden="true">✦</span>
+            <span id="seed-count-top" aria-live="polite" aria-atomic="true">0</span><span class="seed-total">/ 3</span>
+          </div>
+          <button class="icon-button phone-launcher" id="phone-button" type="button" aria-label="Open your phone" title="Open your phone (P)" aria-controls="phone-panel" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M10 5.6h4M10.3 18.2h3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span class="phone-notification-dot" id="phone-notification-dot" aria-hidden="true" hidden></span>
+          </button>
+          <button class="icon-button view-toggle" id="view-toggle" type="button" aria-label="Switch to first-person view" title="Switch to first-person view (V)" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.6 12s3.35-6.2 9.4-6.2 9.4 6.2 9.4 6.2-3.35 6.2-9.4 6.2S2.6 12 2.6 12Z" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="12" r=".85" fill="currentColor"/></svg>
+          </button>
+          <button class="icon-button world-view-toggle" id="world-view-button" type="button" aria-label="Open world view" title="Open world view (O)" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.8" stroke="currentColor" stroke-width="1.55"/><path d="M3.5 12h17M12 3.2c2.2 2.3 3.2 5.2 3.2 8.8s-1 6.5-3.2 8.8C9.8 18.5 8.8 15.6 8.8 12s1-6.5 3.2-8.8Z" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-button" id="camera-reset" type="button" aria-label="Reset camera view" title="Reset camera view">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5A8 8 0 1 1 3 13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 3.5v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="hud" aria-label="World interface">
+        <section class="intro-card" id="intro-card">
+          <div class="eyebrow"><span class="eyebrow-mark">✳</span> ABUJA LIFE · NEW RESIDENT</div>
+          <h1>Your story<br>starts <em>here.</em></h1>
+          <p>Make a home, meet neighbours and find work in a stylised Abuja neighbourhood. This is a fictional game world, not a street-for-street map.</p>
+          <form class="resident-onboarding" id="resident-form">
+            <label class="resident-field" for="resident-name-input"><span>RESIDENT NAME</span><input id="resident-name-input" name="resident-name" type="text" maxlength="20" minlength="2" autocomplete="nickname" placeholder="e.g. Amina" required></label>
+            <div class="resident-choice-row">
+              <label class="resident-field" for="resident-origin-input"><span>FROM</span><select id="resident-origin-input" name="resident-origin"></select></label>
+              <label class="resident-field" for="resident-outfit-input"><span>FIRST OUTFIT</span><select id="resident-outfit-input" name="resident-outfit"></select></label>
+            </div>
+            <button class="primary-button" id="explore-button" type="submit">
+              <span>Begin your life</span>
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </form>
+          <div class="intro-footnote"><span class="sparkle">✦</span> Your story saves only on this device.</div>
+        </section>
+
+        <div class="location-chip" id="location-chip">
+          <span class="location-pin" aria-hidden="true"></span>
+          <span id="location-name" aria-live="polite" aria-atomic="true">Unity Court North</span>
+          <span class="location-separator">·</span>
+          <span id="location-coordinates">0, 12</span>
+        </div>
+
+        <div class="world-view-banner" id="world-view-banner" role="status" aria-live="polite" hidden>
+          <span class="world-view-banner-copy"><strong>WORLD VIEW</strong><small>Neighbourhood overview · drag to orbit</small></span>
+          <button type="button" id="world-view-return" aria-label="Return to your resident view">Return to resident <kbd>O</kbd></button>
+        </div>
+
+        <aside class="map-card" aria-label="Abuja neighbourhood map">
+          <div class="map-art-wrap">
+            <canvas id="map-canvas" width="176" height="176" role="img" aria-label="Map of a schematic Abuja neighbourhood showing your position, streets, bus and rail routes, three transit hubs, homes, shops, stadium, glow seeds and civic plaza">Map of a schematic Abuja neighbourhood showing your position, streets, bus and rail routes, three transit hubs, homes, shops, stadium, glow seeds and civic plaza.</canvas>
+            <span class="map-north">N</span>
+          </div>
+          <div class="map-copy">
+            <div class="panel-eyebrow">ABUJA FIELD NOTES <span>FCT</span></div>
+            <h2>Abuja<br>Neighbourhood</h2>
+            <p><span class="map-player-dot"></span> <span id="map-location">Unity Court North</span></p>
+            <div class="map-coords"><span>POSITION</span><strong id="map-coordinates">X 00 · Z 12</strong></div>
+          </div>
+        </aside>
+
+        <aside class="quest-card" aria-label="Optional neighbourhood quest">
+          <div class="quest-heading">
+            <span class="quest-icon" aria-hidden="true">✦</span>
+            <span class="panel-eyebrow">A LITTLE SIDE QUEST</span>
+            <span class="quest-tag">OPTIONAL</span>
+          </div>
+          <h2>Find the <em>glow seeds</em></h2>
+          <p>Three little lights are tucked around the neighbourhood. Collect them if you feel like it.</p>
+          <div class="quest-progress-row"><span>NEIGHBOURHOOD LIGHT</span><strong><span id="seed-count">0</span><span class="progress-total"> / 3</span></strong></div>
+          <progress id="progress-fill" class="progress-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress>
+        </aside>
+
+        <div class="controls-hint" id="controls-hint" role="group" aria-label="Keyboard controls">
+          <span class="hint-set" id="walking-controls">
+            <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SPACE</kbd><span>JUMP</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>O</kbd><span>WORLD VIEW</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>LOOK / ORBIT</span></span>
+          </span>
+          <span class="hint-set" id="vehicle-controls" hidden>
+            <span class="control-pair"><kbd>W</kbd><kbd>S</kbd><span>DRIVE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>A</kbd><kbd>D</kbd><span>STEER</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>SPACE</kbd><span>BRAKE</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>E</kbd><span>EXIT</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
+          </span>
+          <span class="hint-set" id="transit-controls" hidden>
+            <span class="control-pair"><kbd>E</kbd><span>REQUEST NEXT STOP</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>ENJOY THE RIDE</span></span>
+          </span>
+        </div>
+      </main>
+
+      <div class="phone-scrim" id="phone-scrim" hidden></div>
+      <section class="phone-panel" id="phone-panel" role="dialog" aria-modal="true" aria-labelledby="phone-page-title" aria-hidden="true" hidden>
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="phone-statusbar" role="group" aria-label="Phone status">
+              <span id="phone-time">09:42</span>
+              <span class="phone-status-icons" aria-hidden="true">
+                <span class="phone-signal"><i></i><i></i><i></i><i></i></span>
+                <svg viewBox="0 0 18 14" fill="none"><path d="M1.5 4.5a11 11 0 0 1 15 0M4 7a7.5 7.5 0 0 1 10 0M6.7 9.7a3.6 3.6 0 0 1 4.6 0M9 12h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <span class="phone-battery"><i></i></span>
+              </span>
+            </div>
+
+            <div class="phone-toolbar">
+              <button class="phone-nav-button phone-back" id="phone-back" type="button" aria-label="Back to phone home" hidden>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14.5 5-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="phone-wordmark"><span class="phone-mark">V</span><span>FIELD PHONE</span></div>
+              <button class="phone-nav-button phone-close" id="phone-close" type="button" aria-label="Close phone">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <div class="phone-heading-block">
+              <p class="phone-eyebrow" id="phone-page-eyebrow">YOUR POCKET GUIDE</p>
+              <h2 id="phone-page-title">Your little world</h2>
+              <p id="phone-page-subtitle">Useful things for wherever the path takes you.</p>
+            </div>
+
+            <div class="phone-page-container" id="phone-content">
+              <section class="phone-page phone-home-page" data-phone-page="home" aria-label="Phone home">
+                <div class="phone-home-time-row"><span>ABUJA · FCT</span><span id="phone-home-time">09:42 AM</span></div>
+                <div class="phone-location-widget">
+                  <div class="phone-location-copy">
+                    <span class="phone-card-label">YOU ARE HERE</span>
+                    <h3 id="phone-home-location">Unity Court North</h3>
+                    <span class="phone-coordinates" id="phone-home-coordinates">X 00 · Z 12</span>
+                  </div>
+                  <div class="phone-compass" aria-hidden="true"><span>N</span><i></i></div>
+                </div>
+
+                <div class="phone-section-heading"><span>YOUR APPS</span><span class="phone-app-count">10</span></div>
+                <div class="phone-app-grid">
+                  <button class="phone-app-button" type="button" data-phone-app="map" aria-label="Open map app">
+                    <span class="phone-app-icon app-icon-map"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 6 5.2-2 6.6 2 5.2-2v14l-5.2 2-6.6-2-5.2 2V6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.7 4v14M15.3 6v14" stroke="currentColor" stroke-width="1.5"/><path d="M12 8.4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></span>
+                    <span>Map</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="messages" aria-label="Open messages app">
+                    <span class="phone-app-icon app-icon-messages"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.8A2.8 2.8 0 0 1 6.8 3h10.4A2.8 2.8 0 0 1 20 5.8v7.4a2.8 2.8 0 0 1-2.8 2.8h-6l-4.5 3.2v-3.2h-.1A2.8 2.8 0 0 1 4 13.2V5.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 8.2h8M8 11.6h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="phone-app-badge" id="phone-message-badge" hidden></span></span>
+                    <span>Messages</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="journal" aria-label="Open field notes app">
+                    <span class="phone-app-icon app-icon-journal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4.5h12a1.5 1.5 0 0 1 1.5 1.5v13.5H7.2A2.7 2.7 0 0 1 4.5 16.8V6A1.5 1.5 0 0 1 6 4.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4.5 16.5A2.5 2.5 0 0 1 7 14h12.5M8.5 8h7M8.5 10.8h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                    <span>Journal</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="quests" aria-label="Open quests app">
+                    <span class="phone-app-icon app-icon-quests"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/></svg></span>
+                    <span>Quests</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="property" aria-label="Open your Unity Court home app">
+                    <span class="phone-app-icon app-icon-home"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 10.2 8.5-7 8.5 7v9.2a1.1 1.1 0 0 1-1.1 1.1H4.6a1.1 1.1 0 0 1-1.1-1.1v-9.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9.2 20.2v-6.1h5.6v6.1M7.2 10.6h.01M16.8 10.6h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                    <span>My home</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="cafe" aria-label="Open the Civic Cafe menu">
+                    <span class="phone-app-icon app-icon-cafe"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 8h11v7.2A4.8 4.8 0 0 1 11.2 20h-1.4A4.8 4.8 0 0 1 5 15.2V8ZM16 10h1.4a2.6 2.6 0 1 1 0 5.2H16M7 4.5c0 1 .9 1 0 2M11 4.5c0 1 .9 1 0 2M15 4.5c0 1 .9 1 0 2" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Café</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="market" aria-label="Open the Unity Market grocery shop">
+                    <span class="phone-app-icon app-icon-market"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9h16l-1.4 11H5.4L4 9ZM3 9l2.2-5h13.6L21 9M8 9V4M16 9V4M9 20v-6h6v6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Market</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="bank" aria-label="Open your local game bank account">
+                    <span class="phone-app-icon app-icon-bank"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 8 9-4.5L21 8v1H3V8Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/><path d="M5 10v7m4-7v7m6-7v7m4-7v7M3 19h18M2 21h20" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Bank</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="life" aria-label="Open your resident life and daily needs">
+                    <span class="phone-app-icon app-icon-life"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 12h2.7l1.3-2.2 2 4.4 1.2-2.2h1.8" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Life</span>
+                  </button>
+                  <button class="phone-app-button" type="button" data-phone-app="work" aria-label="Open the neighbourhood job board and work shift">
+                    <span class="phone-app-icon app-icon-work"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="7.5" width="18" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 7.5V5.9A1.9 1.9 0 0 1 10.4 4h3.2a1.9 1.9 0 0 1 1.9 1.9v1.6M3.5 12.2h17M10 12v2h4v-2" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/></svg></span>
+                    <span>Work</span>
+                  </button>
+                </div>
+
+                <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
+                  <span class="phone-contact-avatar" aria-hidden="true">N</span>
+                  <span class="phone-preview-copy"><span class="phone-preview-title">Nia <small>· just now</small></span><span class="phone-preview-text" id="phone-message-preview">The glow seeds have started appearing around the neighbourhood.</span></span>
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m7.5 4 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <p class="phone-local-note"><span aria-hidden="true">✦</span> Your notes stay on this device.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="property" aria-label="Unity Court homes and rental leases" hidden>
+                <div class="property-overview">
+                  <div class="property-stamp"><strong id="property-house-number">01</strong><span>HOUSE</span></div>
+                  <div class="property-overview-copy"><span class="phone-card-label" id="property-home-label">YOUR HOME</span><h3 id="property-home-title">Unity Court</h3><p id="property-home-subtitle">House 01 · west lane</p></div>
+                </div>
+                <div class="economy-wallet"><span>YOUR GAME CREDITS</span><strong id="wallet-balance">1,200 GC</strong></div>
+                <div class="property-status" id="residence-status"><i></i><span>HOUSE 01 · OWNED HOME</span></div>
+                <div class="property-detail"><span id="property-interior-label">INSIDE HOUSE 01</span><strong id="property-interior-description">Living room · full kitchen · bedroom</strong></div>
+                <div class="estate-roster" id="estate-roster" aria-live="polite"></div>
+                <div id="lease-management" aria-live="polite"></div>
+                <div class="property-detail"><span>SHARED SPACE</span><strong>Garden lane · planted roundabout · entry sign</strong></div>
+                <p class="property-help">Rent from a local NPC landlord with in-game credits. Move-in requires the first month’s rent and a refundable deposit; rent comes due every 30 real-world days. Game-credit rent is paid here; a Flutterwave rent option is demo-only. Your lease and credits stay on this device. Press E at your current home’s front door to enter, and use L for the lights.</p>
+                <button class="phone-primary-button" type="button" data-phone-action="show-home-on-map">See Unity Court on the map <span aria-hidden="true">↗</span></button>
+              </section>
+
+              <section class="phone-page" data-phone-page="cafe" aria-label="Civic Cafe menu" hidden>
+                <div class="shop-heading shop-heading--cafe"><span class="shop-avatar" aria-hidden="true">C</span><span><span class="phone-card-label">UNITY COURT · CAFÉ</span><strong>Civic Café</strong><small>Fresh food for the road.</small></span></div>
+                <div class="economy-wallet"><span>YOUR GAME CREDITS</span><strong id="cafe-wallet-balance">1,200 GC</strong></div>
+                <p class="shop-proximity" id="cafe-proximity" aria-live="polite">Visit the café to shop.</p>
+                <div class="shop-items" id="cafe-shop-items"></div>
+                <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="cafe-inventory">Nothing yet</strong></div>
+                <p class="phone-help shop-help">Buy with game credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="market" aria-label="Unity Market groceries" hidden>
+                <div class="shop-heading shop-heading--market"><span class="shop-avatar" aria-hidden="true">M</span><span><span class="phone-card-label">UNITY COURT · GROCERIES</span><strong>Unity Market</strong><small>Everyday goods from local growers.</small></span></div>
+                <div class="economy-wallet"><span>YOUR GAME CREDITS</span><strong id="market-wallet-balance">1,200 GC</strong></div>
+                <p class="shop-proximity" id="market-proximity" aria-live="polite">Visit the market to shop.</p>
+                <div class="shop-items" id="market-shop-items"></div>
+                <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
+                <p class="phone-help shop-help">Buy with game credits or preview a Flutterwave checkout. The payment preview is demo-only and never charges money.</p>
+              </section>
+
+              <section class="phone-page bank-page" data-phone-page="bank" aria-label="In-game bank account and Flutterwave demo" hidden>
+                <div class="bank-account-card">
+                  <div class="bank-account-topline"><span>ABUJA GAME WALLET</span><span class="bank-account-chip">GAME ONLY</span></div>
+                  <span class="bank-account-label">LOCAL GAME ACCOUNT · NOT A REAL BANK ACCOUNT</span>
+                  <strong class="bank-account-id" id="bank-account-id">VW-00000000</strong>
+                  <span class="bank-balance-label">GAME CREDIT BALANCE</span>
+                  <strong class="bank-balance" id="bank-wallet-balance">1,200 GC</strong>
+                  <small>Saved on this device · spend fictional credits in the game</small>
+                </div>
+                <div class="bank-provider-status"><span class="bank-provider-icon" aria-hidden="true">F</span><span><strong>FLUTTERWAVE · DEMO UI</strong><small>Cloudflare Worker not connected</small></span><i>NO CHARGES</i></div>
+                <div class="bank-topup-card">
+                  <div class="bank-section-heading"><strong>Top up game credits</strong><span>ONE-TIME TRANSFER</span></div>
+                  <p>Preview a one-time bank-transfer checkout. Temporary Flutterwave account details appear only after a secure payment backend is connected.</p>
+                  <label class="bank-amount-label" for="bank-topup-amount">TOP-UP AMOUNT <span>NGN</span></label>
+                  <div class="bank-amount-input"><span aria-hidden="true">₦</span><input id="bank-topup-amount" type="number" min="100" max="100000" step="100" value="500" inputmode="numeric" autocomplete="off" aria-describedby="bank-rate-note"></div>
+                  <p class="bank-rate-note" id="bank-rate-note">Illustrative demo only. No live exchange rate, real account or credit top-up is used.</p>
+                  <button class="phone-primary-button bank-topup-button" type="button" data-bank-topup>Preview one-time transfer <span aria-hidden="true">↗</span></button>
+                  <p class="bank-input-feedback" id="bank-input-feedback" aria-live="polite"></p>
+                </div>
+                <div class="bank-checkout-preview" id="bank-checkout-preview" aria-live="polite" hidden>
+                  <div class="bank-preview-header"><span>DEMO CHECKOUT PREVIEW</span><button type="button" data-bank-action="clear-preview" aria-label="Close payment preview">×</button></div>
+                  <strong class="bank-preview-title" id="bank-intent-title">Top-up preview</strong>
+                  <div class="bank-preview-amount" id="bank-intent-amount">₦500</div>
+                  <div class="bank-preview-row"><span>Preview reference</span><strong id="bank-intent-reference">VW-DEMO-000000</strong></div>
+                  <div class="bank-preview-row"><span>One-time transfer account</span><strong id="bank-intent-account">Not generated in demo mode</strong></div>
+                  <p class="bank-preview-warning" id="bank-intent-message">No Flutterwave request was sent. No money was charged and no credits were added.</p>
+                </div>
+                <div class="bank-activity-card">
+                  <div class="bank-section-heading"><strong>Recent account activity</strong><span>LOCAL GAME LEDGER</span></div>
+                  <p class="bank-ledger-empty" id="bank-ledger-empty">No account activity yet. Rent and game-credit purchases will appear here.</p>
+                  <div class="bank-ledger" id="bank-ledger" aria-live="polite"></div>
+                </div>
+                <p class="bank-demo-disclaimer">Demo only. This app does not contact Flutterwave or create real bank-account details. A Cloudflare Worker with server-side secrets and verified payment notifications is required before test or live payments can be enabled.</p>
+              </section>
+
+              <section class="phone-page life-page" data-phone-page="life" aria-label="Resident profile, needs and first-week goals" hidden>
+                <div class="life-profile-card">
+                  <div class="life-resident-avatar" id="life-resident-avatar" aria-hidden="true">R</div>
+                  <div class="life-profile-copy"><span class="phone-card-label">YOUR ABUJA RESIDENT</span><strong id="life-resident-name">New Resident</strong><small id="life-resident-origin">From Abuja · Unity Court</small></div>
+                  <span class="life-rank-chip" id="life-rank-chip">STARTER</span>
+                </div>
+                <div class="life-career-progress"><div><span id="life-rank-label">New starter</span><strong><span id="life-career-xp">0</span> XP</strong></div><progress id="life-career-progress" max="120" value="0" aria-label="Career progress to next rank">0 of 120 career XP</progress></div>
+                <details class="life-edit-details">
+                  <summary>Change your name, hometown or outfit</summary>
+                  <form class="life-profile-form" id="life-profile-form">
+                    <label class="resident-field" for="life-name-edit"><span>RESIDENT NAME</span><input id="life-name-edit" name="name" type="text" maxlength="20" minlength="2" autocomplete="nickname" required></label>
+                    <div class="resident-choice-row">
+                      <label class="resident-field" for="life-origin-edit"><span>FROM</span><select id="life-origin-edit" name="origin"></select></label>
+                      <label class="resident-field" for="life-outfit-edit"><span>OUTFIT</span><select id="life-outfit-edit" name="outfit"></select></label>
+                    </div>
+                    <button class="phone-secondary-button" type="submit">Save resident details</button>
+                  </form>
+                </details>
+                <div class="life-needs-card">
+                  <div class="life-section-heading"><span>HOW YOU’RE DOING</span><span>LOCAL TIME, EASY PACE</span></div>
+                  <div id="life-needs-list" class="life-needs-list" aria-live="polite"></div>
+                  <p class="life-soft-note">Your needs change slowly while you play. Low meters never stop you from exploring.</p>
+                </div>
+                <div class="life-action-grid">
+                  <button class="life-action-button" type="button" data-life-action="rest" id="life-rest-button"><span aria-hidden="true">☾</span><strong>Rest at home</strong><small id="life-rest-hint">Go inside your home first</small></button>
+                  <button class="life-action-button" type="button" data-life-action="message-nia"><span aria-hidden="true">♡</span><strong>Check in with Nia</strong><small>A neighbourly message</small></button>
+                </div>
+                <div class="life-food-card">
+                  <div class="life-section-heading"><span>YOUR BAG · FOOD</span><button type="button" data-phone-app="market">Shop at the market</button></div>
+                  <div id="life-food-inventory" class="life-food-inventory"></div>
+                </div>
+                <div class="life-goals-card">
+                  <div class="life-goals-heading"><div><span class="phone-card-label">A FEW FIRST-DAY IDEAS</span><strong>Find your rhythm</strong></div><span id="life-goal-progress">0 / 9</span></div>
+                  <ul id="life-goal-list" class="life-goal-list"></ul>
+                </div>
+                <p class="life-demo-disclaimer">Abuja Life is a local browser prototype. Your resident and game credits stay on this device; credits have no cash value.</p>
+              </section>
+
+              <section class="phone-page work-page" data-phone-page="work" aria-label="Neighbourhood jobs and work shift" hidden>
+                <div class="work-intro-card"><span class="work-intro-icon" aria-hidden="true">✦</span><div><span class="phone-card-label">NEIGHBOURHOOD JOB BOARD</span><strong>Earn your first game credits</strong><p>Choose a role, walk to the workplace and help a few neighbours on shift.</p></div></div>
+                <div class="work-career-summary" id="work-career-summary"></div>
+                <div class="work-job-list" id="work-job-list"></div>
+                <div class="work-shift-panel" id="work-shift-panel" aria-live="polite"></div>
+                <p class="life-demo-disclaimer">Shift rewards are fictional game credits only. No real payments or wages are involved.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="map" aria-label="Abuja neighbourhood map" hidden>
+                <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
+                <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, community stadium, glow seeds and civic plaza">Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, community stadium, glow seeds and civic plaza.</canvas></div>
+                <div class="phone-map-details">
+                  <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Unity Court North</strong></div>
+                  <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
+                </div>
+                <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-civic"></i>Community hall</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Abuja City Rail</span><span><i class="legend-bus"></i>Bus terminal</span><span><i class="legend-shop"></i>Café &amp; market</span></div>
+                <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
+                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">The map shows the connected street grid and bus route. Gold circles mark rail terminals; orange squares mark bus terminals at all three hubs.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="messages" aria-label="Messages with Nia" hidden>
+                <div class="phone-contact-card"><span class="phone-contact-avatar" aria-hidden="true">N</span><span><strong>Nia</strong><small>Abuja neighbour · nearby</small></span><span class="phone-contact-online"><i></i> HERE</span></div>
+                <div class="phone-chat-thread" id="phone-chat-thread" aria-live="polite">
+                  <div class="phone-chat-day">THIS MORNING</div>
+                  <div class="phone-chat-message phone-chat-message--incoming"><span class="phone-chat-sender">Nia</span><p>The glow seeds have started appearing around the neighbourhood. Send me a quick update when you find one.</p><time>09:42</time></div>
+                </div>
+                <div class="phone-reply-heading">QUICK REPLY</div>
+                <div class="phone-reply-options" id="phone-reply-options">
+                  <button type="button" data-phone-reply="beacon">I’m heading to Unity Circle</button>
+                  <button type="button" data-phone-reply="exploring">I’m still exploring</button>
+                  <button type="button" data-phone-reply="found">I found a glow seed!</button>
+                </div>
+                <form class="phone-message-composer" id="phone-message-form">
+                  <label class="visually-hidden" for="phone-message-input">Write a message to Nia</label>
+                  <input id="phone-message-input" type="text" maxlength="160" autocomplete="off" placeholder="Message Nia…" >
+                  <button type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 5 16 7-16 7 2.5-7L4 5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6.5 12H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+                </form>
+              </section>
+
+              <section class="phone-page" data-phone-page="journal" aria-label="Field journal" hidden>
+                <div class="phone-journal-intro"><span class="phone-journal-icon" aria-hidden="true">✎</span><span><strong>A note to yourself</strong><small>Keep a small memory from the day.</small></span></div>
+                <label class="phone-note-label" for="phone-note">TODAY’S NOTE</label>
+                <textarea id="phone-note" class="phone-note" maxlength="500" placeholder="A quiet corner, a thought, a place to return to…"></textarea>
+                <div class="phone-note-footer"><span id="phone-note-status" aria-live="polite" aria-atomic="true">Saved on this device</span><span><span id="phone-note-count">0</span>/500</span></div>
+                <div class="phone-journal-prompt"><span>✦</span><p>What would you like to remember about this little world?</p></div>
+              </section>
+
+              <section class="phone-page" data-phone-page="quests" aria-label="Quests and progress" hidden>
+                <div class="phone-quest-card">
+                  <div class="phone-quest-kicker"><span>✦</span> OPTIONAL NEIGHBOURHOOD QUEST</div>
+                  <h3>Bring the neighbourhood<br>back to light.</h3>
+                  <p>Find the three glow seeds tucked around the neighbourhood. No timer, no rush.</p>
+                  <div class="phone-quest-progress"><div><span>LIGHTS FOUND</span><strong id="phone-seed-count" aria-live="polite" aria-atomic="true">0 / 3</strong></div><progress id="phone-quest-progress-fill" class="phone-quest-track" max="3" value="0" aria-label="Glow seeds found">0 of 3 glow seeds found</progress></div>
+                </div>
+                <div class="phone-seed-list">
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-1">1</span><span>Glow seed one</span><strong id="phone-seed-status-1">TO FIND</strong></div>
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-2">2</span><span>Glow seed two</span><strong id="phone-seed-status-2">TO FIND</strong></div>
+                  <div class="phone-seed-row"><span class="phone-seed-check" id="phone-seed-check-3">3</span><span>Glow seed three</span><strong id="phone-seed-status-3">TO FIND</strong></div>
+                </div>
+                <button class="phone-primary-button" type="button" data-phone-action="continue">Back to exploring <span aria-hidden="true">↗</span></button>
+              </section>
+            </div>
+            <div class="phone-home-indicator" aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="toast" id="toast" role="status" aria-live="polite">
+        <span class="toast-icon" aria-hidden="true">✦</span>
+        <span class="toast-message" id="toast-message">A little light found its way home.</span>
+      </div>
+
+      <div class="home-interaction" id="home-interaction" role="group" aria-label="Nearby interaction controls" hidden>
+        <div class="home-interaction-copy"><span id="home-interaction-eyebrow">HOUSE 01 · YOUR HOME</span><strong id="home-interaction-message" aria-live="polite" aria-atomic="true">Enter your home at Unity Court</strong></div>
+        <button id="home-interaction-button" type="button" aria-label="Enter your Unity Court home"><kbd>E</kbd><span id="home-interaction-action">ENTER HOME</span></button>
+        <button class="home-lights-button" id="home-lights-button" type="button" aria-label="Turn home lights off" hidden><kbd>L</kbd><span id="home-lights-action">LIGHTS OFF</span></button>
+      </div>
+
+      <aside class="stadium-broadcast" id="stadium-broadcast" aria-label="Abuja Community Stadium live match" hidden>
+        <div class="stadium-broadcast-topline">
+          <span class="stadium-broadcast-live"><i aria-hidden="true"></i> LIVE MATCH</span>
+          <span class="stadium-broadcast-venue">ABUJA COMMUNITY STADIUM · EAST STAND</span>
+          <time id="stadium-broadcast-clock" aria-label="Match clock">00:00</time>
+        </div>
+        <div class="stadium-broadcast-score" aria-live="polite" aria-atomic="true">
+          <span class="broadcast-team broadcast-team--foxes"><i aria-hidden="true">CS</i><span>Capital Stars</span></span>
+          <strong id="stadium-broadcast-scoreline">0 – 0</strong>
+          <span class="broadcast-team broadcast-team--blues"><span>Savannah United</span><i aria-hidden="true">SU</i></span>
+        </div>
+        <div class="stadium-broadcast-footer">
+          <span id="stadium-broadcast-status" role="status" aria-live="polite" aria-atomic="true">The match is underway</span>
+          <button id="stadium-watch-exit" type="button" aria-label="Return to the Abuja Community Stadium"><span>RETURN TO WORLD</span><kbd>E</kbd></button>
+        </div>
+      </aside>
+
+      <div class="touch-controls" id="touch-controls" role="group" aria-label="Touch controls">
+        <div class="joystick" id="joystick" role="group" aria-label="Movement joystick. Drag to move; keyboard movement is also available.">
+          <span class="joystick-ring"></span>
+          <span class="joystick-stick" id="joystick-stick"></span>
+        </div>
+        <button class="jump-button" id="jump-button" type="button" aria-label="Jump"><span id="jump-button-icon">↑</span><small id="jump-button-label">JUMP</small></button>
+        <button class="jump-button accelerate-button" id="accelerate-button" type="button" aria-label="Accelerate" hidden><span aria-hidden="true">↑</span><small>ACCEL</small></button>
+        <div class="touch-label" id="touch-label">MOVE</div>
+      </div>
+
+      <div class="loading-screen" id="loading-screen" role="status" aria-live="polite" aria-atomic="true">
+        <div class="loading-mark"><span>V</span><i></i></div>
+        <div class="loading-title">OPENING ABUJA</div>
+        <div class="loading-subtitle">One small world, coming right up.</div>
+        <div class="loading-detail" hidden></div>
+        <button class="loading-retry-button" id="loading-retry" type="button" hidden>Reload world</button>
+        <div class="loading-line"><span></span></div>
+        <noscript><p class="loading-subtitle">This Abuja neighbourhood needs JavaScript and WebGL 2 graphics. Enable them in your browser, then reload.</p></noscript>
+      </div>
+    </div>
+    <script type="module" id="world-entry" src="/src/main.js"></script>
+    <script id="world-boot">
+(() => {
+  const screen = document.getElementById('loading-screen');
+  if (!screen) return;
+
+  const title = screen.querySelector('.loading-title');
+  const subtitle = screen.querySelector('.loading-subtitle');
+  const line = screen.querySelector('.loading-line');
+  const detail = screen.querySelector('.loading-detail');
+  const retryButton = screen.querySelector('.loading-retry-button');
+  const entryScripts = Array.from(document.querySelectorAll('script[type="module"]'));
+  const canvas = document.getElementById('world-canvas');
+  const STARTUP_TIMEOUT_MS = 20_000;
+  let state = 'loading';
+  let timeoutId;
+
+  function describeCause(cause) {
+    if (!cause) return '';
+    if (typeof cause === 'string') return cause.trim().slice(0, 180);
+    if (typeof cause === 'object') {
+      const message = typeof cause.message === 'string'
+        ? cause.message
+        : typeof cause.statusMessage === 'string'
+          ? cause.statusMessage
+          : '';
+      const name = typeof cause.name === 'string' ? cause.name : '';
+      return `${name && message ? `${name}: ` : ''}${message}`.trim().slice(0, 180);
+    }
+    return String(cause).slice(0, 180);
+  }
+
+  function setCopy(nextTitle, nextSubtitle, cause = '') {
+    if (title) title.textContent = nextTitle;
+    if (subtitle) subtitle.textContent = nextSubtitle;
+    if (detail) {
+      const diagnostic = describeCause(cause);
+      detail.textContent = diagnostic ? `Technical detail: ${diagnostic}` : '';
+      detail.hidden = !diagnostic;
+    }
+  }
+
+  function showFailure(message, cause = '') {
+    if (state === 'ready' || state === 'error') return false;
+    state = 'error';
+    window.clearTimeout(timeoutId);
+    setCopy('ABUJA COULD NOT OPEN', message, cause);
+    if (line) line.hidden = true;
+    if (retryButton) retryButton.hidden = false;
+    screen.classList.remove('is-slow');
+    screen.classList.add('is-error');
+    return true;
+  }
+
+  function showSlowNotice() {
+    if (state !== 'loading') return;
+    state = 'slow';
+    setCopy(
+      'STILL OPENING',
+      'This is taking longer than expected. You can keep waiting or reload the world.',
+    );
+    if (line) line.hidden = true;
+    if (retryButton) retryButton.hidden = false;
+    screen.classList.add('is-slow');
+  }
+
+  function markReady() {
+    if (state === 'ready' || state === 'error') return false;
+    state = 'ready';
+    window.clearTimeout(timeoutId);
+    if (retryButton) retryButton.hidden = true;
+    screen.classList.remove('is-slow', 'is-error');
+    screen.classList.add('is-ready');
+    return true;
+  }
+
+  window.vertualworldBoot = Object.freeze({ ready: markReady, fail: showFailure });
+
+  retryButton?.addEventListener('click', () => window.location.reload());
+
+  const showEntryFailure = (script) => showFailure(
+    'The game code could not be loaded. Check your connection, then reload the page.',
+    script?.src,
+  );
+  for (const script of entryScripts) {
+    script.addEventListener('error', () => showEntryFailure(script));
+  }
+
+  // Resource error events do not bubble, so listen during capture and only act on app modules.
+  document.addEventListener('error', (event) => {
+    if (entryScripts.includes(event.target)) showEntryFailure(event.target);
+  }, true);
+
+  window.addEventListener('error', (event) => {
+    if (state === 'ready' || (!event?.error && !event?.message)) return;
+    const cause = event.error || event.message;
+    console.error('Vertualworld startup error:', cause);
+    showFailure(
+      'A script error interrupted startup. Reload the page; if it happens again, share the technical detail below.',
+      cause,
+    );
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (state === 'ready') return;
+    console.error('Vertualworld startup promise rejected:', event.reason);
+    showFailure(
+      'A startup task failed. Reload the page; if it happens again, share the technical detail below.',
+      event.reason,
+    );
+  });
+
+  canvas?.addEventListener('webglcontextcreationerror', (event) => {
+    showFailure(
+      'This browser or device could not start WebGL 2 graphics. Try an up-to-date browser with hardware acceleration enabled.',
+      event.statusMessage,
+    );
+  });
+
+  canvas?.addEventListener('webglcontextlost', (event) => {
+    if (state === 'ready') return;
+    event.preventDefault?.();
+    showFailure(
+      'The 3D graphics context was lost while opening. Close other graphics-heavy tabs, then reload the world.',
+    );
+  });
+
+  timeoutId = window.setTimeout(showSlowNotice, STARTUP_TIMEOUT_MS);
+})();
+    </script>
+  </body>
+</html>
