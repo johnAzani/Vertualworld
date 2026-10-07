@@ -18,6 +18,7 @@ import {
   ESTATE_HOUSE_COLLISION_MARGIN,
   ESTATE_HOUSE_LAYOUT,
   ESTATE_HOUSE_SIZE,
+  MALL_SHOP_BAY_LAYOUT,
 } from '../src/world-layout.js';
 
 function distanceToPolyline(x, z, points) {
@@ -295,5 +296,15 @@ test('strategic advertising billboards stay clear of every connected road surfac
       }
     }
   }
+});
+
+test('expanded Unity Grand Mall provides a larger footprint and wider storefront bays while staying inside the world boundary', () => {
+  const mall = COMMERCE_VENUE_LAYOUT.find((venue) => venue.id === 'market');
+  assert.ok(mall, 'Unity Mall is present in COMMERCE_VENUE_LAYOUT');
+  assert.ok(mall.width >= 21, 'Unity Mall width is expanded to a grand multi-wing footprint');
+  assert.ok(mall.depth >= 13, 'Unity Mall depth is expanded');
+  assert.equal(MALL_SHOP_BAY_LAYOUT.length, 4, 'all 4 mall shop bays are laid out across the expanded facade');
+  const totalBayWidth = MALL_SHOP_BAY_LAYOUT.reduce((sum, bay) => sum + bay.bayWidth, 0);
+  assert.ok(totalBayWidth >= 17, 'storefront bays are widened across the larger mall facade');
 });
 

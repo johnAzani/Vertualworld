@@ -510,7 +510,7 @@
       <aside class="stadium-broadcast" id="stadium-broadcast" aria-label="Abuja Community Stadium live match" hidden>
         <div class="stadium-broadcast-topline">
           <span class="stadium-broadcast-live"><i aria-hidden="true"></i> LIVE MATCH</span>
-          <span class="stadium-broadcast-venue">ABUJA COMMUNITY STADIUM · EAST STAND</span>
+          <span class="stadium-broadcast-venue" id="stadium-broadcast-venue">ABUJA COMMUNITY STADIUM · EAST STAND</span>
           <time id="stadium-broadcast-clock" aria-label="Match clock">00:00</time>
         </div>
         <div class="stadium-broadcast-score" aria-live="polite" aria-atomic="true">
@@ -519,8 +519,11 @@
           <span class="broadcast-team broadcast-team--blues"><span>Savannah United</span><i aria-hidden="true">SU</i></span>
         </div>
         <div class="stadium-broadcast-footer">
-          <span id="stadium-broadcast-status" role="status" aria-live="polite" aria-atomic="true">The match is underway</span>
-          <button id="stadium-watch-exit" type="button" aria-label="Return to the Abuja Community Stadium"><span>RETURN TO WORLD</span><kbd>E</kbd></button>
+          <span id="stadium-broadcast-status" role="status" aria-live="polite" aria-atomic="true">Seated in the stands · Live match</span>
+          <div class="stadium-broadcast-actions">
+            <button id="stadium-vip-seat" type="button" aria-label="Move to VIP Presidential Lounge seat"><span>VIP SECTION</span></button>
+            <button id="stadium-watch-exit" type="button" aria-label="Stand up and explore the stadium"><span>STAND UP</span><kbd>E</kbd></button>
+          </div>
         </div>
       </aside>
 

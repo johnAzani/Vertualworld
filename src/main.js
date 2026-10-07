@@ -14,7 +14,16 @@ import {
   ESTATE_HOUSE_SIZE,
   MALL_SHOP_BAY_LAYOUT,
 } from './world-layout.js';
-import { createStadium, STADIUM_CONFIG as STADIUM, updateStadiumMatch } from './stadium.js';
+import {
+  createStadium,
+  getNearestStadiumSeat,
+  getStadiumSurfaceHeight,
+  getStadiumWallColliders,
+  isInsideStadiumBowl,
+  STADIUM_CONFIG as STADIUM,
+  STADIUM_SEATING_SPOTS,
+  updateStadiumMatch,
+} from './stadium.js';
 import {
   createTransportNetwork,
   getBusWaitSeconds,
@@ -161,9 +170,11 @@ const homeInteractionAction = document.querySelector('#home-interaction-action')
 const homeInteractionButton = document.querySelector('#home-interaction-button');
 const homeLightsButton = document.querySelector('#home-lights-button');
 const stadiumBroadcast = document.querySelector('#stadium-broadcast');
+const stadiumBroadcastVenue = document.querySelector('#stadium-broadcast-venue');
 const stadiumBroadcastClock = document.querySelector('#stadium-broadcast-clock');
 const stadiumBroadcastScoreline = document.querySelector('#stadium-broadcast-scoreline');
 const stadiumBroadcastStatus = document.querySelector('#stadium-broadcast-status');
+const stadiumVipSeatButton = document.querySelector('#stadium-vip-seat');
 const stadiumWatchExitButton = document.querySelector('#stadium-watch-exit');
 const homeLightsAction = document.querySelector('#home-lights-action');
 const controlsHint = document.querySelector('#controls-hint');
@@ -775,8 +786,9 @@ function groundHeightAt(x, z) {
   if (distanceToPath(x, z) <= TRAIL_HALF_WIDTH) {
     ground = Math.max(ground, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET);
   }
-  if (Math.abs(x - STADIUM.x) <= STADIUM.fieldHalfX && Math.abs(z - STADIUM.z) <= STADIUM.fieldHalfZ) {
-    ground = Math.max(ground, terrainHeight(x, z) + STADIUM.pitchOffset);
+  const stadiumSurface = getStadiumSurfaceHeight(x, z, terrainHeight(STADIUM.x, STADIUM.z), STADIUM);
+  if (stadiumSurface !== null) {
+    ground = Math.max(ground, stadiumSurface);
   }
 
   for (const surface of estateRoadSurfaces) {
@@ -1939,8 +1951,8 @@ function createShoppingMallVenue(venueLayout) {
     x,
     z,
     facing,
-    width = 14.2,
-    depth = 8.6,
+    width = 21.6,
+    depth = 13.6,
     collider = COMMERCE_VENUE_COLLIDER,
     wallColor,
     roofColor,
@@ -1977,28 +1989,31 @@ function createShoppingMallVenue(venueLayout) {
   };
 
   // Broad promenade deck and main multi-wing shopping mall body
-  addBox([width + 1.1, 0.24, depth + 2.1], [0, 0.12, -0.45], plinthMaterial, false, true);
-  addBox([width, 4.35, depth], [0, 2.3, 0.2], wallMaterial);
-  // Second-level central skylight atrium hall
-  addBox([6.4, 2.25, depth - 1.2], [0.8, 5.55, 0.15], upperWallMaterial);
-  addBox([6.8, 0.28, depth - 0.8], [0.8, 6.78, 0.15], roofMaterial);
-  addBox([5.6, 0.72, 0.12], [0.8, 5.65, frontZ + 0.68], glassMaterial, false, false);
-  addBox([width + 0.55, 0.3, depth + 0.45], [0, 4.55, 0.2], roofMaterial);
-  addBox([width - 0.5, 0.24, 1.35], [0, 3.55, frontZ - 0.35], awningMaterial);
+  addBox([width + 1.8, 0.28, depth + 2.6], [0, 0.14, -0.55], plinthMaterial, false, true);
+  addBox([width, 4.75, depth], [0, 2.5, 0.2], wallMaterial);
+  // West & East mezzanine retail wings
+  addBox([width - 2.4, 1.85, depth - 1.8], [0, 5.75, 0.35], upperWallMaterial);
+  addBox([width - 1.9, 0.26, depth - 1.4], [0, 6.75, 0.35], roofMaterial);
+  // Grand central skylight atrium hall
+  addBox([10.4, 2.15, depth - 2.6], [0.9, 7.65, 0.15], upperWallMaterial);
+  addBox([10.9, 0.32, depth - 2.1], [0.9, 8.85, 0.15], roofMaterial);
+  addBox([9.2, 1.05, 0.12], [0.9, 7.65, frontZ + 1.38], glassMaterial, false, false);
+  addBox([width + 0.65, 0.32, depth + 0.55], [0, 4.95, 0.2], roofMaterial);
+  addBox([width - 0.5, 0.26, 1.65], [0, 3.65, frontZ - 0.45], awningMaterial);
 
-  for (const columnX of [-6.3, -3.55, -0.65, 2.75, 6.35]) {
-    addBox([0.28, 3.45, 0.28], [columnX, 1.85, frontZ - 0.85], columnMaterial);
+  for (const columnX of [-9.8, -5.8, -1.8, 2.8, 6.6, 9.8]) {
+    addBox([0.34, 3.55, 0.34], [columnX, 1.9, frontZ - 1.05], columnMaterial);
   }
 
   for (const bay of MALL_SHOP_BAY_LAYOUT) {
-    const windowHeight = Math.min(2.35, bay.bayHeight - 0.65);
-    addBox([bay.bayWidth, windowHeight + 0.22, 0.12], [bay.localX, 1.48, frontZ + 0.16], trimMaterial, false, false);
-    addBox([bay.bayWidth - 0.22, windowHeight, 0.08], [bay.localX, 1.48, frontZ + 0.1], glassMaterial, false, false);
-    addBox([bay.bayWidth + 0.12, 0.16, 0.92], [bay.localX, 0.3, frontZ - 0.18], trimMaterial, false, true);
+    const windowHeight = Math.min(2.45, bay.bayHeight - 0.65);
+    addBox([bay.bayWidth, windowHeight + 0.24, 0.12], [bay.localX, 1.52, frontZ + 0.16], trimMaterial, false, false);
+    addBox([bay.bayWidth - 0.24, windowHeight, 0.08], [bay.localX, 1.52, frontZ + 0.1], glassMaterial, false, false);
+    addBox([bay.bayWidth + 0.16, 0.16, 1.15], [bay.localX, 0.3, frontZ - 0.24], trimMaterial, false, true);
   }
 
-  const mainSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.95), signMaterial);
-  mainSignBoard.position.set(0.8, 6.08, frontZ + 0.58);
+  const mainSignBoard = new THREE.Mesh(new THREE.PlaneGeometry(8.8, 1.32), signMaterial);
+  mainSignBoard.position.set(0.9, 7.95, frontZ + 1.24);
   mainSignBoard.rotation.y = Math.PI;
   group.add(mainSignBoard);
 
@@ -2014,19 +2029,19 @@ function createShoppingMallVenue(venueLayout) {
       map: makeMallBaySignTexture(initialState, accentHex),
     });
     const baySign = new THREE.Mesh(
-      new THREE.PlaneGeometry(Math.max(2.1, bay.bayWidth - 0.15), 0.64),
+      new THREE.PlaneGeometry(Math.max(2.6, bay.bayWidth - 0.15), 0.72),
       baySignMaterial,
     );
-    baySign.position.set(0, 3.06, -0.02);
+    baySign.position.set(0, 3.12, -0.02);
     baySign.rotation.y = Math.PI;
     bayGroup.add(baySign);
 
     const goodsGroup = new THREE.Group();
-    goodsGroup.position.set(0, 0, -0.2);
+    goodsGroup.position.set(0, 0, -0.25);
     bayGroup.add(goodsGroup);
     group.add(bayGroup);
 
-    const worldPos = residenceLocalToWorld({ x, z, facing }, bay.localX, frontZ - 0.95);
+    const worldPos = residenceLocalToWorld({ x, z, facing }, bay.localX, frontZ - 1.1);
     const runtimeEntry = {
       spaceId: bay.spaceId,
       code: bay.code,
@@ -2046,7 +2061,7 @@ function createShoppingMallVenue(venueLayout) {
   group.position.set(x, terrainHeight(x, z), z);
   group.rotation.y = facing;
   scene.add(group);
-  const doorPosition = residenceLocalToWorld({ x, z, facing }, 0, frontZ - 0.95);
+  const doorPosition = residenceLocalToWorld({ x, z, facing }, 0, frontZ - 1.1);
   const venue = {
     id,
     kind: 'mall',
@@ -2057,7 +2072,7 @@ function createShoppingMallVenue(venueLayout) {
     group,
     interactionX: doorPosition.x,
     interactionZ: doorPosition.z,
-    interactionRadius: 9.2,
+    interactionRadius: 13.5,
     shopBays,
   };
   const colliderCenter = residenceLocalToWorld(
@@ -2637,6 +2652,7 @@ addEstateRoad(4.45, 2.5, 23.85, -2.8, false);
 playerCar = createParkedCar(23.85, -2.8, -Math.PI / 2);
 const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
+worldObstacleColliders.push(...getStadiumWallColliders(STADIUM));
 transitNetwork = createTransportNetwork(scene, terrainHeight);
 createCommunityHall();
 createStrategicBillboards();
@@ -3238,6 +3254,7 @@ let isWorldView = false;
 let worldViewRestore = null;
 let worldViewCameraDistance = 0;
 let isWatchingMatch = false;
+let seatedStadiumSeat = null;
 let previousMatchCameraFov = camera.fov;
 let pointerDragging = false;
 let activeCameraPointer = null;
@@ -3316,7 +3333,7 @@ function updateWorldViewProjection() {
 }
 
 function toggleCameraMode() {
-  if (isWatchingMatch || isRidingTransit || isWorldView) return;
+  if (isRidingTransit || isWorldView) return;
   setCameraMode(getNextCameraMode(cameraMode));
   const messages = {
     follow: isDriving ? 'Follow view · the camera stays behind your car as you turn.' : 'Follow camera · stays behind your resident.',
@@ -3402,7 +3419,7 @@ function updateVehicleControlUi() {
   vehicleControlsHint.hidden = !isDriving;
   transitControlsHint.hidden = !isRidingTransit;
   controlsHint.setAttribute('aria-label', isDriving ? 'Driving controls' : isRidingTransit ? 'Rail and bus riding controls' : 'Keyboard controls');
-  viewToggleButton.disabled = isRidingTransit || isWatchingMatch || isWorldView;
+  viewToggleButton.disabled = isRidingTransit || isWorldView;
   jumpButtonLabel.textContent = isDriving ? 'BRAKE' : isRidingTransit ? 'ON BOARD' : 'JUMP';
   jumpButtonIcon.textContent = isDriving ? '■' : '↑';
   jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : isRidingTransit ? 'On the Abuja City Rail tram' : 'Jump');
@@ -3441,13 +3458,17 @@ window.addEventListener('keydown', (event) => {
   }
   if (isPhoneOpen()) return;
   if (isWatchingMatch) {
-    if ((key === 'e' || key === 'escape') && !event.repeat) {
+    if ((key === 'e' || key === 'escape' || key === ' ') && !event.repeat) {
       event.preventDefault();
       exitMatchView();
       return;
     }
-    if (keyToMove.has(key)) event.preventDefault();
-    return;
+    if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      event.preventDefault();
+      exitMatchView();
+      pressedKeys.add(key);
+      return;
+    }
   }
   if (key === 'o' && !event.repeat) {
     event.preventDefault();
@@ -3848,27 +3869,83 @@ function updateStadiumBroadcast() {
   setTextIfChanged(stadiumBroadcastScoreline, `${stadium.score[0]} – ${stadium.score[1]}`);
   const isGoal = stadium.goalFlash > 0;
   stadiumBroadcast.classList.toggle('is-goal', isGoal);
+  const seatLabel = seatedStadiumSeat
+    ? `Seated: ${seatedStadiumSeat.label} (${seatedStadiumSeat.sectionName})`
+    : 'Seated in the stands · Live match';
+  if (stadiumBroadcastVenue) {
+    setTextIfChanged(
+      stadiumBroadcastVenue,
+      seatedStadiumSeat
+        ? `ABUJA COMMUNITY STADIUM · ${seatedStadiumSeat.sectionName.toUpperCase()}`
+        : 'ABUJA COMMUNITY STADIUM · EAST STAND',
+    );
+  }
+  if (stadiumVipSeatButton) {
+    setTextIfChanged(
+      stadiumVipSeatButton,
+      seatedStadiumSeat?.isVip ? 'EAST STAND SEAT' : 'VIP SECTION',
+    );
+  }
   setTextIfChanged(stadiumBroadcastStatus, isGoal
     ? `GOAL! ${stadium.teams[stadium.lastScoringTeam].name}`
-    : 'The match is underway');
+    : seatLabel);
 }
 
-function enterMatchView() {
+function selectStadiumSeatForPlayer({ preferVip = false, seatId = null } = {}) {
+  const baseY = stadium.group.position.y;
+  if (seatId) {
+    const exact = STADIUM_SEATING_SPOTS.find((spot) => spot.id === seatId);
+    if (exact) {
+      return {
+        ...exact,
+        worldX: STADIUM.x + exact.localX,
+        worldY: baseY + exact.localY,
+        worldZ: STADIUM.z + exact.localZ,
+      };
+    }
+  }
+  if (preferVip) {
+    const vipSpots = STADIUM_SEATING_SPOTS.filter((spot) => spot.isVip);
+    let bestVip = vipSpots[0];
+    let bestDist = Infinity;
+    for (const spot of vipSpots) {
+      const d = Math.hypot(player.position.x - (STADIUM.x + spot.localX), player.position.z - (STADIUM.z + spot.localZ));
+      if (d < bestDist) {
+        bestDist = d;
+        bestVip = spot;
+      }
+    }
+    return {
+      ...bestVip,
+      worldX: STADIUM.x + bestVip.localX,
+      worldY: baseY + bestVip.localY,
+      worldZ: STADIUM.z + bestVip.localZ,
+    };
+  }
+  return getNearestStadiumSeat(player.position.x, player.position.z, baseY, STADIUM);
+}
+
+function enterMatchView(options = {}) {
   if (isWorldView) toggleWorldView();
-  if (isWatchingMatch || isDriving || isInsideHome || homeTransitionPending) return;
+  if (isDriving || isInsideHome || homeTransitionPending) return;
+  const targetSeat = selectStadiumSeatForPlayer(options);
+  const wasWatching = isWatchingMatch;
   isWatchingMatch = true;
+  seatedStadiumSeat = targetSeat;
   notifyDailyActivity('watch-match');
   if (life.profile.created && completeLifeGoal(life, 'watch-match')) {
     adjustLifeNeeds(life, { mood: 8, social: 5, energy: -2 });
     persistLife();
     if (isPhoneOpen() && activePhonePage === 'life') renderLifePage();
   }
-  previousMatchCameraFov = camera.fov;
-  camera.fov = 55;
+  if (!wasWatching) {
+    previousMatchCameraFov = camera.fov;
+  }
+  camera.fov = 56;
   camera.updateProjectionMatrix();
   app.classList.add('is-watching-match');
   stadiumBroadcast.hidden = false;
-  viewToggleButton.disabled = true;
+  viewToggleButton.disabled = false;
   pressedKeys.clear();
   resetJoystick();
   resetVehicleTouchInputs();
@@ -3878,32 +3955,54 @@ function enterMatchView() {
   jumpRequested = false;
   jumpBufferTimer = 0;
   isGrounded = true;
-  player.position.y = groundHeightAt(player.position.x, player.position.z);
-  avatarModel.visible = false;
-  playerShadow.visible = false;
+  if (targetSeat) {
+    player.position.set(targetSeat.worldX, targetSeat.worldY, targetSeat.worldZ);
+    player.rotation.y = targetSeat.facingYaw;
+    cameraYaw = targetSeat.facingYaw;
+    cameraPitch = -0.14;
+  } else {
+    player.position.y = groundHeightAt(player.position.x, player.position.z);
+  }
+  avatarModel.visible = !isFirstPerson;
+  playerShadow.visible = !isFirstPerson;
   updateStadiumBroadcast();
   updateLocationAndMap();
+  showToast(
+    targetSeat?.isVip
+      ? `Seated in ${targetSeat.label} (${targetSeat.sectionName}). Press E or walk to stand up and explore.`
+      : `Seated in ${targetSeat?.label || 'the stands'}. Press E, VIP SECTION, or walk to explore the stadium.`,
+    3200,
+  );
   stadiumWatchExitButton.focus({ preventScroll: true });
 }
 
 function exitMatchView() {
   if (!isWatchingMatch) return;
+  const previousSeat = seatedStadiumSeat;
   isWatchingMatch = false;
+  seatedStadiumSeat = null;
   stadiumBroadcast.hidden = true;
   stadiumBroadcast.classList.remove('is-goal');
   app.classList.remove('is-watching-match');
   viewToggleButton.disabled = false;
   camera.fov = previousMatchCameraFov;
   camera.updateProjectionMatrix();
+  avatarModel.position.y = 0;
   avatarModel.visible = !isFirstPerson && !isDriving;
   playerShadow.visible = !isFirstPerson && !isDriving;
+  player.position.y = groundHeightAt(player.position.x, player.position.z);
   pressedKeys.clear();
   resetJoystick();
   resetVehicleTouchInputs();
   velocity.set(0, 0, 0);
   updateLocationAndMap();
   if (!isPhoneOpen()) canvas.focus({ preventScroll: true });
-  showToast('Back in the stands. The match keeps playing.', 2400);
+  showToast(
+    previousSeat
+      ? `Stood up in ${previousSeat.sectionName}. Walk around to explore the stands, VIP lounge, or pitch!`
+      : 'Back in the stands. The match keeps playing.',
+    2600,
+  );
 }
 
 function completeHomeEntry() {
@@ -6086,6 +6185,12 @@ worldViewButton.addEventListener('click', toggleWorldView);
 worldViewReturnButton.addEventListener('click', toggleWorldView);
 homeInteractionButton.addEventListener('click', handleNearbyInteraction);
 homeLightsButton.addEventListener('click', toggleHomeLighting);
+stadiumVipSeatButton?.addEventListener('click', () => {
+  enterMatchView({
+    preferVip: !seatedStadiumSeat?.isVip,
+    seatId: seatedStadiumSeat?.isVip ? 'east-stand-mid-n' : null,
+  });
+});
 stadiumWatchExitButton.addEventListener('click', exitMatchView);
 phoneCloseButton.addEventListener('click', closePhone);
 phoneBackButton.addEventListener('click', () => setPhonePage('home'));
@@ -6735,10 +6840,32 @@ function updateLocationAndMap() {
       ? `Board the ${vehicleName} at ${stop.name}`
       : `Wait for the ${vehicleName} at ${stop.name}`);
   } else if (hasStadiumPrompt) {
-    setTextIfChanged(homeInteractionEyebrow, 'MATCHDAY · ABUJA COMMUNITY STADIUM');
-    setTextIfChanged(homeInteractionMessage, 'Capital Stars vs Savannah United · LIVE');
-    setTextIfChanged(homeInteractionAction, 'WATCH MATCH');
-    setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Watch the live Abuja Community Stadium football match');
+    const nearestSeat = getNearestStadiumSeat(
+      player.position.x,
+      player.position.z,
+      stadium.group.position.y,
+      STADIUM,
+    );
+    setTextIfChanged(
+      homeInteractionEyebrow,
+      nearestSeat
+        ? `ABUJA COMMUNITY STADIUM · ${nearestSeat.sectionName.toUpperCase()}`
+        : 'MATCHDAY · ABUJA COMMUNITY STADIUM',
+    );
+    setTextIfChanged(
+      homeInteractionMessage,
+      nearestSeat
+        ? `Sit in ${nearestSeat.label} · Capital Stars vs Savannah United LIVE`
+        : 'Capital Stars vs Savannah United · LIVE',
+    );
+    setTextIfChanged(homeInteractionAction, nearestSeat?.isVip ? 'SIT IN VIP' : 'SIT IN STANDS');
+    setAttributeIfChanged(
+      homeInteractionButton,
+      'aria-label',
+      nearestSeat?.isVip
+        ? `Sit in ${nearestSeat.label} in the VIP Presidential Lounge`
+        : `Sit in ${nearestSeat?.label || 'the stadium stands'} to watch the live match`,
+    );
   }
   drawMap();
 }
@@ -7270,8 +7397,12 @@ function animate(timestamp) {
     }
   }
   if (isWatchingMatch) {
-    forwardInput = 0;
-    sideInput = 0;
+    if (Math.hypot(forwardInput, sideInput) > 0.15 || jumpRequested) {
+      exitMatchView();
+    } else {
+      forwardInput = 0;
+      sideInput = 0;
+    }
   }
 
   const inputMagnitude = Math.hypot(forwardInput, sideInput);
@@ -7394,24 +7525,44 @@ function animate(timestamp) {
 
   const gait = isMoving ? Math.sin(elapsedWorldTime * (isRunning ? 13.2 : 9.4)) : 0;
   const idleSway = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.35);
-  legPivots[0].rotation.x = gait * (isMoving ? 0.43 : 0);
-  legPivots[1].rotation.x = -gait * (isMoving ? 0.43 : 0);
-  kneePivots[0].rotation.x = isMoving ? Math.max(0, -gait) * 0.3 : 0;
-  kneePivots[1].rotation.x = isMoving ? Math.max(0, gait) * 0.3 : 0;
-  armPivots[0].rotation.x = -gait * (isMoving ? 0.34 : 0) + idleSway * 0.018;
-  armPivots[1].rotation.x = gait * (isMoving ? 0.34 : 0) - idleSway * 0.018;
-  elbowPivots[0].rotation.x = -0.12 + Math.max(0, gait) * (isMoving ? 0.16 : 0);
-  elbowPivots[1].rotation.x = -0.12 + Math.max(0, -gait) * (isMoving ? 0.16 : 0);
-  headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.52) * 0.035;
-  headGroup.rotation.x = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.83) * 0.014) + (isMoving ? -0.018 : 0);
+  if (isWatchingMatch && seatedStadiumSeat) {
+    player.position.set(seatedStadiumSeat.worldX, seatedStadiumSeat.worldY, seatedStadiumSeat.worldZ);
+    player.rotation.y = seatedStadiumSeat.facingYaw;
+    const goalCheer = stadium.goalFlash > 0 ? Math.sin(elapsedWorldTime * 11) * 0.45 + 0.55 : 0;
+    legPivots[0].rotation.x = -1.28;
+    legPivots[1].rotation.x = -1.28;
+    kneePivots[0].rotation.x = 1.24;
+    kneePivots[1].rotation.x = 1.24;
+    armPivots[0].rotation.x = goalCheer > 0 ? -2.1 - goalCheer * 0.35 : -0.42 + idleSway * 0.03;
+    armPivots[1].rotation.x = goalCheer > 0 ? -2.1 + goalCheer * 0.35 : -0.42 - idleSway * 0.03;
+    elbowPivots[0].rotation.x = -0.35;
+    elbowPivots[1].rotation.x = -0.35;
+    headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.7) * 0.08;
+    headGroup.rotation.x = 0.06;
+    avatarModel.position.y = -0.26;
+    backpack.rotation.z = 0;
+    backpack.rotation.x = -0.04;
+    playerShadow.material.opacity = 0.18;
+  } else {
+    legPivots[0].rotation.x = gait * (isMoving ? 0.43 : 0);
+    legPivots[1].rotation.x = -gait * (isMoving ? 0.43 : 0);
+    kneePivots[0].rotation.x = isMoving ? Math.max(0, -gait) * 0.3 : 0;
+    kneePivots[1].rotation.x = isMoving ? Math.max(0, gait) * 0.3 : 0;
+    armPivots[0].rotation.x = -gait * (isMoving ? 0.34 : 0) + idleSway * 0.018;
+    armPivots[1].rotation.x = gait * (isMoving ? 0.34 : 0) - idleSway * 0.018;
+    elbowPivots[0].rotation.x = -0.12 + Math.max(0, gait) * (isMoving ? 0.16 : 0);
+    elbowPivots[1].rotation.x = -0.12 + Math.max(0, -gait) * (isMoving ? 0.16 : 0);
+    headGroup.rotation.y = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.52) * 0.035;
+    headGroup.rotation.x = (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 0.83) * 0.014) + (isMoving ? -0.018 : 0);
+    avatarModel.position.y = (isMoving ? Math.abs(gait) * 0.034 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.7) * 0.012)) + jumpHeight * 0.035;
+    backpack.rotation.z = isMoving ? gait * 0.013 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.2) * 0.008);
+    backpack.rotation.x = isMoving ? Math.abs(gait) * 0.012 : -0.01;
+    playerShadow.material.opacity = 0.24 - Math.min(jumpHeight * 0.025, 0.12);
+  }
   const blinkPhase = elapsedWorldTime % 4.6;
   const blink = !prefersReducedMotion && blinkPhase < 0.18 ? Math.sin((blinkPhase / 0.18) * Math.PI) : 0;
   for (const eye of eyeGroups) eye.scale.y = 1 - blink * 0.86;
   torsoMesh.scale.y = prefersReducedMotion ? 1 : 1 + Math.sin(elapsedWorldTime * 1.7) * 0.004;
-  avatarModel.position.y = (isMoving ? Math.abs(gait) * 0.034 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.7) * 0.012)) + jumpHeight * 0.035;
-  backpack.rotation.z = isMoving ? gait * 0.013 : (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.2) * 0.008);
-  backpack.rotation.x = isMoving ? Math.abs(gait) * 0.012 : -0.01;
-  playerShadow.material.opacity = 0.24 - Math.min(jumpHeight * 0.025, 0.12);
 
   for (const seed of seeds) {
     if (seed.collected) continue;
@@ -7482,22 +7633,44 @@ function animate(timestamp) {
   beaconLight.intensity = prefersReducedMotion ? 3.8 : 3.8 + Math.sin(elapsedWorldTime * 1.25) * 0.5;
 
   if (isWatchingMatch) {
-    const aspectRatio = window.innerWidth / Math.max(window.innerHeight, 1);
-    const portraitView = aspectRatio < 0.82;
-    const cameraDistance = portraitView ? 51 : 25;
-    const cameraHeight = portraitView ? 20.5 : 10.2;
-    const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
-      STADIUM.x + cameraDistance,
-      stadium.group.position.y + cameraHeight,
-      STADIUM.z + 0.6,
-    );
-    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-3.4 * delta));
-    const lookAt = animationScratch.lookAtPosition.set(
-      STADIUM.x + stadium.ball.position.x * 0.14,
-      stadium.group.position.y + 1.15 + (stadium.ball.position.y - STADIUM.pitchOffset) * 0.1,
-      STADIUM.z + stadium.ball.position.z * 0.14,
-    );
-    camera.lookAt(lookAt);
+    if (seatedStadiumSeat) {
+      const seatYaw = seatedStadiumSeat.facingYaw;
+      const desiredCameraPosition = isFirstPerson
+        ? animationScratch.desiredCameraPosition.set(
+            seatedStadiumSeat.worldX - Math.sin(seatYaw) * 0.08,
+            seatedStadiumSeat.worldY + 0.56,
+            seatedStadiumSeat.worldZ - Math.cos(seatYaw) * 0.08,
+          )
+        : animationScratch.desiredCameraPosition.set(
+            seatedStadiumSeat.worldX + Math.sin(seatYaw) * 2.35,
+            seatedStadiumSeat.worldY + 1.42,
+            seatedStadiumSeat.worldZ + Math.cos(seatYaw) * 2.35,
+          );
+      camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-5.2 * delta));
+      const lookAt = animationScratch.lookAtPosition.set(
+        STADIUM.x + stadium.ball.position.x * 0.25,
+        stadium.group.position.y + 0.85 + (stadium.ball.position.y - STADIUM.pitchOffset) * 0.12,
+        STADIUM.z + stadium.ball.position.z * 0.25,
+      );
+      camera.lookAt(lookAt);
+    } else {
+      const aspectRatio = window.innerWidth / Math.max(window.innerHeight, 1);
+      const portraitView = aspectRatio < 0.82;
+      const cameraDistance = portraitView ? 51 : 25;
+      const cameraHeight = portraitView ? 20.5 : 10.2;
+      const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
+        STADIUM.x + cameraDistance,
+        stadium.group.position.y + cameraHeight,
+        STADIUM.z + 0.6,
+      );
+      camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-3.4 * delta));
+      const lookAt = animationScratch.lookAtPosition.set(
+        STADIUM.x + stadium.ball.position.x * 0.14,
+        stadium.group.position.y + 1.15 + (stadium.ball.position.y - STADIUM.pitchOffset) * 0.1,
+        STADIUM.z + stadium.ball.position.z * 0.14,
+      );
+      camera.lookAt(lookAt);
+    }
     updateStadiumBroadcast();
   } else if (isWorldView) {
     const angle = WORLD_VIEW_ANGLE * Math.PI / 180;

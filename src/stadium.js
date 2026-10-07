@@ -10,11 +10,259 @@ export const STADIUM_CONFIG = Object.freeze({
   goalHeight: 2.6,
   standHalfX: 18,
   standHalfZ: 19,
-  plateauHalfX: 19.5,
-  plateauHalfZ: 20.5,
+  plateauHalfX: 27.5,
+  plateauHalfZ: 21.5,
   terrainBlend: 3.5,
   pitchOffset: 0.065,
+  gateHalfWidth: 2.35,
+  parkingCenterX: 23.0,
+  parkingCenterZ: -10.3,
+  parkingHalfX: 3.8,
+  parkingHalfZ: 6.1,
 });
+
+export const STADIUM_PARKING_BAYS = Object.freeze([
+  Object.freeze({ id: 'vip-bay-1', label: 'VIP Bay 01', localX: 21.3, localZ: -6.1, isVip: true, occupied: true, color: 0x263849 }),
+  Object.freeze({ id: 'vip-bay-2', label: 'VIP Bay 02', localX: 21.3, localZ: -8.6, isVip: true, occupied: false, color: null }),
+  Object.freeze({ id: 'bay-3', label: 'Matchday Bay 03', localX: 21.3, localZ: -11.1, isVip: false, occupied: true, color: 0xa64b38 }),
+  Object.freeze({ id: 'bay-4', label: 'Matchday Bay 04', localX: 24.8, localZ: -6.1, isVip: false, occupied: false, color: null }),
+  Object.freeze({ id: 'bay-5', label: 'Matchday Bay 05', localX: 24.8, localZ: -8.6, isVip: false, occupied: true, color: 0x3b6e58 }),
+  Object.freeze({ id: 'bay-6', label: 'Matchday Bay 06', localX: 24.8, localZ: -11.1, isVip: false, occupied: false, color: null }),
+]);
+
+export const STADIUM_SEATING_SPOTS = Object.freeze([
+  Object.freeze({
+    id: 'vip-north-1',
+    sectionName: 'VIP Presidential Lounge',
+    label: 'VIP Box Seat A1',
+    localX: -16.1,
+    localZ: -5.4,
+    localY: 2.22,
+    facingYaw: -Math.PI / 2,
+    isVip: true,
+  }),
+  Object.freeze({
+    id: 'vip-north-2',
+    sectionName: 'VIP Presidential Lounge',
+    label: 'VIP Box Seat A2',
+    localX: -16.1,
+    localZ: -3.6,
+    localY: 2.22,
+    facingYaw: -Math.PI / 2,
+    isVip: true,
+  }),
+  Object.freeze({
+    id: 'vip-south-1',
+    sectionName: 'VIP Presidential Lounge',
+    label: 'VIP Box Seat B1',
+    localX: -16.1,
+    localZ: 3.6,
+    localY: 2.22,
+    facingYaw: -Math.PI / 2,
+    isVip: true,
+  }),
+  Object.freeze({
+    id: 'vip-south-2',
+    sectionName: 'VIP Presidential Lounge',
+    label: 'VIP Box Seat B2',
+    localX: -16.1,
+    localZ: 5.4,
+    localY: 2.22,
+    facingYaw: -Math.PI / 2,
+    isVip: true,
+  }),
+  Object.freeze({
+    id: 'east-stand-north',
+    sectionName: 'East Stand',
+    label: 'East Stand Row 3 · North',
+    localX: 15.2,
+    localZ: -6.25,
+    localY: 1.12,
+    facingYaw: Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'east-stand-mid-n',
+    sectionName: 'East Stand',
+    label: 'East Stand Row 2 · Midfield',
+    localX: 14.2,
+    localZ: -3.75,
+    localY: 0.76,
+    facingYaw: Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'east-stand-mid-s',
+    sectionName: 'East Stand',
+    label: 'East Stand Row 2 · South',
+    localX: 14.2,
+    localZ: 3.75,
+    localY: 0.76,
+    facingYaw: Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'east-stand-south',
+    sectionName: 'East Stand',
+    label: 'East Stand Row 4 · South',
+    localX: 16.3,
+    localZ: 7.5,
+    localY: 1.48,
+    facingYaw: Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'west-stand-lower-n',
+    sectionName: 'West Stand Lower',
+    label: 'West Stand Row 2 · North',
+    localX: -14.2,
+    localZ: -6.25,
+    localY: 0.76,
+    facingYaw: -Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'west-stand-lower-s',
+    sectionName: 'West Stand Lower',
+    label: 'West Stand Row 2 · South',
+    localX: -14.2,
+    localZ: 6.25,
+    localY: 0.76,
+    facingYaw: -Math.PI / 2,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'north-stand-center',
+    sectionName: 'North Stand',
+    label: 'North Stand Goal End',
+    localX: 0,
+    localZ: -17.2,
+    localY: 1.08,
+    facingYaw: Math.PI,
+    isVip: false,
+  }),
+  Object.freeze({
+    id: 'south-stand-center',
+    sectionName: 'South Stand',
+    label: 'South Stand Goal End',
+    localX: 0,
+    localZ: 17.2,
+    localY: 1.08,
+    facingYaw: 0,
+    isVip: false,
+  }),
+]);
+
+export function getStadiumWallColliders(config = STADIUM_CONFIG) {
+  const cx = config.x;
+  const cz = config.z;
+  const wallX = config.standHalfX + 0.38;
+  const wallZ = config.standHalfZ + 0.38;
+  const wingCenterZ = 10.85;
+  const wingHalfZ = 8.55;
+  const colliders = [
+    // North enclosed stadium perimeter wall
+    { id: 'stadium-wall-north', x: cx, z: cz - wallZ, yaw: 0, halfX: wallX, halfZ: 0.58, height: 5.2 },
+    // South enclosed stadium perimeter wall
+    { id: 'stadium-wall-south', x: cx, z: cz + wallZ, yaw: 0, halfX: wallX, halfZ: 0.58, height: 5.2 },
+    // East stadium perimeter walls (framing the East Main Gate at localZ in [-2.3, +2.3])
+    { id: 'stadium-wall-east-n', x: cx + wallX, z: cz - wingCenterZ, yaw: 0, halfX: 0.58, halfZ: wingHalfZ, height: 5.2 },
+    { id: 'stadium-wall-east-s', x: cx + wallX, z: cz + wingCenterZ, yaw: 0, halfX: 0.58, halfZ: wingHalfZ, height: 5.2 },
+    // West stadium perimeter walls (framing the West VIP & Transit Gate at localZ in [-2.3, +2.3])
+    { id: 'stadium-wall-west-n', x: cx - wallX, z: cz - wingCenterZ, yaw: 0, halfX: 0.58, halfZ: wingHalfZ, height: 5.2 },
+    { id: 'stadium-wall-west-s', x: cx - wallX, z: cz + wingCenterZ, yaw: 0, halfX: 0.58, halfZ: wingHalfZ, height: 5.2 },
+  ];
+
+  for (const bay of STADIUM_PARKING_BAYS) {
+    if (!bay.occupied) continue;
+    colliders.push({
+      id: `stadium-parked-car-${bay.id}`,
+      x: cx + bay.localX,
+      z: cz + bay.localZ,
+      yaw: Math.PI / 2,
+      halfX: 1.45,
+      halfZ: 0.85,
+      height: 1.65,
+    });
+  }
+
+  return colliders;
+}
+
+export function isInsideStadiumBowl(x, z, config = STADIUM_CONFIG) {
+  const localX = x - config.x;
+  const localZ = z - config.z;
+  return Math.abs(localX) <= config.standHalfX + 0.2 && Math.abs(localZ) <= config.standHalfZ + 0.2;
+}
+
+export function getStadiumSurfaceHeight(x, z, baseY = STADIUM_CONFIG.level, config = STADIUM_CONFIG) {
+  const localX = x - config.x;
+  const localZ = z - config.z;
+
+  // Parking lot surface east of the stadium
+  if (
+    Math.abs(localX - config.parkingCenterX) <= config.parkingHalfX + 0.4
+    && Math.abs(localZ - config.parkingCenterZ) <= config.parkingHalfZ + 0.4
+  ) {
+    return baseY + 0.05;
+  }
+
+  if (Math.abs(localX) > config.standHalfX + 0.6 || Math.abs(localZ) > config.standHalfZ + 0.6) {
+    return null;
+  }
+
+  // East & West Entry Gate Concourse Tunnels
+  if (Math.abs(localZ) <= 2.35 && Math.abs(localX) >= config.fieldHalfX) {
+    return baseY + config.pitchOffset;
+  }
+
+  // Pitch and inner running track
+  if (Math.abs(localX) <= config.fieldHalfX + 1.15 && Math.abs(localZ) <= config.fieldHalfZ + 1.05) {
+    return baseY + config.pitchOffset;
+  }
+
+  // West Stand VIP Presidential Lounge upper deck
+  if (localX <= -(config.fieldHalfX + 3.0) && localX >= -17.95 && Math.abs(localZ) >= 2.35 && Math.abs(localZ) <= 8.65) {
+    return baseY + 2.18;
+  }
+
+  // East & West Stand stepped seating tiers
+  if (Math.abs(localX) > config.fieldHalfX + 0.95 && Math.abs(localX) <= 17.95 && Math.abs(localZ) <= 16.9) {
+    const offsetFromField = Math.abs(localX) - (config.fieldHalfX + 1.0);
+    const row = Math.max(0, Math.min(4, Math.floor(offsetFromField / 1.08)));
+    return baseY + 0.38 + row * 0.36;
+  }
+
+  // North & South Stand stepped seating tiers
+  if (Math.abs(localZ) > config.fieldHalfZ + 0.85 && Math.abs(localZ) <= 18.85 && Math.abs(localX) <= 13.5) {
+    const offsetFromField = Math.abs(localZ) - (config.fieldHalfZ + 0.9);
+    const row = Math.max(0, Math.min(4, Math.floor(offsetFromField / 0.72)));
+    return baseY + 0.37 + row * 0.34;
+  }
+
+  return baseY + config.pitchOffset;
+}
+
+export function getNearestStadiumSeat(x, z, baseY = STADIUM_CONFIG.level, config = STADIUM_CONFIG) {
+  let bestSeat = null;
+  let bestDistance = Infinity;
+  for (const spot of STADIUM_SEATING_SPOTS) {
+    const worldX = config.x + spot.localX;
+    const worldZ = config.z + spot.localZ;
+    const distance = Math.hypot(x - worldX, z - worldZ);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestSeat = {
+        ...spot,
+        worldX,
+        worldY: baseY + spot.localY,
+        worldZ,
+        distance,
+      };
+    }
+  }
+  return bestSeat;
+}
 
 const TEAM_NAMES = ['CAPITAL STARS', 'SAVANNAH UNITED'];
 const TEAM_COLORS = [0xe87955, 0x477bc0];
@@ -54,11 +302,38 @@ function addBox(parent, width, height, depth, material, x, y, z, castShadow = tr
   return mesh;
 }
 
+function createCanvas2D(width, height) {
+  if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return { canvas, context: canvas.getContext('2d') };
+  }
+  const noop = () => {};
+  const context = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    textAlign: 'center',
+    textBaseline: 'middle',
+    font: '',
+    fillRect: noop,
+    strokeRect: noop,
+    clearRect: noop,
+    beginPath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    closePath: noop,
+    fill: noop,
+    stroke: noop,
+    fillText: noop,
+  };
+  const canvas = { width, height, getContext: () => context };
+  return { canvas, context };
+}
+
 function makeFootballTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 384;
-  canvas.height = 192;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(384, 192);
   context.fillStyle = '#f4f3e8';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#252e2d';
@@ -85,10 +360,7 @@ function makeFootballTexture() {
 }
 
 function makeBoardTexture(isScoreboard = false) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = isScoreboard ? 256 : 192;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(768, isScoreboard ? 256 : 192);
   context.fillStyle = isScoreboard ? '#173832' : '#254b3e';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.strokeStyle = '#d9c48c';
@@ -125,10 +397,7 @@ function makeBoardTexture(isScoreboard = false) {
 }
 
 function makeMatchdaySignTexture(title, subtitle, backgroundColor, accentColor) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 128;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(1024, 128);
   context.fillStyle = backgroundColor;
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = accentColor;
@@ -152,10 +421,7 @@ function makeMatchdaySignTexture(title, subtitle, backgroundColor, accentColor) 
 }
 
 function makeTeamDugoutSignTexture(title, accentColor) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 60;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(1024, 60);
   context.fillStyle = '#17382f';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = accentColor;
@@ -588,7 +854,8 @@ function addStandSeats(group, config, random) {
       const tierY = 0.2 + row * 0.36;
       for (let seatIndex = 0; seatIndex <= 24; seatIndex += 1) {
         const z = -15 + seatIndex * 1.25;
-        if (side === 1 && Math.abs(z) < 1.8) continue;
+        if (Math.abs(z) < 2.2) continue;
+        if (side === -1 && row >= 3 && Math.abs(z) < 8.6) continue;
         seats.push({ x, z, y: tierY + 0.21, rotation: side * Math.PI / 2, backX: x + side * 0.24, backZ: z, side, row, end: false });
       }
     }
@@ -817,6 +1084,161 @@ function createTeams(group, config) {
   return teams;
 }
 
+function addVipSection(group, config, trimMaterial, concreteDark) {
+  const vipGroup = new THREE.Group();
+  vipGroup.name = 'Stadium VIP Section';
+  const carpetMaterial = new THREE.MeshStandardMaterial({ color: 0x8f2934, roughness: 0.78 });
+  const goldMaterial = new THREE.MeshStandardMaterial({ color: 0xe3be66, roughness: 0.38, metalness: 0.35 });
+  const chairMaterial = new THREE.MeshStandardMaterial({ color: 0x6b1d28, roughness: 0.56 });
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd8ece8,
+    roughness: 0.16,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.38,
+    side: THREE.DoubleSide,
+  });
+
+  // North and South VIP terrace wings on the West Stand upper deck (framing the West Gate aisle)
+  for (const wingSign of [-1, 1]) {
+    const centerZ = wingSign * 5.45;
+    addBox(vipGroup, 3.3, 0.24, 5.9, concreteDark, -16.05, 2.04, centerZ);
+    addBox(vipGroup, 3.1, 0.06, 5.65, carpetMaterial, -16.05, 2.18, centerZ, false, true);
+    addBox(vipGroup, 0.08, 0.68, 5.75, glassMaterial, -14.48, 2.52, centerZ, false, false);
+    addBox(vipGroup, 0.12, 0.08, 5.8, goldMaterial, -14.48, 2.88, centerZ, false, false);
+    // Hospitality table
+    addBox(vipGroup, 0.58, 0.55, 1.5, goldMaterial, -15.25, 2.46, centerZ, true, true);
+  }
+
+  // Luxury VIP armchairs matching STADIUM_SEATING_SPOTS (isVip: true)
+  for (const spot of STADIUM_SEATING_SPOTS) {
+    if (!spot.isVip) continue;
+    const chair = new THREE.Group();
+    chair.position.set(spot.localX, 2.21, spot.localZ);
+    addBox(chair, 0.68, 0.24, 0.74, chairMaterial, 0, 0.12, 0);
+    addBox(chair, 0.2, 0.58, 0.74, chairMaterial, -0.26, 0.42, 0);
+    addBox(chair, 0.68, 0.14, 0.1, goldMaterial, 0.04, 0.32, -0.35);
+    addBox(chair, 0.68, 0.14, 0.1, goldMaterial, 0.04, 0.32, 0.35);
+    vipGroup.add(chair);
+  }
+
+  const vipSignTexture = makeMatchdaySignTexture(
+    'VIP PRESIDENTIAL LOUNGE',
+    'WEST STAND HOSPITALITY  ·  PRESS E TO SIT IN VIP',
+    '#4a1620',
+    '#e5c165',
+  );
+  const vipSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(6.8, 0.85),
+    new THREE.MeshBasicMaterial({ map: vipSignTexture, side: THREE.DoubleSide, toneMapped: false }),
+  );
+  vipSign.position.set(-14.35, 3.52, 0);
+  vipSign.rotation.y = Math.PI / 2;
+  vipGroup.add(vipSign);
+  addBox(vipGroup, 0.18, 0.96, 7.0, trimMaterial, -14.42, 3.52, 0, false, false);
+
+  group.add(vipGroup);
+  return vipGroup;
+}
+
+function addStadiumParkingLot(group, config, concreteDark, trimMaterial) {
+  const parkingGroup = new THREE.Group();
+  parkingGroup.name = 'Stadium Parking Lot';
+  const asphaltMaterial = new THREE.MeshStandardMaterial({ color: 0x454d4a, roughness: 0.94 });
+  const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xf4f0de });
+  const vipLineMaterial = new THREE.MeshBasicMaterial({ color: 0xe6c365 });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0xa9ccd4, roughness: 0.22, metalness: 0.15 });
+  const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x222726, roughness: 0.85 });
+
+  const { parkingCenterX, parkingCenterZ, parkingHalfX, parkingHalfZ } = config;
+  addBox(
+    parkingGroup,
+    parkingHalfX * 2,
+    0.08,
+    parkingHalfZ * 2,
+    asphaltMaterial,
+    parkingCenterX,
+    0.02,
+    parkingCenterZ,
+    false,
+    true,
+  );
+  addBox(
+    parkingGroup,
+    parkingHalfX * 2 + 0.35,
+    0.14,
+    0.22,
+    trimMaterial,
+    parkingCenterX,
+    0.07,
+    parkingCenterZ - parkingHalfZ,
+    false,
+    true,
+  );
+  addBox(
+    parkingGroup,
+    parkingHalfX * 2 + 0.35,
+    0.14,
+    0.22,
+    trimMaterial,
+    parkingCenterX,
+    0.07,
+    parkingCenterZ + parkingHalfZ,
+    false,
+    true,
+  );
+
+  for (const bay of STADIUM_PARKING_BAYS) {
+    const paint = bay.isVip ? vipLineMaterial : lineMaterial;
+    addBox(parkingGroup, 2.75, 0.02, 0.09, paint, bay.localX, 0.068, bay.localZ - 1.05, false, false);
+    addBox(parkingGroup, 2.75, 0.02, 0.09, paint, bay.localX, 0.068, bay.localZ + 1.05, false, false);
+    addBox(
+      parkingGroup,
+      0.09,
+      0.02,
+      2.1,
+      paint,
+      bay.localX + (bay.localX < parkingCenterX ? -1.35 : 1.35),
+      0.068,
+      bay.localZ,
+      false,
+      false,
+    );
+
+    if (bay.occupied && bay.color) {
+      const car = new THREE.Group();
+      car.position.set(bay.localX, 0.06, bay.localZ);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: bay.color, roughness: 0.48, metalness: 0.18 });
+      addBox(car, 2.45, 0.56, 1.32, bodyMat, 0, 0.42, 0);
+      addBox(car, 1.38, 0.46, 1.16, bodyMat, -0.1, 0.88, 0);
+      addBox(car, 1.44, 0.38, 1.18, glassMaterial, -0.1, 0.88, 0, false, false);
+      for (const wx of [-0.78, 0.78]) {
+        for (const wz of [-0.62, 0.62]) {
+          addBox(car, 0.42, 0.42, 0.18, wheelMaterial, wx, 0.22, wz);
+        }
+      }
+      parkingGroup.add(car);
+    }
+  }
+
+  const parkingSignTexture = makeMatchdaySignTexture(
+    'STADIUM PARKING  ·  VIP & GENERAL',
+    '6 BAYS  ·  2 VIP BAYS BY EAST MAIN GATE',
+    '#1f3d34',
+    '#e4c267',
+  );
+  addBox(parkingGroup, 0.22, 2.2, 0.22, concreteDark, parkingCenterX, 1.1, parkingCenterZ + parkingHalfZ + 0.35);
+  const signMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.2, 0.62),
+    new THREE.MeshBasicMaterial({ map: parkingSignTexture, side: THREE.DoubleSide, toneMapped: false }),
+  );
+  signMesh.position.set(parkingCenterX, 2.15, parkingCenterZ + parkingHalfZ + 0.35);
+  parkingGroup.add(signMesh);
+
+  group.add(parkingGroup);
+  return parkingGroup;
+}
+
 export function createStadium(terrainHeight) {
   const config = STADIUM_CONFIG;
   const baseY = terrainHeight(config.x, config.z);
@@ -827,9 +1249,10 @@ export function createStadium(terrainHeight) {
   const random = makeRandom(0x72a91c);
   const concrete = new THREE.MeshStandardMaterial({ color: 0x9ca698, roughness: 0.96, flatShading: true });
   const concreteDark = new THREE.MeshStandardMaterial({ color: 0x718078, roughness: 0.95, flatShading: true });
+  const exteriorWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.88 });
   const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x3d6658, roughness: 0.82, metalness: 0.08 });
   const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xd6c48f, roughness: 0.68, metalness: 0.12 });
-  const fieldBase = addBox(group, 38, 0.18, 40, concrete, 0, -0.09, 0);
+  const fieldBase = addBox(group, 38.6, 0.18, 40.6, concrete, 0, -0.09, 0);
   fieldBase.receiveShadow = true;
 
   const runningTrack = addBox(group, config.fieldHalfX * 2 + 2.8, 0.045, config.fieldHalfZ * 2 + 2.8, new THREE.MeshStandardMaterial({ color: 0xb27d61, roughness: 0.94 }), 0, 0.022, 0, false, true);
@@ -852,33 +1275,53 @@ export function createStadium(terrainHeight) {
     for (let row = 0; row < seatRows; row += 1) {
       const x = side * (config.fieldHalfX + 1.55 + row * 1.08);
       const y = 0.2 + row * 0.36;
-      addBox(group, 1.12, 0.36, 33.5, tierMaterials[row % 2], x, y, 0);
-      if (row === 0) addBox(group, 0.12, 0.56, 33.5, concreteDark, x - side * 0.54, y + 0.33, 0, true, false);
+      // Split East and West stands around z = 0 so the East Main Gate & West VIP Gate have walkable entry tunnels
+      for (const wingSign of [-1, 1]) {
+        const wingZ = wingSign * 9.55;
+        addBox(group, 1.12, 0.36 + row * 0.34, 14.6, tierMaterials[row % 2], x, y / 2 + 0.1, wingZ);
+        if (row === 0) {
+          addBox(group, 0.12, 0.56, 14.6, concreteDark, x - side * 0.54, y + 0.33, wingZ, true, false);
+        }
+      }
     }
   }
   for (const side of [-1, 1]) {
     for (let row = 0; row < seatRows; row += 1) {
       const z = side * (config.fieldHalfZ + 1.3 + row * 0.72);
       const y = 0.2 + row * 0.34;
-      addBox(group, 26, 0.34, 0.82, tierMaterials[row % 2], 0, y, z);
+      addBox(group, 27.6, 0.34 + row * 0.32, 0.82, tierMaterials[row % 2], 0, y / 2 + 0.1, z);
     }
   }
   const crowd = addStandSeats(group, config, random);
+  const vipSection = addVipSection(group, config, trimMaterial, concreteDark);
+  const parkingLot = addStadiumParkingLot(group, config, concreteDark, trimMaterial);
 
+  // Enclosed 4-stand stadium perimeter facade walls (with East Main Gate & West VIP Gate openings)
+  addBox(group, 37.4, 3.85, 0.72, exteriorWallMaterial, 0, 1.92, -19.35);
+  addBox(group, 37.4, 3.85, 0.72, exteriorWallMaterial, 0, 1.92, 19.35);
   for (const side of [-1, 1]) {
-    addBox(group, 7.0, 0.34, 35.5, roofMaterial, side * 15.7, 4.15, 0);
-    addBox(group, 7.0, 0.14, 35.8, trimMaterial, side * 15.7, 3.92, 0);
-    const supportPositions = side > 0 ? [-15.5, -5, 5, 15.5] : [-15.5, 0, 15.5];
+    for (const wingSign of [-1, 1]) {
+      addBox(group, 0.72, 3.85, 16.9, exteriorWallMaterial, side * 18.35, 1.92, wingSign * 10.9);
+    }
+  }
+
+  // Full 4-side standard stadium roof canopy bowl
+  for (const side of [-1, 1]) {
+    addBox(group, 7.0, 0.34, 38.8, roofMaterial, side * 15.7, 4.15, 0);
+    addBox(group, 7.0, 0.14, 39.0, trimMaterial, side * 15.7, 3.92, 0);
+    const supportPositions = [-15.5, -5, 5, 15.5];
     for (const z of supportPositions) {
-      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.7, 8), concreteDark);
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 3.9, 8), concreteDark);
       column.position.set(side * 18.05, 2.05, z);
       column.castShadow = true;
       group.add(column);
     }
-    addBox(group, 0.22, 0.5, 33.5, side < 0 ? new THREE.MeshStandardMaterial({ color: TEAM_COLORS[0], roughness: 0.82 }) : new THREE.MeshStandardMaterial({ color: TEAM_COLORS[1], roughness: 0.82 }), side * 17.45, 3.55, 0, false, false);
+    addBox(group, 0.22, 0.5, 37.5, side < 0 ? new THREE.MeshStandardMaterial({ color: TEAM_COLORS[0], roughness: 0.82 }) : new THREE.MeshStandardMaterial({ color: TEAM_COLORS[1], roughness: 0.82 }), side * 17.45, 3.55, 0, false, false);
   }
-  addBox(group, 34, 0.36, 0.75, roofMaterial, 0, 3.55, -18.15);
-  addBox(group, 34, 0.36, 0.75, roofMaterial, 0, 3.55, 18.15);
+  for (const endSign of [-1, 1]) {
+    addBox(group, 37.4, 0.34, 5.4, roofMaterial, 0, 4.15, endSign * 17.0);
+    addBox(group, 37.6, 0.14, 5.5, trimMaterial, 0, 3.92, endSign * 17.0);
+  }
 
   const postMaterial = new THREE.MeshStandardMaterial({ color: 0xf0eee2, roughness: 0.48, metalness: 0.08 });
   const netMaterial = new THREE.LineBasicMaterial({ color: 0xf2f0e6, transparent: true, opacity: 0.52 });
@@ -898,11 +1341,13 @@ export function createStadium(terrainHeight) {
   boardScreen.rotation.y = Math.PI / 2;
   group.add(boardScreen);
 
-  for (const side of [-1, 1]) {
-    const column = addBox(group, 0.55, 3.1, 0.55, concreteDark, config.standHalfX + 0.2, 1.55, side * 2.3);
-    column.castShadow = true;
+  for (const gateSide of [-1, 1]) {
+    for (const side of [-1, 1]) {
+      const column = addBox(group, 0.55, 3.1, 0.55, concreteDark, gateSide * (config.standHalfX + 0.2), 1.55, side * 2.3);
+      column.castShadow = true;
+    }
+    addBox(group, 0.55, 0.28, 5.15, trimMaterial, gateSide * (config.standHalfX + 0.2), 3.12, 0);
   }
-  addBox(group, 0.55, 0.28, 5.15, trimMaterial, config.standHalfX + 0.2, 3.12, 0);
   const entranceBoard = makeBoardTexture(false);
   const entranceSign = new THREE.Mesh(
     new THREE.PlaneGeometry(4.8, 1.2),
@@ -911,6 +1356,20 @@ export function createStadium(terrainHeight) {
   entranceSign.position.set(config.standHalfX + 0.48, 3.65, 0);
   entranceSign.rotation.y = Math.PI / 2;
   group.add(entranceSign);
+
+  const vipGateSignTexture = makeMatchdaySignTexture(
+    'WEST VIP & TRANSIT GATE',
+    'VIP PRESIDENTIAL LOUNGE  ·  STANDS ACCESS',
+    '#2a1b24',
+    '#e4c267',
+  );
+  const vipGateSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.8, 1.05),
+    new THREE.MeshBasicMaterial({ map: vipGateSignTexture, side: THREE.DoubleSide, toneMapped: false }),
+  );
+  vipGateSign.position.set(-config.standHalfX - 0.48, 3.55, 0);
+  vipGateSign.rotation.y = -Math.PI / 2;
+  group.add(vipGateSign);
 
   const ballTexture = makeFootballTexture();
   const ball = new THREE.Mesh(
@@ -934,6 +1393,10 @@ export function createStadium(terrainHeight) {
     config,
     teams,
     crowd,
+    vipSection,
+    parkingLot,
+    seatingSpots: STADIUM_SEATING_SPOTS,
+    parkingBays: STADIUM_PARKING_BAYS,
     floodlights: floodlightRig.lights,
     floodlightMaterial: floodlightRig.material,
     pitchsideMaterials: pitchside.materials,
