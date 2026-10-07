@@ -91,6 +91,23 @@ import {
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
 } from './follow-camera.js';
+import {
+  GOVERNOR_POLICIES,
+  PUBLIC_PROJECTS,
+  TAX_RATES,
+  canvassNeighboursForCampaign,
+  enactGovernorPolicy,
+  fundPublicProject,
+  getActiveGovernorPolicy,
+  getActiveTaxRate,
+  getNextCivicPetition,
+  holdCivicTownHall,
+  loadGovernment,
+  runGovernorElection,
+  saveGovernment,
+  setGovernorTaxRate,
+  updateCampaignPlatform,
+} from './government.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -182,6 +199,11 @@ const cafeInventoryElement = document.querySelector('#cafe-inventory');
 const marketInventoryElement = document.querySelector('#market-inventory');
 const mallShopSpacesElement = document.querySelector('#mall-shop-spaces');
 const mallShowcaseManagerElement = document.querySelector('#mall-showcase-manager');
+const governmentTreasuryBalanceElement = document.querySelector('#government-treasury-balance');
+const governmentProximityElement = document.querySelector('#government-proximity');
+const governmentOfficeCardElement = document.querySelector('#government-office-card');
+const governmentPolicySectionElement = document.querySelector('#government-policy-section');
+const governmentProjectsSectionElement = document.querySelector('#government-projects-section');
 const residentForm = document.querySelector('#resident-form');
 const residentNameInput = document.querySelector('#resident-name-input');
 const residentOriginInput = document.querySelector('#resident-origin-input');
@@ -207,6 +229,8 @@ const economyStorage = {
 const economy = loadEconomy(economyStorage);
 // Persist the local game-account reference even before the first wallet transaction.
 saveEconomy(economyStorage, economy);
+const government = loadGovernment(economyStorage);
+saveGovernment(economyStorage, government);
 const lifeStorage = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -2088,6 +2112,55 @@ function createCommerceVenue(venueLayout) {
   return venue;
 }
 
+let communityHallSignMaterial = null;
+
+function makeCommunityHallSignTexture() {
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 512;
+  signCanvas.height = 148;
+  const context = signCanvas.getContext('2d');
+  context.fillStyle = '#335749';
+  context.fillRect(0, 0, signCanvas.width, signCanvas.height);
+  context.strokeStyle = 'rgba(255, 245, 214, .84)';
+  context.lineWidth = 6;
+  context.strokeRect(8, 8, signCanvas.width - 16, signCanvas.height - 16);
+  context.fillStyle = '#d8f3c5';
+  context.font = '700 20px system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'top';
+  context.fillText('UNITY COMMUNITY HALL · GOVERNOR’S OFFICE', signCanvas.width / 2, 18, 472);
+  context.fillStyle = '#fff8e6';
+  context.font = '700 32px system-ui, sans-serif';
+  context.textBaseline = 'middle';
+  context.fillText(
+    `GOVERNOR ${government.governorName.toUpperCase()} · ${government.approval}%`,
+    signCanvas.width / 2,
+    76,
+    472,
+  );
+  const policy = getActiveGovernorPolicy(government);
+  context.fillStyle = 'rgba(255, 244, 216, .9)';
+  context.font = '600 19px system-ui, sans-serif';
+  context.fillText(
+    `${policy.title.toUpperCase()} · TREASURY GC ${government.treasury}`,
+    signCanvas.width / 2,
+    118,
+    472,
+  );
+  const texture = new THREE.CanvasTexture(signCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function syncCommunityHall3D() {
+  if (!communityHallSignMaterial) return;
+  const nextTexture = makeCommunityHallSignTexture();
+  if (communityHallSignMaterial.map) communityHallSignMaterial.map.dispose();
+  communityHallSignMaterial.map = nextTexture;
+  communityHallSignMaterial.needsUpdate = true;
+}
+
 function createCommunityHall() {
   const layout = COMMUNITY_HALL_LAYOUT;
   const { width, depth } = layout;
@@ -2099,9 +2172,10 @@ function createCommunityHall() {
   const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xd5c7a2, roughness: 0.92 });
   const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xf6ecd6, roughness: 0.78 });
   const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x775c43, roughness: 0.82 });
+  const civicGreenMaterial = new THREE.MeshStandardMaterial({ color: 0x2f6b4f, roughness: 0.65 });
   const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x91bcb5, roughness: 0.3, metalness: 0.04, transparent: true, opacity: 0.74, side: THREE.DoubleSide });
-  const signMaterial = new THREE.MeshBasicMaterial({
-    map: makeCommerceSignTexture('UNITY COMMUNITY HALL', '#38564a', '#fff3d8'),
+  communityHallSignMaterial = new THREE.MeshBasicMaterial({
+    map: makeCommunityHallSignTexture(),
     toneMapped: false,
     side: THREE.DoubleSide,
   });
@@ -2117,19 +2191,21 @@ function createCommunityHall() {
   addBox([width + 0.42, 0.24, depth + 0.42], [0, 0.12, 0], plinthMaterial);
   addBox([width, 3.15, depth], [0, 1.82, 0], wallMaterial);
   addBox([width + 1.4, 0.28, depth + 2.2], [0, 3.55, 0.02], roofMaterial);
+  // Civic rooftop Rotunda pediment and green-white-green flag standards
+  addBox([2.8, 0.62, 1.8], [0, 3.98, -0.15], trimMaterial);
+  addBox([3.1, 0.16, 2.05], [0, 4.35, -0.15], civicGreenMaterial);
   for (const side of [-1, 1]) {
     addBox([0.18, 3.1, 0.18], [side * (width / 2 - 0.32), 1.65, frontZ - 0.95], trimMaterial);
     addBox([1.7, 1.48, 0.1], [side * 2.12, 2.1, frontZ - 0.065], trimMaterial, false, false);
     addBox([1.48, 1.26, 0.12], [side * 2.12, 2.1, frontZ - 0.14], glassMaterial, false, false);
+    // Flanking civic flagpoles
+    addBox([0.07, 2.35, 0.07], [side * 2.65, 1.35, frontZ - 1.25], trimMaterial);
+    addBox([0.48, 0.28, 0.04], [side * 2.65 + 0.24, 2.32, frontZ - 1.25], civicGreenMaterial);
   }
   addBox([1.58, 2.32, 0.12], [0, 1.4, frontZ - 0.08], trimMaterial, false, false);
   addBox([1.32, 2.06, 0.14], [0, 1.38, frontZ - 0.16], doorMaterial);
   addBox([4.5, 0.14, 1.2], [0, 0.22, frontZ - 0.72], roofMaterial, false, true);
   addBox([1.7, 0.12, 0.55], [0, 0.1, frontZ - 1.38], trimMaterial, false, true);
-  const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 0.72), signMaterial);
-  signBoard.position.set(0, 3.03, frontZ - 0.19);
-  signBoard.rotation.y = Math.PI;
-  group.add(signBoard);
 
   // A pair of shaded seats makes the forecourt a usable neighbourhood meeting place.
   const benchMaterial = new THREE.MeshStandardMaterial({ color: 0x58755e, roughness: 0.84 });
@@ -2142,6 +2218,10 @@ function createCommunityHall() {
   }
 
   batchStaticVenueMeshes(group);
+  const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 0.88), communityHallSignMaterial);
+  signBoard.position.set(0, 3.05, frontZ - 0.19);
+  signBoard.rotation.y = Math.PI;
+  group.add(signBoard);
   group.position.set(layout.x, terrainHeight(layout.x, layout.z), layout.z);
   group.rotation.y = layout.facing;
   scene.add(group);
@@ -3668,6 +3748,13 @@ function getNearbyCommerceVenue(maxDistance = 5.8) {
   return nearest ? { venue: nearest, distance: nearestDistance } : null;
 }
 
+function isPlayerAtCommunityHall(maxDistance = 6.2) {
+  const entranceZ = COMMUNITY_HALL_LAYOUT.z - COMMUNITY_HALL_LAYOUT.depth / 2 - 0.8;
+  const entranceDistance = Math.hypot(player.position.x - COMMUNITY_HALL_LAYOUT.x, player.position.z - entranceZ);
+  const centerDistance = Math.hypot(player.position.x - COMMUNITY_HALL_LAYOUT.x, player.position.z - COMMUNITY_HALL_LAYOUT.z);
+  return Math.min(entranceDistance, centerDistance) <= maxDistance;
+}
+
 function getNearbyRentalHouse(maxDistance = 4.6) {
   let nearest = null;
   let nearestDistance = maxDistance;
@@ -3705,6 +3792,7 @@ function getNearbyInteractionTarget() {
   if (getNearbyRentalHouse()) return 'view-rentals';
   const nearbyVenue = getNearbyCommerceVenue();
   if (nearbyVenue) return `open-${nearbyVenue.venue.id}`;
+  if (isPlayerAtCommunityHall()) return 'open-government';
 
   const railStop = getNearestTransitStation(transitNetwork, player.position.x, player.position.z, 4.6);
   const busStop = getNearestBusTerminal(transitNetwork, player.position.x, player.position.z, 4.6);
@@ -3795,6 +3883,11 @@ function handleNearbyInteraction() {
   }
   if (target === 'open-cafe' || target === 'open-market') {
     openCommercePage(target.slice('open-'.length));
+    return true;
+  }
+  if (target === 'open-government') {
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('government');
     return true;
   }
   if (target === 'watch-match') {
@@ -4350,6 +4443,10 @@ function toggleMallGoodFromPhone(spaceId, goodId) {
   );
 }
 
+function persistGovernment() {
+  return saveGovernment(economyStorage, government);
+}
+
 function handleMallActionFromPhone(action, spaceId) {
   selectedMallSpaceId = spaceId;
   if (action === 'collect-sales') {
@@ -4362,9 +4459,19 @@ function handleMallActionFromPhone(action, spaceId) {
       showToast('Display at least one virtual good in your window before collecting sales.');
       return;
     }
+    const activePolicy = getActiveGovernorPolicy(government);
+    const bonusMultiplier = activePolicy.mallSalesMultiplier || 1;
+    const policyBonus = bonusMultiplier > 1 ? Math.round(result.payout * (bonusMultiplier - 1)) : 0;
+    if (policyBonus > 0) {
+      earnGameCredits(economy, `${activePolicy.title} · Governor showcase bonus`, policyBonus, Date.now());
+      result.lease.totalSales += policyBonus;
+    }
     persistEconomy();
     renderCommercePage('market');
-    showToast(`Showcase sales collected · +${formatCredits(result.payout)} from ${result.lease.shopName}!`, 3400);
+    showToast(
+      `Showcase sales collected · +${formatCredits(result.payout + policyBonus)} from ${result.lease.shopName}${policyBonus > 0 ? ` (includes +${formatCredits(policyBonus)} Governor policy bonus)` : ''}!`,
+      3600,
+    );
     return;
   }
   if (action === 'pay-rent') {
@@ -4388,6 +4495,226 @@ function handleMallActionFromPhone(action, spaceId) {
       3400,
     );
   }
+}
+
+function renderGovernmentPage() {
+  if (!governmentOfficeCardElement || !governmentPolicySectionElement || !governmentProjectsSectionElement) return;
+  updateWalletBalances();
+  const atHall = isPlayerAtCommunityHall();
+  const activePolicy = getActiveGovernorPolicy(government);
+  const activeTax = getActiveTaxRate(government);
+  const nextPetition = getNextCivicPetition(government);
+  const candidateName = life.profile?.created ? life.profile.name : 'Resident';
+
+  setTextIfChanged(
+    governmentTreasuryBalanceElement,
+    `${formatCredits(government.treasury)} · ${government.approval}%`,
+  );
+  governmentProximityElement.textContent = atHall
+    ? `At Unity Community Hall · hold town halls, canvass voters, or run gubernatorial business.`
+    : `Current Governor: ${government.governorName} (Term ${government.termNumber}). Walk to Unity Community Hall for extra town-hall support.`;
+  governmentProximityElement.classList.toggle('is-near', atHall);
+  governmentProximityElement.classList.toggle('is-away', !atHall);
+
+  const platformOptions = GOVERNOR_POLICIES.map(
+    (policy) => `<option value="${policy.id}" ${government.campaignPlatformId === policy.id ? 'selected' : ''}>${escapeHtml(policy.title)}</option>`,
+  ).join('');
+
+  governmentOfficeCardElement.innerHTML = `<div class="mall-showcase-card">
+    <div class="rental-lease-heading">
+      <span>${government.isPlayerGovernor ? `Governor ${escapeHtml(government.governorName)} (You)` : `Governor ${escapeHtml(government.governorName)}`} · Term ${government.termNumber}</span>
+      <small>${government.isPlayerGovernor ? 'IN OFFICE' : `YOUR POLLING · ${government.campaignSupport}%`}</small>
+    </div>
+    <p>${escapeHtml(government.lastElectionSummary)}</p>
+    <p><strong>Active Charter:</strong> ${escapeHtml(activePolicy.title)} — ${escapeHtml(activePolicy.summary)}</p>
+    <form class="mall-showcase-form" data-government-campaign-form>
+      <div class="mall-form-row">
+        <input class="mall-input" name="slogan" type="text" maxlength="64" minlength="2" value="${escapeHtml(government.campaignSlogan)}" placeholder="Campaign slogan" aria-label="Campaign slogan" required>
+        <select class="mall-input" name="platformId" aria-label="Campaign platform">${platformOptions}</select>
+      </div>
+      <button class="rental-action-button" type="submit">UPDATE CAMPAIGN PLATFORM (+3% SUPPORT)</button>
+    </form>
+    <div class="mall-space-meta" style="margin-top:8px;">
+      <span>Next Town Hall Petition: ${escapeHtml(nextPetition.citizen)}</span>
+      <strong>+${formatCredits(nextPetition.treasuryGrant)} Treasury</strong>
+    </div>
+    <p style="margin:4px 0 8px;">“${escapeHtml(nextPetition.prompt)}”</p>
+    <div class="rental-actions">
+      <button class="rental-action-button" type="button" data-government-action="canvass">
+        CANVASS NEIGHBOURS (+${atHall ? 12 : 7}% SUPPORT)
+      </button>
+      <button class="rental-action-button" type="button" data-government-action="town-hall">
+        HOLD TOWN HALL (+${formatCredits(government.isPlayerGovernor ? nextPetition.governorStipend : Math.round(nextPetition.governorStipend * 0.5))} STIPEND)
+      </button>
+    </div>
+    <button class="rental-action-button" style="width:100%;margin-top:6px;" type="button" data-government-action="run-election">
+      ${government.isPlayerGovernor
+        ? `SEEK RE-ELECTION AS GOVERNOR (${government.campaignSupport}% SUPPORT)`
+        : `RUN FOR GOVERNOR AS ${escapeHtml(candidateName.toUpperCase())} (${government.campaignSupport}% SUPPORT · 51% NEEDED)`}
+    </button>
+  </div>`;
+
+  governmentPolicySectionElement.innerHTML = `<div class="estate-roster-heading"><span>GOVERNOR’S EXECUTIVE POLICIES</span><strong>${government.isPlayerGovernor ? 'ACTIVE OFFICE' : 'WIN ELECTION TO ENACT'}</strong></div>
+    <div class="mall-spaces-list">
+      ${GOVERNOR_POLICIES.map((policy) => {
+        const isCurrent = policy.id === government.activePolicyId;
+        return `<div class="mall-space-card ${isCurrent ? 'is-rented is-selected' : ''}">
+          <div class="mall-space-header">
+            <span class="mall-space-title">
+              <strong>${escapeHtml(policy.title)}</strong>
+              <small>${escapeHtml(policy.summary)}</small>
+            </span>
+            <span class="mall-size-badge ${isCurrent ? 'mall-size-badge--medium' : ''}">${isCurrent ? 'ENACTED' : `+${policy.approvalDelta}% APPROVAL`}</span>
+          </div>
+          <div class="mall-space-actions">
+            <button class="rental-action-button ${isCurrent ? 'rental-action-button--quiet' : ''}" type="button" data-governor-policy="${policy.id}" ${!government.isPlayerGovernor || isCurrent ? 'disabled' : ''}>
+              ${isCurrent ? 'ACTIVE EXECUTIVE POLICY' : government.isPlayerGovernor ? 'ENACT POLICY' : 'GOVERNOR ONLY'}
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="estate-roster-heading" style="margin-top:9px;"><span>CIVIC REVENUE RATE</span><strong>${escapeHtml(activeTax.label.toUpperCase())}</strong></div>
+    <div class="government-tax-row">
+      ${TAX_RATES.map((rate) => {
+        const isCurrent = rate.id === government.taxRateId;
+        return `<button class="rental-action-button ${isCurrent ? '' : 'rental-action-button--quiet'}" type="button" data-governor-tax="${rate.id}" ${!government.isPlayerGovernor || isCurrent ? 'disabled' : ''}>${escapeHtml(rate.label)}</button>`;
+      }).join('')}
+    </div>`;
+
+  governmentProjectsSectionElement.innerHTML = `<div class="estate-roster-heading"><span>PUBLIC WORKS · TREASURY ${formatCredits(government.treasury)}</span><strong>${government.completedProjects.length} / ${PUBLIC_PROJECTS.length} BUILT</strong></div>
+    <div class="mall-spaces-list">
+      ${PUBLIC_PROJECTS.map((project) => {
+        const completed = government.completedProjects.includes(project.id);
+        const canFund = government.isPlayerGovernor && !completed && government.treasury >= project.cost;
+        return `<div class="mall-space-card ${completed ? 'is-rented' : ''}">
+          <div class="mall-space-header">
+            <span class="mall-space-title">
+              <strong>${escapeHtml(project.name)}</strong>
+              <small>${escapeHtml(project.description)}</small>
+            </span>
+            <span class="mall-size-badge ${completed ? 'mall-size-badge--medium' : 'mall-size-badge--anchor'}">${completed ? 'COMPLETED' : formatCredits(project.cost)}</span>
+          </div>
+          <div class="mall-space-meta">
+            <span>+${project.approvalBoost}% citizen approval</span>
+            <strong>+${formatCredits(project.treasuryReturn)} / town hall</strong>
+          </div>
+          <div class="mall-space-actions">
+            <button class="rental-action-button" type="button" data-fund-project="${project.id}" ${!canFund ? 'disabled' : ''}>
+              ${completed
+                ? 'PUBLIC WORK COMPLETED'
+                : !government.isPlayerGovernor
+                  ? 'WIN GOVERNOR ELECTION TO COMMISSION'
+                  : government.treasury < project.cost
+                    ? `NEED ${formatCredits(project.cost)} IN TREASURY`
+                    : `COMMISSION PROJECT · ${formatCredits(project.cost)}`}
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function handleGovernmentActionFromPhone(action) {
+  const atHall = isPlayerAtCommunityHall();
+  const candidateName = life.profile?.created ? life.profile.name : 'Resident';
+  if (action === 'canvass') {
+    const result = canvassNeighboursForCampaign(government, { atCommunityHall: atHall });
+    if (life.profile?.created) {
+      connectWithNeighbour(life);
+      persistLife();
+    }
+    persistGovernment();
+    syncCommunityHall3D();
+    renderGovernmentPage();
+    showToast(
+      `Canvassed neighbours${atHall ? ' at Unity Community Hall' : ''} · campaign support is now ${result.campaignSupport}%!`,
+      3200,
+    );
+    return;
+  }
+  if (action === 'town-hall') {
+    const result = holdCivicTownHall(government);
+    earnGameCredits(
+      economy,
+      `Unity Community Hall · ${government.isPlayerGovernor ? 'Governor' : 'Civic'} town-hall stipend`,
+      result.stipend,
+      Date.now(),
+    );
+    if (life.profile?.created) {
+      adjustLifeNeeds(life, { mood: 6, social: 8 });
+      persistLife();
+    }
+    persistEconomy();
+    persistGovernment();
+    syncCommunityHall3D();
+    renderGovernmentPage();
+    showToast(
+      `Town Hall resolved: ${result.petition.resolution} (+${formatCredits(result.treasuryAdded)} Treasury, +${formatCredits(result.stipend)} to your wallet)!`,
+      4200,
+    );
+    return;
+  }
+  if (action === 'run-election') {
+    const result = runGovernorElection(government, candidateName);
+    persistGovernment();
+    syncCommunityHall3D();
+    renderGovernmentPage();
+    updateLocationAndMap();
+    if (result.won) {
+      if (life.profile?.created) {
+        adjustLifeNeeds(life, { mood: 15, social: 12 });
+        persistLife();
+      }
+      showToast(
+        `Congratulations, Governor ${result.governorName}! You won with ${result.voteShare}% of the Unity Court vote!`,
+        4500,
+      );
+    } else {
+      showToast(result.summary, 3800);
+    }
+  }
+}
+
+function enactPolicyFromPhone(policyId) {
+  const result = enactGovernorPolicy(government, policyId);
+  if (!result.ok) {
+    showToast('Win the gubernatorial election to enact executive policies.');
+    return;
+  }
+  persistGovernment();
+  syncCommunityHall3D();
+  renderGovernmentPage();
+  updateLocationAndMap();
+  showToast(`Enacted Governor Policy: ${result.policy.title}!`, 3400);
+}
+
+function setTaxRateFromPhone(taxRateId) {
+  const result = setGovernorTaxRate(government, taxRateId);
+  if (!result.ok) {
+    showToast('Only the Governor can adjust the civic revenue rate.');
+    return;
+  }
+  persistGovernment();
+  syncCommunityHall3D();
+  renderGovernmentPage();
+  showToast(`Civic revenue rate set to ${result.rate.label}. Approval: ${result.approval}%.`, 3000);
+}
+
+function fundProjectFromPhone(projectId) {
+  const result = fundPublicProject(government, projectId);
+  if (!result.ok) {
+    if (result.reason === 'insufficient-treasury') {
+      showToast(`Treasury needs ${formatCredits(result.cost)} (currently ${formatCredits(result.treasury)}). Hold a town hall to raise civic funds.`);
+    } else if (result.reason === 'not-governor') {
+      showToast('Win the gubernatorial election before commissioning public works.');
+    }
+    return;
+  }
+  persistGovernment();
+  syncCommunityHall3D();
+  renderGovernmentPage();
+  showToast(`Commissioned ${result.project.name}! Citizen approval rose to ${result.approval}%.`, 3800);
 }
 
 function rentHouseFromPhone(houseNumber) {
@@ -4636,7 +4963,9 @@ function answerWorkShift(optionId) {
   }
   persistLife();
   if (result.complete) {
-    const creditResult = earnGameCredits(economy, `${result.job.workplaceName} · shift pay`, result.reward);
+    const activePolicy = getActiveGovernorPolicy(government);
+    const totalPay = Math.round(result.reward * (activePolicy.workPayMultiplier || 1));
+    const creditResult = earnGameCredits(economy, `${result.job.workplaceName} · shift pay`, totalPay);
     if (creditResult.ok) {
       persistEconomy();
       updateWalletBalances();
@@ -4644,7 +4973,7 @@ function answerWorkShift(optionId) {
     renderWorkPage();
     if (activePhonePage === 'life') renderLifePage();
     const promotion = result.rankUp ? ` Promotion earned: ${getLifeRank(result.rank)}.` : '';
-    showToast(`Shift complete · ${formatCredits(result.reward)} added to your game wallet · ${result.correctAnswers}/3 good calls.${promotion}`, 4200);
+    showToast(`Shift complete · ${formatCredits(totalPay)} added to your game wallet · ${result.correctAnswers}/3 good calls.${promotion}`, 4200);
     return;
   }
   renderWorkPage();
@@ -4686,6 +5015,7 @@ const phonePageCopy = {
   property: { eyebrow: 'UNITY COURT · HOMES', title: 'Homes & rentals', subtitle: 'Meet local landlords and manage your lease.' },
   cafe: { eyebrow: 'CIVIC CAFÉ · ABUJA', title: 'A little something', subtitle: 'Fresh food and a warm drink for the road.' },
   market: { eyebrow: 'UNITY MALL · SHOPS & GROCERIES', title: 'Unity Mall', subtitle: 'Rent shop spaces, display virtual goods, and shop.' },
+  government: { eyebrow: 'UNITY COURT · CIVIC SEAT', title: 'Governor’s Office', subtitle: 'Run for Governor, enact policies, and fund public works.' },
   bank: { eyebrow: 'ABUJA GAME WALLET · GAME ACCOUNT', title: 'Your game wallet', subtitle: 'Check your credits and preview payment flows.' },
   life: { eyebrow: 'YOUR RESIDENT · LOCAL SAVE', title: 'Life in Abuja', subtitle: 'Look after your needs, make your own routine.' },
   work: { eyebrow: 'NEIGHBOURHOOD JOB BOARD', title: 'Work & progression', subtitle: 'Pick a role, show up and help your neighbours.' },
@@ -4712,6 +5042,7 @@ function setPhonePage(pageName) {
   phoneContent.scrollTop = 0;
   if (page === 'property') renderPropertyPage();
   else if (page === 'cafe' || page === 'market') renderCommercePage(page);
+  else if (page === 'government') renderGovernmentPage();
   else if (page === 'bank') renderBankPage();
   else if (page === 'life') renderLifePage();
   else if (page === 'work') renderWorkPage();
@@ -4752,6 +5083,7 @@ function openPhone() {
   else if (activePhonePage === 'life') renderLifePage();
   else if (activePhonePage === 'work') renderWorkPage();
   else if (activePhonePage === 'cafe' || activePhonePage === 'market') renderCommercePage(activePhonePage);
+  else if (activePhonePage === 'government') renderGovernmentPage();
   else if (activePhonePage === 'property') renderPropertyPage();
 }
 
@@ -4928,6 +5260,26 @@ phoneContent.addEventListener('click', (event) => {
     );
     return;
   }
+  const governmentActionButton = event.target.closest('[data-government-action]');
+  if (governmentActionButton) {
+    handleGovernmentActionFromPhone(governmentActionButton.dataset.governmentAction);
+    return;
+  }
+  const governorPolicyButton = event.target.closest('[data-governor-policy]');
+  if (governorPolicyButton) {
+    enactPolicyFromPhone(governorPolicyButton.dataset.governorPolicy);
+    return;
+  }
+  const governorTaxButton = event.target.closest('[data-governor-tax]');
+  if (governorTaxButton) {
+    setTaxRateFromPhone(governorTaxButton.dataset.governorTax);
+    return;
+  }
+  const fundProjectButton = event.target.closest('[data-fund-project]');
+  if (fundProjectButton) {
+    fundProjectFromPhone(fundProjectButton.dataset.fundProject);
+    return;
+  }
   const foodButton = event.target.closest('[data-food-use]');
   if (foodButton) {
     useFoodFromBag(foodButton.dataset.foodUse);
@@ -5030,6 +5382,26 @@ phoneContent.addEventListener('submit', (event) => {
         : `Created "${result.good.name}" in your virtual goods catalog.`,
       3400,
     );
+    return;
+  }
+
+  const campaignForm = event.target.closest('[data-government-campaign-form]');
+  if (campaignForm) {
+    event.preventDefault();
+    const formData = new FormData(campaignForm);
+    const result = updateCampaignPlatform(government, {
+      slogan: String(formData.get('slogan') || ''),
+      platformId: String(formData.get('platformId') || ''),
+      candidateName: life.profile?.created ? life.profile.name : '',
+    });
+    if (!result.ok) {
+      showToast('Enter a campaign slogan with at least two characters.');
+      return;
+    }
+    persistGovernment();
+    syncCommunityHall3D();
+    renderGovernmentPage();
+    showToast(`Campaign platform updated · voter support rose to ${result.campaignSupport}%!`, 3200);
   }
 });
 
@@ -5242,6 +5614,7 @@ function updateLocationAndMap() {
     location = `${currentHomeRoom} · House ${String(currentResidence.number).padStart(2, '0')}`;
   } else if (Math.hypot(x - STADIUM.x, z - STADIUM.z) < 24) location = 'Abuja Community Stadium';
   else if (Math.hypot(x, z + 27) < 10) location = 'Unity Circle';
+  else if (Math.hypot(x - COMMUNITY_HALL_LAYOUT.x, z - COMMUNITY_HALL_LAYOUT.z) < 10) location = 'Unity Community Hall · Governor’s Office';
   else if (currentCommerceVenue) location = currentCommerceVenue.name;
   else if (isInsideEstate(x, z)) location = 'Unity Court';
   else if (Math.hypot(x, z - 12) < 15) location = 'Unity Court North';
@@ -5266,12 +5639,12 @@ function updateLocationAndMap() {
   const hasCarPrompt = interactionTarget === 'enter-car' || interactionTarget === 'exit-car';
   const hasStadiumPrompt = interactionTarget === 'watch-match';
   const hasTransitPrompt = ['board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop'].includes(interactionTarget);
-  const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market';
+  const hasCommercePrompt = interactionTarget === 'open-cafe' || interactionTarget === 'open-market' || interactionTarget === 'open-government';
   const hasPropertyPrompt = interactionTarget === 'view-rentals';
   homeInteraction.hidden = isWorldView || isWatchingMatch || !(hasHomePrompt || hasCarPrompt || hasStadiumPrompt || hasTransitPrompt || hasCommercePrompt || hasPropertyPrompt) || isPhoneOpen();
-  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market'].includes(interactionTarget);
+  homeInteractionButton.hidden = !['enter-home', 'exit-home', 'enter-car', 'exit-car', 'watch-match', 'board-train', 'wait-train', 'board-bus', 'wait-bus', 'request-transit-stop', 'view-rentals', 'open-cafe', 'open-market', 'open-government'].includes(interactionTarget);
   homeLightsButton.hidden = !isInsideHome;
-  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
+  setAttributeIfChanged(homeInteraction, 'aria-label', hasCarPrompt ? 'Car controls' : hasTransitPrompt ? 'Rail and bus terminal controls' : hasStadiumPrompt ? 'Stadium match controls' : hasCommercePrompt ? 'Shop and civic controls' : hasPropertyPrompt ? 'Rental listing controls' : 'Home controls');
   setTextIfChanged(homeLightsAction, homeLightingEnabled ? 'LIGHTS OFF' : 'LIGHTS ON');
   setAttributeIfChanged(homeLightsButton, 'aria-label', homeLightingEnabled ? 'Turn home lights off' : 'Turn home lights on');
 
@@ -5294,6 +5667,15 @@ function updateLocationAndMap() {
       : 'Browse furnished cottages from local landlords.');
     setTextIfChanged(homeInteractionAction, 'VIEW RENTALS');
     setAttributeIfChanged(homeInteractionButton, 'aria-label', 'View Unity Court rental listings');
+  } else if (interactionTarget === 'open-government') {
+    const activePolicy = getActiveGovernorPolicy(government);
+    setTextIfChanged(homeInteractionEyebrow, 'UNITY COMMUNITY HALL · GOVERNOR’S OFFICE');
+    setTextIfChanged(
+      homeInteractionMessage,
+      `Governor ${government.governorName} (${government.approval}% approval) · ${activePolicy.title}`,
+    );
+    setTextIfChanged(homeInteractionAction, 'OPEN GOVERNMENT');
+    setAttributeIfChanged(homeInteractionButton, 'aria-label', 'Open the Governor’s Office and civic government');
   } else if (hasCommercePrompt) {
     const venue = getNearbyCommerceVenue()?.venue;
     if (venue?.id === 'cafe') {

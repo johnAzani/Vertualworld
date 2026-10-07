@@ -470,6 +470,7 @@ kbd { min-width: 17px; height: 19px; display: grid; place-items: center; padding
 .app-icon-cafe { color: #8f6042; background: linear-gradient(145deg,#f6dcc0,#e7b789); }
 .app-icon-market { color: #508063; background: linear-gradient(145deg,#e4f1cf,#bad39d); }
 .app-icon-bank { color: #58774d; background: linear-gradient(145deg,#f5ecc9,#dfd296); }
+.app-icon-government { color: #355d4e; background: linear-gradient(145deg,#dceee3,#b2d3c2); }
 .phone-app-badge { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border: 1.5px solid #f7f7ed; border-radius: 50%; background: #e97861; }
 .phone-message-preview { width: 100%; min-height: 63px; display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid rgba(66,100,76,.1); border-radius: 15px; color: #4f6859; background: rgba(255,255,255,.62); text-align: left; cursor: pointer; transition: background .18s, transform .18s; }
 .phone-message-preview:hover { background: #fff; transform: translateY(-1px); }
@@ -1060,3 +1061,6 @@ kbd { font-size: 9px; }
 .mall-catalog-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .mall-catalog-copy strong { color: #42614d; font-size: 10.5px; }
 .mall-catalog-copy small { color: #7c8c7e; font-size: 9.5px; }
+.shop-heading--government { background: linear-gradient(125deg,#dceee4,#cadfd3); }
+.shop-heading--government .shop-avatar { background: #365e4d; }
+.government-tax-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 7px; }

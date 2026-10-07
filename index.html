@@ -235,6 +235,10 @@
                     <span class="phone-app-icon app-icon-work"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="7.5" width="18" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 7.5V5.9A1.9 1.9 0 0 1 10.4 4h3.2a1.9 1.9 0 0 1 1.9 1.9v1.6M3.5 12.2h17M10 12v2h4v-2" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/></svg></span>
                     <span>Work</span>
                   </button>
+                  <button class="phone-app-button" type="button" data-phone-app="government" aria-label="Open the Unity Court Governor’s Office and civic government">
+                    <span class="phone-app-icon app-icon-government"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 4 8h16l-8-4.5ZM6 10v7m4-7v7m4-7v7m4-7v7M3.5 19.5h17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                    <span>Governor</span>
+                  </button>
                 </div>
 
                 <button class="phone-message-preview" type="button" data-phone-app="messages" aria-label="Read the latest message from Nia">
@@ -284,6 +288,16 @@
                   <div class="shop-inventory"><span>IN YOUR BAG</span><strong id="market-inventory">Nothing yet</strong></div>
                 </div>
                 <p class="phone-help shop-help">Rent a Small kiosk, Medium boutique, Large showroom, or Anchor hall with game credits to display virtual goods in Unity Mall’s 3D windows. Payment previews are demo-only and never charge money.</p>
+              </section>
+
+              <section class="phone-page" data-phone-page="government" aria-label="Unity Court Governor’s Office and civic government" hidden>
+                <div class="shop-heading shop-heading--government"><span class="shop-avatar" aria-hidden="true">G</span><span><span class="phone-card-label">UNITY COMMUNITY HALL · CIVIC SEAT</span><strong>Governor’s Office</strong><small>Run for Governor, enact civic policies, and fund public works.</small></span></div>
+                <div class="economy-wallet"><span>PUBLIC TREASURY · APPROVAL</span><strong id="government-treasury-balance">GC 520 · 58%</strong></div>
+                <p class="shop-proximity" id="government-proximity" aria-live="polite">Visit Unity Community Hall for town halls and gubernatorial business.</p>
+                <div id="government-office-card" aria-live="polite"></div>
+                <div class="mall-section-block" id="government-policy-section" aria-live="polite"></div>
+                <div class="mall-section-block" id="government-projects-section" aria-live="polite"></div>
+                <p class="phone-help shop-help">Visit Unity Community Hall in person to hold town halls for extra campaign support, public treasury grants, and the Governor’s civic stipend.</p>
               </section>
 
               <section class="phone-page bank-page" data-phone-page="bank" aria-label="In-game bank account and Flutterwave demo" hidden>
