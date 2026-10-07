@@ -7,6 +7,7 @@ import {
   getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
+  stepJoystickNavigation,
 } from '../src/follow-camera.js';
 
 const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
@@ -64,3 +65,39 @@ test('gameplay cameras support follow behind, orbit, overhead, and first-person 
   assert.match(mainSource, /\(!isFirstPerson && !isWorldView && cameraMode !== 'orbit'\)/);
   assert.match(mainSource, /followsResident && hasMovementInput/);
 });
+
+test('touch controls use the button next to jump to walk while the joystick only navigates direction', () => {
+  const state = createThirdPersonMovementState();
+  const thirdPersonTurn = stepJoystickNavigation({
+    joystickX: 0.8,
+    joystickY: -0.9,
+    delta: 0.1,
+    playerYaw: 0,
+    cameraYaw: 0,
+    cameraPitch: 0,
+    isFirstPerson: false,
+    thirdPersonMovementState: state,
+  });
+  assert.ok(thirdPersonTurn.playerYaw < 0, 'dragging joystick right turns the resident right');
+  assert.equal(thirdPersonTurn.cameraYaw, thirdPersonTurn.playerYaw);
+  assert.equal(state.yaw, -thirdPersonTurn.playerYaw);
+  assert.equal(thirdPersonTurn.cameraPitch, 0);
+
+  const firstPersonLook = stepJoystickNavigation({
+    joystickX: -0.5,
+    joystickY: 0.6,
+    delta: 0.1,
+    playerYaw: 0,
+    cameraYaw: 0,
+    cameraPitch: 0,
+    isFirstPerson: true,
+    thirdPersonMovementState: state,
+  });
+  assert.ok(firstPersonLook.playerYaw > 0);
+  assert.equal(firstPersonLook.cameraYaw, -firstPersonLook.playerYaw);
+  assert.ok(firstPersonLook.cameraPitch < 0);
+
+  assert.match(mainSource, /accelerateButtonLabel\.textContent = isDriving \? 'ACCEL' : 'WALK'/);
+  assert.match(mainSource, /touchLabel\.textContent = isDriving \? 'STEER' : isRidingTransit \? 'TRANSIT' : 'NAVIGATE'/);
+});
+

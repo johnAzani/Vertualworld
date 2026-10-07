@@ -24,3 +24,45 @@ export function setBehindPlayerOffset(target, playerYaw, distance) {
   target.set(Math.sin(playerYaw) * distance, 0, Math.cos(playerYaw) * distance);
   return target;
 }
+
+// Use the on-screen joystick purely for navigation (turning/aiming the resident
+// and camera direction), while forward walking is triggered by the Walk button.
+export function stepJoystickNavigation({
+  joystickX = 0,
+  joystickY = 0,
+  delta = 0,
+  playerYaw = 0,
+  cameraYaw = 0,
+  cameraPitch = 0,
+  isFirstPerson = false,
+  thirdPersonMovementState = null,
+}) {
+  let nextPlayerYaw = playerYaw;
+  let nextCameraYaw = cameraYaw;
+  let nextCameraPitch = cameraPitch;
+  const deadzone = 0.04;
+
+  if (Math.abs(joystickX) > deadzone && delta > 0) {
+    const turnDelta = -joystickX * 2.15 * delta;
+    nextPlayerYaw += turnDelta;
+    if (isFirstPerson) {
+      nextCameraYaw = -nextPlayerYaw;
+    } else {
+      nextCameraYaw = nextPlayerYaw;
+      if (thirdPersonMovementState) {
+        thirdPersonMovementState.yaw = -nextPlayerYaw;
+      }
+    }
+  }
+
+  if (Math.abs(joystickY) > deadzone && delta > 0 && isFirstPerson) {
+    nextCameraPitch = Math.max(-0.7, Math.min(0.58, nextCameraPitch - joystickY * 1.15 * delta));
+  }
+
+  return {
+    playerYaw: nextPlayerYaw,
+    cameraYaw: nextCameraYaw,
+    cameraPitch: nextCameraPitch,
+  };
+}
+

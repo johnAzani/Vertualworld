@@ -91,6 +91,7 @@ import {
   getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
+  stepJoystickNavigation,
 } from './follow-camera.js';
 import {
   GOVERNOR_POLICIES,
@@ -151,6 +152,8 @@ const jumpButtonLabel = document.querySelector('#jump-button-label');
 const jumpButtonIcon = document.querySelector('#jump-button-icon');
 const touchLabel = document.querySelector('#touch-label');
 const accelerateButton = document.querySelector('#accelerate-button');
+const accelerateButtonLabel = document.querySelector('#accelerate-button-label');
+const accelerateButtonIcon = document.querySelector('#accelerate-button-icon');
 const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
@@ -3321,12 +3324,15 @@ function updateVehicleControlUi() {
   jumpButtonLabel.textContent = isDriving ? 'BRAKE' : isRidingTransit ? 'ON BOARD' : 'JUMP';
   jumpButtonIcon.textContent = isDriving ? '■' : '↑';
   jumpButton.setAttribute('aria-label', isDriving ? 'Brake the car' : isRidingTransit ? 'On the Abuja City Rail tram' : 'Jump');
-  accelerateButton.hidden = !isDriving;
+  accelerateButton.hidden = isRidingTransit;
+  if (accelerateButtonLabel) accelerateButtonLabel.textContent = isDriving ? 'ACCEL' : 'WALK';
+  if (accelerateButtonIcon) accelerateButtonIcon.textContent = '↑';
+  accelerateButton.setAttribute('aria-label', isDriving ? 'Accelerate' : 'Walk forward');
   app.classList.toggle('is-riding-transit', isRidingTransit);
   setAttributeIfChanged(joystick, 'aria-label', isDriving
     ? 'Steering joystick. Drag left or right to steer the car.'
-    : 'Movement joystick. Drag to move; keyboard movement is also available.');
-  touchLabel.textContent = isDriving ? 'STEER' : isRidingTransit ? 'TRANSIT' : 'MOVE';
+    : 'Navigation joystick. Drag to turn and aim your direction; use the Walk button to walk forward.');
+  touchLabel.textContent = isDriving ? 'STEER' : isRidingTransit ? 'TRANSIT' : 'NAVIGATE';
 }
 
 const keyToMove = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift']);
@@ -3677,18 +3683,20 @@ jumpButton.addEventListener('click', (event) => {
 });
 
 accelerateButton.addEventListener('pointerdown', (event) => {
-  if (!isDriving || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if (isRidingTransit || homeTransitionPending || isPhoneOpen() || (event.pointerType === 'mouse' && event.button !== 0)) return;
   event.preventDefault();
   vehicleTouchInput.accelerate = true;
+  accelerateButton.classList.add('is-active');
   accelerateButton.setPointerCapture?.(event.pointerId);
 });
 for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   accelerateButton.addEventListener(eventName, () => {
     vehicleTouchInput.accelerate = false;
+    accelerateButton.classList.remove('is-active');
   });
 }
 accelerateButton.addEventListener('click', (event) => {
-  if (event.detail === 0 && isDriving) vehicleAccelerateTapTimer = 0.22;
+  if (event.detail === 0 && !isRidingTransit) vehicleAccelerateTapTimer = 0.25;
 });
 
 function showToast(message, duration = 2600) {
@@ -6800,8 +6808,22 @@ function animate(timestamp) {
     forwardInput = clamp(forwardInput, -1, 1);
     sideInput = clamp(sideInput, -1, 1);
   } else {
-    forwardInput -= joystickInput.y;
-    sideInput += joystickInput.x;
+    if (vehicleTouchInput.accelerate || vehicleAccelerateTapTimer > 0) forwardInput += 1;
+    if (!isWatchingMatch && (Math.abs(joystickInput.x) > 0.04 || Math.abs(joystickInput.y) > 0.04)) {
+      const nav = stepJoystickNavigation({
+        joystickX: joystickInput.x,
+        joystickY: joystickInput.y,
+        delta,
+        playerYaw: player.rotation.y,
+        cameraYaw,
+        cameraPitch,
+        isFirstPerson,
+        thirdPersonMovementState,
+      });
+      player.rotation.y = nav.playerYaw;
+      cameraYaw = nav.cameraYaw;
+      cameraPitch = nav.cameraPitch;
+    }
     const movementMagnitude = Math.hypot(forwardInput, sideInput);
     if (movementMagnitude > 1) {
       forwardInput /= movementMagnitude;
