@@ -74,6 +74,7 @@ import {
 } from './world-view.js';
 import {
   createThirdPersonMovementState,
+  getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
 } from './follow-camera.js';
@@ -2495,6 +2496,7 @@ let cameraYaw = 0;
 let cameraPitch = 0;
 const thirdPersonMovementState = createThirdPersonMovementState();
 let drivingViewYawOffset = 0;
+let cameraMode = 'follow';
 let isFirstPerson = false;
 let isWorldView = false;
 let worldViewRestore = null;
@@ -2527,13 +2529,38 @@ let phoneNoteSaveTimer = 0;
 let bankCheckoutIntent = null;
 if (activeResidence && activeResidence !== homeHouse) placePlayerOutsideResidence(activeResidence);
 
+const CAMERA_MODE_LABELS = {
+  follow: 'Follow behind',
+  orbit: 'Orbit',
+  overhead: 'Overhead',
+  'first-person': 'First-person',
+};
+
 function syncViewToggleButton() {
-  viewToggleButton.classList.toggle('is-active', isFirstPerson);
-  viewToggleButton.setAttribute('aria-pressed', String(isFirstPerson));
-  const nextMode = isFirstPerson ? 'third-person' : 'first-person';
-  viewToggleButton.setAttribute('aria-label', `Switch to ${nextMode} view`);
-  viewToggleButton.title = `Switch to ${nextMode} view (V)`;
+  const nextMode = getNextCameraMode(cameraMode);
+  const currentLabel = CAMERA_MODE_LABELS[cameraMode];
+  const nextLabel = CAMERA_MODE_LABELS[nextMode];
+  viewToggleButton.classList.toggle('is-active', cameraMode !== 'follow');
+  viewToggleButton.dataset.cameraMode = cameraMode;
+  viewToggleButton.removeAttribute('aria-pressed');
+  viewToggleButton.setAttribute('aria-label', `Camera mode: ${currentLabel}. Activate to switch to ${nextLabel}.`);
+  viewToggleButton.title = `Camera: ${currentLabel} · next: ${nextLabel} (V)`;
 }
+
+function setCameraMode(nextMode) {
+  cameraMode = CAMERA_MODE_LABELS[nextMode] ? nextMode : 'follow';
+  isFirstPerson = cameraMode === 'first-person';
+  cameraYaw = isFirstPerson ? -player.rotation.y : player.rotation.y;
+  cameraPitch = 0;
+  drivingViewYawOffset = 0;
+  getThirdPersonMovementYaw(thirdPersonMovementState, player.rotation.y, false);
+  camera.fov = isFirstPerson ? 68 : cameraMode === 'overhead' ? 54 : 49;
+  camera.updateProjectionMatrix();
+  avatarModel.visible = !isFirstPerson && !isDriving && !isRidingTransit;
+  playerShadow.visible = !isFirstPerson && !isDriving && !isRidingTransit;
+  syncViewToggleButton();
+}
+syncViewToggleButton();
 
 function resetCameraView() {
   cameraYaw = isWorldView ? 0 : isFirstPerson ? -player.rotation.y : player.rotation.y;
@@ -2554,23 +2581,16 @@ function updateWorldViewProjection() {
 
 function toggleCameraMode() {
   if (isWatchingMatch || isRidingTransit || isWorldView) return;
-  isFirstPerson = !isFirstPerson;
-  if (isFirstPerson) {
-    cameraYaw = -player.rotation.y;
-    cameraPitch = 0;
-  } else {
-    getThirdPersonMovementYaw(thirdPersonMovementState, player.rotation.y, false);
-  }
-  avatarModel.visible = !isFirstPerson && !isDriving && !isRidingTransit;
-  playerShadow.visible = !isFirstPerson && !isDriving && !isRidingTransit;
-  camera.fov = isFirstPerson ? 68 : 49;
-  camera.updateProjectionMatrix();
-  syncViewToggleButton();
-  if (isFirstPerson) {
-    showToast(isDriving ? 'Driver view · looking through the windscreen.' : 'First-person view · drag to look up, down, and around.', 2600);
-  } else if (isDriving) {
-    showToast('Follow view · the camera stays behind your car as you turn.', 2600);
-  } else showToast('Third-person follow view · the camera stays behind your resident.', 2600);
+  setCameraMode(getNextCameraMode(cameraMode));
+  const messages = {
+    follow: isDriving ? 'Follow view · the camera stays behind your car as you turn.' : 'Follow camera · stays behind your resident.',
+    orbit: isDriving ? 'Orbit camera · drag to circle around your car.' : 'Orbit camera · drag to circle around your resident.',
+    overhead: isDriving ? 'Overhead camera · follows above your car.' : 'Overhead camera · follows above your resident.',
+    'first-person': isDriving
+      ? 'Driver view · looking through the windscreen.'
+      : 'First-person view · drag to look up, down, and around.',
+  };
+  showToast(messages[cameraMode], 2800);
 }
 
 function toggleWorldView() {
@@ -2585,7 +2605,8 @@ function toggleWorldView() {
       scene.fog.far = restore.fogFar;
       cameraYaw = restore.cameraYaw;
       cameraPitch = restore.cameraPitch;
-      isFirstPerson = restore.wasFirstPerson;
+      cameraMode = restore.cameraMode ?? (restore.wasFirstPerson ? 'first-person' : 'follow');
+      isFirstPerson = cameraMode === 'first-person';
     }
     worldViewRestore = null;
     camera.updateProjectionMatrix();
@@ -2614,13 +2635,13 @@ function toggleWorldView() {
     up: camera.up.clone(),
     fogNear: scene.fog.near,
     fogFar: scene.fog.far,
+    cameraMode,
     wasFirstPerson: isFirstPerson,
     cameraYaw,
     cameraPitch,
   };
   isWorldView = true;
-  isFirstPerson = false;
-  if (!worldViewRestore.wasFirstPerson) cameraYaw = player.rotation.y;
+  if (cameraMode === 'follow' || cameraMode === 'overhead') cameraYaw = player.rotation.y;
   camera.fov = 49;
   cameraPitch = 0;
   camera.up.set(0, 1, 0);
@@ -2898,7 +2919,8 @@ function resolveWorldObstacleCollisions() {
 }
 
 canvas.addEventListener('pointerdown', (event) => {
-  if (pointerDragging || (event.pointerType === 'mouse' && event.button !== 0) || (!isFirstPerson && !isWorldView)) return;
+  if (pointerDragging || (event.pointerType === 'mouse' && event.button !== 0)
+    || (!isFirstPerson && !isWorldView && cameraMode !== 'orbit')) return;
   pointerDragging = true;
   activeCameraPointer = event.pointerId;
   canvas.classList.add('is-dragging');
@@ -2912,9 +2934,8 @@ canvas.addEventListener('pointermove', (event) => {
   const deltaY = event.clientY - previousPointerY;
   previousPointerX = event.clientX;
   previousPointerY = event.clientY;
-  if (isDriving) {
-    if (isFirstPerson) drivingViewYawOffset -= deltaX * 0.0065;
-  } else if (isFirstPerson || isWorldView) cameraYaw -= deltaX * 0.0065;
+  if (isDriving && isFirstPerson) drivingViewYawOffset -= deltaX * 0.0065;
+  else if (isFirstPerson || isWorldView || cameraMode === 'orbit') cameraYaw -= deltaX * 0.0065;
   if (isFirstPerson) cameraPitch = clamp(cameraPitch - deltaY * 0.004, -0.7, 0.58);
 });
 function releasePointer(event) {
@@ -3477,7 +3498,7 @@ function updateVehicleMovement(delta, forwardInput, steeringInput) {
   const turnDelta = -clamp(steeringInput, -1, 1) * 1.05 * speedFactor * directionSign * delta;
   playerCar.group.rotation.y += turnDelta;
   playerCar.steering = -clamp(steeringInput, -1, 1) * directionSign * 0.42;
-  cameraYaw = playerCar.group.rotation.y;
+  if (cameraMode !== 'orbit') cameraYaw = playerCar.group.rotation.y;
 
   const forwardX = -Math.sin(playerCar.group.rotation.y);
   const forwardZ = -Math.cos(playerCar.group.rotation.y);
@@ -4460,7 +4481,9 @@ document.querySelector('#camera-reset').addEventListener('click', () => {
     ? 'World View camera reset.'
     : isFirstPerson
       ? 'First-person view reset to your resident’s facing direction.'
-      : 'Camera reset behind your resident.';
+      : cameraMode === 'overhead'
+        ? 'Overhead camera aligned with your resident.'
+        : 'Camera reset behind your resident.';
   showToast(message, 1800);
 });
 function updateFullscreenButton() {
@@ -5154,7 +5177,8 @@ function animate(timestamp) {
   const hasMovementInput = inputMagnitude > 0.08;
   const isRunning = !isDriving && pressedKeys.has('shift');
   const desiredDirection = animationScratch.desiredDirection.set(0, 0, 0);
-  const followsResident = !isFirstPerson && !isDriving && !isRidingTransit && !isWorldView && !isWatchingMatch;
+  const followsResident = !isFirstPerson && !isDriving && !isRidingTransit && !isWorldView
+    && !isWatchingMatch && cameraMode !== 'orbit';
   const followMovementYaw = getThirdPersonMovementYaw(
     thirdPersonMovementState,
     player.rotation.y,
@@ -5379,14 +5403,30 @@ function animate(timestamp) {
     );
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
     camera.lookAt(animationScratch.lookAtPosition.copy(eyePosition).addScaledVector(viewDirection, 18));
+  } else if (cameraMode === 'overhead') {
+    const cameraDistance = isInsideHome ? 2.4 : isDriving ? 4.2 : 3.8;
+    const cameraHeight = isInsideHome ? 8.5 : isDriving ? 15.5 : 16.5;
+    const lookHeight = isDriving ? 1.1 : 1.2;
+    const behindOffset = setBehindPlayerOffset(
+      animationScratch.behindCameraOffset,
+      player.rotation.y,
+      cameraDistance,
+    );
+    const desiredCameraPosition = animationScratch.desiredCameraPosition.set(
+      player.position.x + behindOffset.x,
+      player.position.y + cameraHeight + jumpHeight * 0.12,
+      player.position.z + behindOffset.z,
+    );
+    camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-6 * delta));
+    camera.up.set(0, 1, 0);
+    camera.lookAt(player.position.x, player.position.y + lookHeight + jumpHeight * 0.08, player.position.z);
   } else if (isInsideHome && getCurrentResidence()) {
     const residence = getCurrentResidence();
     const local = homeWorldToLocal(player.position.x, player.position.z);
-    const behindOffset = setBehindPlayerOffset(
-      animationScratch.behindCameraOffset,
-      player.rotation.y - residence.facing,
-      4.15,
-    );
+    const orbitYaw = cameraMode === 'orbit'
+      ? cameraYaw - residence.facing
+      : player.rotation.y - residence.facing;
+    const behindOffset = setBehindPlayerOffset(animationScratch.behindCameraOffset, orbitYaw, 4.15);
     const cameraLocal = homeLocalToWorld(
       local.x + behindOffset.x,
       local.z + behindOffset.z,
@@ -5399,13 +5439,13 @@ function animate(timestamp) {
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-7 * delta));
     camera.lookAt(player.position.x, player.position.y + 1.2 + jumpHeight * 0.08, player.position.z);
   } else {
-    // Keep third-person directly behind the resident's facing direction.
     const cameraDistance = isDriving ? 12.6 : 10.8;
     const cameraHeight = isDriving ? 4.8 : 6.2;
     const lookHeight = isDriving ? 0.98 : 1.24;
+    const cameraYawForPosition = cameraMode === 'orbit' ? cameraYaw : player.rotation.y;
     const behindOffset = setBehindPlayerOffset(
       animationScratch.behindCameraOffset,
-      player.rotation.y,
+      cameraYawForPosition,
       cameraDistance,
     );
     const desiredCameraPosition = animationScratch.desiredCameraPosition.set(

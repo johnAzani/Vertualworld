@@ -19,7 +19,7 @@ Open the local URL Vite prints. Run checks with `npm test`, and build a producti
 
 - **W / A / S / D** or **arrow keys** to walk
 - **Shift** to run, **Space** to jump
-- Press **V** or tap the eye button to switch between third-person and first-person. Third-person stays behind your resident as they turn; movement is relative to the way they are facing. In first-person, drag to look up, down, and around; while driving, first-person looks through the windscreen and third-person follows behind the car as it turns
+- Press **V** or tap the eye button to cycle through four camera views: **Follow behind** (stays behind your resident or car), **Orbit** (the original third-person view where dragging circles around your resident or car), **Overhead** (an elevated camera following above your resident or car), and **First-person** (drag to look up, down, and around; while driving, looks through the windscreen)
 - Press **O** or tap the globe button for **World View**, a high-angle overview of the whole neighbourhood; drag to orbit around the city, then press O or tap **Return to resident** to go back
 - House walls, tree trunks, and rocks are solid, with collisions that let you slide along them; jumps have a short input buffer, forgiving coyote time, and lighter air steering
 - House 01 has an enterable, furnished interior with a living room, kitchen, and bedroom. The **Unity Court** home app lets you rent Houses 02–04 from named NPC landlords with fictional in-game credits; move-in charges the first month plus a refundable deposit, rent comes due every 30 real-world days and is paid manually in the home app; leases, balances, and purchases save locally on this device

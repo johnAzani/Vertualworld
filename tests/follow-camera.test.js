@@ -2,12 +2,24 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  CAMERA_MODE_ORDER,
   createThirdPersonMovementState,
+  getNextCameraMode,
   getThirdPersonMovementYaw,
   setBehindPlayerOffset,
 } from '../src/follow-camera.js';
 
 const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+
+test('camera mode control cycles through follow, the previous orbit, overhead and first-person views', () => {
+  assert.deepEqual(CAMERA_MODE_ORDER, ['follow', 'orbit', 'overhead', 'first-person']);
+  let mode = 'follow';
+  for (const expected of ['orbit', 'overhead', 'first-person', 'follow']) {
+    mode = getNextCameraMode(mode);
+    assert.equal(mode, expected);
+  }
+  assert.equal(getNextCameraMode('unknown'), 'follow');
+});
 
 function vector() {
   return {
@@ -44,9 +56,11 @@ test('third-person movement keeps a stable heading while the camera follows, the
   assert.equal(getThirdPersonMovementYaw(state, 0.5, true), -0.5);
 });
 
-test('the gameplay camera follows avatar facing and reserves dragging for first-person and World View', () => {
+test('gameplay cameras support follow behind, orbit, overhead, and first-person modes', () => {
+  assert.match(mainSource, /else if \(cameraMode === 'overhead'\)/);
   assert.match(mainSource, /setBehindPlayerOffset\(\s*animationScratch\.behindCameraOffset,\s*player\.rotation\.y,\s*cameraDistance/);
+  assert.match(mainSource, /const cameraYawForPosition = cameraMode === 'orbit' \? cameraYaw : player\.rotation\.y;/);
   assert.match(mainSource, /player\.rotation\.y\s*-\s*residence\.facing/);
-  assert.match(mainSource, /\(!isFirstPerson && !isWorldView\)/);
+  assert.match(mainSource, /\(!isFirstPerson && !isWorldView && cameraMode !== 'orbit'\)/);
   assert.match(mainSource, /followsResident && hasMovementInput/);
 });

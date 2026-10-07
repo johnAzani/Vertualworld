@@ -1,3 +1,10 @@
+export const CAMERA_MODE_ORDER = Object.freeze(['follow', 'orbit', 'overhead', 'first-person']);
+
+export function getNextCameraMode(currentMode) {
+  const currentIndex = CAMERA_MODE_ORDER.indexOf(currentMode);
+  return CAMERA_MODE_ORDER[(currentIndex + 1 + CAMERA_MODE_ORDER.length) % CAMERA_MODE_ORDER.length];
+}
+
 export function createThirdPersonMovementState() {
   return { yaw: 0, hasInput: false };
 }

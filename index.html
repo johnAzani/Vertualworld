@@ -12,7 +12,7 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="world-canvas" tabindex="0" role="img" aria-label="An interactive, stylised Abuja neighbourhood. Use WASD or the arrow keys to move. The third-person camera follows behind your resident; drag to look in first-person or orbit World View.">Your browser does not support the 3D canvas.</canvas>
+      <canvas id="world-canvas" tabindex="0" role="img" aria-label="An interactive, stylised Abuja neighbourhood. Use WASD or the arrow keys to move. Press V to cycle follow, orbit, overhead, and first-person cameras. Drag in Orbit or first-person; drag World View to orbit the neighbourhood.">Your browser does not support the 3D canvas.</canvas>
       <div class="world-wash" aria-hidden="true"></div>
       <div class="home-transition" id="home-transition" aria-hidden="true"></div>
 
@@ -48,7 +48,7 @@
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M10 5.6h4M10.3 18.2h3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             <span class="phone-notification-dot" id="phone-notification-dot" aria-hidden="true" hidden></span>
           </button>
-          <button class="icon-button view-toggle" id="view-toggle" type="button" aria-label="Switch to first-person view" title="Switch to first-person view (V)" aria-pressed="false">
+          <button class="icon-button view-toggle" id="view-toggle" type="button" data-camera-mode="follow" aria-label="Camera mode: Follow behind. Activate to switch to Orbit." title="Camera: Follow behind · next: Orbit (V)">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.6 12s3.35-6.2 9.4-6.2 9.4 6.2 9.4 6.2-3.35 6.2-9.4 6.2S2.6 12 2.6 12Z" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.8" stroke="currentColor" stroke-width="1.65"/><circle cx="12" cy="12" r=".85" fill="currentColor"/></svg>
           </button>
           <button class="icon-button world-view-toggle" id="world-view-button" type="button" aria-label="Open world view" title="Open world view (O)" aria-pressed="false">
