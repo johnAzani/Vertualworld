@@ -40,6 +40,10 @@
         </div>
 
         <div class="topbar-actions">
+          <button class="daily-streak-pill wallet-topbar-pill" id="topbar-wallet-button" type="button" aria-label="Open your game wallet and bank account" title="Open Game Wallet (Bank)">
+            <span class="wallet-pill-icon" aria-hidden="true">◈</span>
+            <span class="daily-streak-label"><strong id="topbar-wallet-balance">160 GC</strong></span>
+          </button>
           <button class="daily-streak-pill" id="daily-streak-button" type="button" aria-label="Open Daily Abuja Pulse and check-in streak" title="Open Daily Abuja Pulse">
             <span class="daily-streak-flame" aria-hidden="true">☀</span>
             <span class="daily-streak-label">DAY <strong id="daily-streak-count">1</strong></span>
@@ -89,9 +93,29 @@
 
         <div class="location-chip" id="location-chip">
           <span class="location-pin" aria-hidden="true"></span>
-          <span id="location-name" aria-live="polite" aria-atomic="true">Unity Court North</span>
+          <span id="location-name" aria-live="polite" aria-atomic="true">Unity Court</span>
           <span class="location-separator">·</span>
-          <span id="location-coordinates">0, 12</span>
+          <span id="location-coordinates">36, -24</span>
+        </div>
+
+        <nav class="district-nav-bar" id="district-nav-bar" aria-label="District GPS quick navigation and taxi hail">
+          <span class="district-nav-label">GPS</span>
+          <button class="district-nav-pill" type="button" data-gps-dest="home" title="Set GPS route to Unity Court Home"><span aria-hidden="true">⌂</span><span>Home</span></button>
+          <button class="district-nav-pill" type="button" data-gps-dest="mall" title="Set GPS route to Unity Grand Indoor Mall"><span aria-hidden="true">🛍</span><span>Mall</span></button>
+          <button class="district-nav-pill" type="button" data-gps-dest="hall" title="Set GPS route to Governor’s Office"><span aria-hidden="true">🏛</span><span>Gov</span></button>
+          <button class="district-nav-pill" type="button" data-gps-dest="stadium" title="Set GPS route to Abuja Community Stadium"><span aria-hidden="true">⚽</span><span>Stadium</span></button>
+          <button class="district-nav-pill" type="button" data-gps-dest="cafe" title="Set GPS route to Civic Café"><span aria-hidden="true">☕</span><span>Café</span></button>
+          <button class="district-nav-pill district-nav-pill--taxi" id="hud-quick-taxi-button" type="button" title="Order or hail an Abuja Private Car Taxi (T)"><span aria-hidden="true">🚕</span><span>Taxi</span></button>
+        </nav>
+
+        <div class="gps-guidance-banner" id="gps-guidance-banner" role="status" aria-live="polite" hidden>
+          <span class="gps-compass-badge" aria-hidden="true"><i id="gps-compass-arrow">↑</i></span>
+          <div class="gps-guidance-copy">
+            <strong id="gps-destination-title">Unity Grand Indoor Mall · 98m</strong>
+            <small id="gps-route-subtitle">Via Maitama–CBD Commercial Flyover · ~11s run</small>
+          </div>
+          <button class="gps-hail-button" id="gps-hail-taxi-button" type="button" aria-label="Hail an Abuja Private Taxi to this destination">🚕 Hail Taxi</button>
+          <button class="gps-clear-button" id="gps-clear-button" type="button" aria-label="Clear GPS destination" title="Clear GPS route">×</button>
         </div>
 
         <div class="world-view-banner" id="world-view-banner" role="status" aria-live="polite" hidden>
@@ -135,15 +159,17 @@
           <span class="hint-set" id="walking-controls">
             <span class="control-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></span>
             <span class="control-separator"></span>
-            <span class="control-pair"><kbd>SHIFT</kbd><span>RUN</span></span>
+            <span class="control-pair"><kbd>SHIFT</kbd>/<kbd>R</kbd><span>RUN</span></span>
             <span class="control-separator"></span>
             <span class="control-pair"><kbd>SPACE</kbd><span>JUMP</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>T</kbd><span>TAXI</span></span>
+            <span class="control-separator"></span>
+            <span class="control-pair"><kbd>M</kbd><span>MAP</span></span>
             <span class="control-separator"></span>
             <span class="control-pair"><kbd>V</kbd><span>VIEW</span></span>
             <span class="control-separator"></span>
             <span class="control-pair"><kbd>O</kbd><span>WORLD VIEW</span></span>
-            <span class="control-separator"></span>
-            <span class="control-pair"><span class="mouse-icon" aria-hidden="true"></span><span>LOOK / ORBIT</span></span>
           </span>
           <span class="hint-set" id="vehicle-controls" hidden>
             <span class="control-pair"><kbd>W</kbd><kbd>S</kbd><span>DRIVE</span></span>
@@ -444,15 +470,26 @@
               </section>
 
               <section class="phone-page" data-phone-page="map" aria-label="Abuja neighbourhood map" hidden>
-                <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP</span><span class="phone-map-north">N</span></div>
+                <div class="phone-map-banner"><span class="phone-live-dot"></span><span>LIVE FIELD MAP · TAP ANY DISTRICT TO SET GPS</span><span class="phone-map-north">N</span></div>
                 <div class="phone-map-frame"><canvas id="phone-map-canvas" width="320" height="230" role="img" aria-label="Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, strategic billboards, community stadium, glow seeds and civic plaza">Map of the schematic Abuja neighbourhood showing your position, streets, bus and rail routes, transit hubs, Unity Court homes, Civic Cafe, Unity Market, Unity Community Hall, strategic billboards, community stadium, glow seeds and civic plaza.</canvas></div>
                 <div class="phone-map-details">
-                  <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Unity Court North</strong></div>
-                  <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 00 · Z 12</strong></div>
+                  <div><span class="phone-card-label">CURRENT AREA</span><strong id="phone-map-location">Unity Court</strong></div>
+                  <div><span class="phone-card-label">POSITION</span><strong id="phone-map-coordinates">X 36 · Z -24</strong></div>
+                </div>
+                <div class="phone-map-quick-destinations" id="phone-map-quick-destinations" role="group" aria-label="Set GPS route or hail taxi to district">
+                  <button type="button" data-map-gps="home">⌂ Home</button>
+                  <button type="button" data-map-gps="mall">🛍 Mall</button>
+                  <button type="button" data-map-gps="hall">🏛 Gov</button>
+                  <button type="button" data-map-gps="stadium">⚽ Stadium</button>
+                  <button type="button" data-map-gps="cafe">☕ Café</button>
+                  <button type="button" data-map-gps="circle">✦ Circle</button>
                 </div>
                 <div class="phone-map-legend"><span><i class="legend-you"></i>You</span><span><i class="legend-seed"></i>Glow seed</span><span><i class="legend-beacon"></i>Beacon</span><span><i class="legend-home"></i>Home</span><span><i class="legend-civic"></i>Community hall</span><span><i class="legend-stadium"></i>Stadium</span><span><i class="legend-road"></i>Road grid</span><span><i class="legend-rail"></i>Abuja City Rail</span><span><i class="legend-bus"></i>Bus terminal</span><span><i class="legend-shop"></i>Café &amp; market</span><span><i class="legend-billboard"></i>Billboard</span></div>
-                <button class="phone-primary-button" type="button" data-phone-action="camera-reset">Reset camera view <span aria-hidden="true">↗</span></button>
-                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">The map shows the connected street grid and bus route. Gold circles mark rail terminals; orange squares mark bus terminals at all three hubs.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                  <button class="phone-primary-button" type="button" data-phone-app="taxi">Hail Private Taxi <span aria-hidden="true">🚕</span></button>
+                  <button class="phone-secondary-button" type="button" data-phone-action="camera-reset">Reset camera <span aria-hidden="true">↗</span></button>
+                </div>
+                <p class="phone-feedback" id="phone-map-feedback" aria-live="polite">Tap any district above or click on the map to set a 3D GPS route across the bridges and flyovers.</p>
               </section>
 
               <section class="phone-page" data-phone-page="messages" aria-label="Messages with Nia" hidden>
@@ -555,6 +592,7 @@
           <span class="joystick-ring"></span>
           <span class="joystick-stick" id="joystick-stick"></span>
         </div>
+        <button class="jump-button sprint-toggle-button" id="sprint-toggle-button" type="button" aria-pressed="false" aria-label="Toggle Run / Sprint speed" title="Toggle Run speed (R)"><span id="sprint-button-icon" aria-hidden="true">⚡</span><small id="sprint-button-label">RUN</small></button>
         <button class="jump-button" id="jump-button" type="button" aria-label="Jump"><span id="jump-button-icon">↑</span><small id="jump-button-label">JUMP</small></button>
         <button class="jump-button accelerate-button" id="accelerate-button" type="button" aria-label="Walk forward"><span id="accelerate-button-icon" aria-hidden="true">↑</span><small id="accelerate-button-label">WALK</small></button>
         <div class="touch-label" id="touch-label">NAVIGATE</div>

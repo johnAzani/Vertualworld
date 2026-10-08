@@ -186,6 +186,16 @@ import {
   saveDailyReturnState,
   syncDailyReturnDay,
 } from './daily-return.js';
+import {
+  DISTRICT_QUICK_DESTINATIONS,
+  clearNavigationDestination,
+  computeGpsGuidance,
+  createNavigationUxState,
+  findNearestQuickDestination,
+  getQuickDestinationById,
+  selectNavigationDestination,
+  toggleSprintMode,
+} from './navigation-ux.js';
 import './style.css';
 
 const app = document.querySelector('#app');
@@ -218,6 +228,20 @@ const touchLabel = document.querySelector('#touch-label');
 const accelerateButton = document.querySelector('#accelerate-button');
 const accelerateButtonLabel = document.querySelector('#accelerate-button-label');
 const accelerateButtonIcon = document.querySelector('#accelerate-button-icon');
+const sprintToggleButton = document.querySelector('#sprint-toggle-button');
+const sprintButtonLabel = document.querySelector('#sprint-button-label');
+const topbarWalletButton = document.querySelector('#topbar-wallet-button');
+const topbarWalletBalance = document.querySelector('#topbar-wallet-balance');
+const districtNavBar = document.querySelector('#district-nav-bar');
+const hudQuickTaxiButton = document.querySelector('#hud-quick-taxi-button');
+const gpsGuidanceBanner = document.querySelector('#gps-guidance-banner');
+const gpsCompassArrow = document.querySelector('#gps-compass-arrow');
+const gpsDestinationTitle = document.querySelector('#gps-destination-title');
+const gpsRouteSubtitle = document.querySelector('#gps-route-subtitle');
+const gpsHailTaxiButton = document.querySelector('#gps-hail-taxi-button');
+const gpsClearButton = document.querySelector('#gps-clear-button');
+const mapCardElement = document.querySelector('.map-card');
+const phoneMapQuickDestinations = document.querySelector('#phone-map-quick-destinations');
 const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
 const mapContext = mapCanvas.getContext('2d');
@@ -4000,6 +4024,29 @@ function toggleWorldView() {
   return true;
 }
 
+const navigationUxState = createNavigationUxState();
+
+function syncSprintToggleButton() {
+  if (!sprintToggleButton) return;
+  sprintToggleButton.hidden = isDriving || isRidingTransit || isRidingPrivateTaxi;
+  const active = Boolean(navigationUxState.sprintEnabled);
+  sprintToggleButton.classList.toggle('is-active', active);
+  sprintToggleButton.setAttribute('aria-pressed', String(active));
+  if (sprintButtonLabel) sprintButtonLabel.textContent = active ? 'RUN ON' : 'RUN';
+}
+
+function handleToggleSprint() {
+  if (isDriving || isRidingTransit || isRidingPrivateTaxi) return;
+  const enabled = toggleSprintMode(navigationUxState);
+  syncSprintToggleButton();
+  showToast(
+    enabled
+      ? 'Run mode ON · you will sprint across bridges and boulevards when moving.'
+      : 'Run mode OFF · back to a relaxed walking pace.',
+    2200,
+  );
+}
+
 function updateVehicleControlUi() {
   walkingControlsHint.hidden = isDriving || isRidingTransit;
   vehicleControlsHint.hidden = !isDriving;
@@ -4013,6 +4060,7 @@ function updateVehicleControlUi() {
   if (accelerateButtonLabel) accelerateButtonLabel.textContent = isDriving ? 'ACCEL' : 'WALK';
   if (accelerateButtonIcon) accelerateButtonIcon.textContent = '↑';
   accelerateButton.setAttribute('aria-label', isDriving ? 'Accelerate' : 'Walk forward');
+  syncSprintToggleButton();
   app.classList.toggle('is-riding-transit', isRidingTransit);
   setAttributeIfChanged(joystick, 'aria-label', isDriving
     ? 'Steering joystick. Drag left or right to steer the car.'
@@ -4042,7 +4090,24 @@ window.addEventListener('keydown', (event) => {
     togglePhone();
     return;
   }
+  if (key === 't' && !event.repeat) {
+    event.preventDefault();
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('taxi');
+    return;
+  }
+  if (key === 'm' && !event.repeat) {
+    event.preventDefault();
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('map');
+    return;
+  }
   if (isPhoneOpen()) return;
+  if (key === 'r' && !event.repeat) {
+    event.preventDefault();
+    handleToggleSprint();
+    return;
+  }
   if (isWatchingMatch) {
     if ((key === 'e' || key === 'escape' || key === ' ') && !event.repeat) {
       event.preventDefault();
@@ -4437,6 +4502,156 @@ for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 accelerateButton.addEventListener('click', (event) => {
   if (event.detail === 0 && !isRidingTransit) vehicleAccelerateTapTimer = 0.25;
 });
+
+if (sprintToggleButton) {
+  sprintToggleButton.addEventListener('contextmenu', (event) => event.preventDefault());
+  sprintToggleButton.addEventListener('click', () => {
+    handleToggleSprint();
+  });
+}
+
+// 3D GPS Waypoint Beacon at the selected destination + Floating Directional Chevron ahead of the player
+const gpsWaypointGroup = new THREE.Group();
+gpsWaypointGroup.name = 'GPS Destination Waypoint Beacon';
+gpsWaypointGroup.visible = false;
+const gpsBeaconMat = new THREE.MeshBasicMaterial({
+  color: 0xf4cf76,
+  transparent: true,
+  opacity: 0.36,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+const gpsRingMat = new THREE.MeshBasicMaterial({
+  color: 0x38d49c,
+  transparent: true,
+  opacity: 0.78,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+const gpsBeaconColumn = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.95, 16, 18, 1, true), gpsBeaconMat);
+gpsBeaconColumn.position.y = 8;
+gpsWaypointGroup.add(gpsBeaconColumn);
+const gpsGroundRing = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.65, 28), gpsRingMat);
+gpsGroundRing.rotation.x = -Math.PI / 2;
+gpsGroundRing.position.y = 0.16;
+gpsWaypointGroup.add(gpsGroundRing);
+const gpsDiamond = new THREE.Mesh(
+  new THREE.OctahedronGeometry(0.58, 0),
+  new THREE.MeshStandardMaterial({ color: 0xffe49c, emissive: 0xe6b245, emissiveIntensity: 0.85, roughness: 0.25 }),
+);
+gpsDiamond.position.y = 3.2;
+gpsWaypointGroup.add(gpsDiamond);
+scene.add(gpsWaypointGroup);
+
+const gpsPlayerArrow = new THREE.Group();
+gpsPlayerArrow.name = 'GPS Floating Route Arrow';
+gpsPlayerArrow.visible = false;
+const gpsArrowHead = new THREE.Mesh(
+  new THREE.ConeGeometry(0.26, 0.56, 12),
+  new THREE.MeshStandardMaterial({ color: 0x38d49c, emissive: 0x1b8c63, emissiveIntensity: 0.75, roughness: 0.3 }),
+);
+gpsArrowHead.rotation.x = -Math.PI / 2;
+gpsArrowHead.position.z = -0.18;
+gpsPlayerArrow.add(gpsArrowHead);
+const gpsArrowStem = new THREE.Mesh(
+  new THREE.BoxGeometry(0.16, 0.08, 0.36),
+  new THREE.MeshStandardMaterial({ color: 0xffe39f, emissive: 0xc9962c, emissiveIntensity: 0.65, roughness: 0.3 }),
+);
+gpsArrowStem.position.z = 0.16;
+gpsPlayerArrow.add(gpsArrowStem);
+scene.add(gpsPlayerArrow);
+
+function syncNavigationUxUi() {
+  const activeId = navigationUxState.activeDestinationId;
+  if (districtNavBar) {
+    for (const btn of districtNavBar.querySelectorAll('[data-gps-dest]')) {
+      const isSelected = btn.dataset.gpsDest === activeId;
+      btn.classList.toggle('is-active', isSelected);
+      btn.setAttribute('aria-pressed', String(isSelected));
+    }
+  }
+  if (phoneMapQuickDestinations) {
+    for (const btn of phoneMapQuickDestinations.querySelectorAll('[data-map-gps]')) {
+      const isSelected = btn.dataset.mapGps === activeId;
+      btn.classList.toggle('is-active', isSelected);
+      btn.setAttribute('aria-pressed', String(isSelected));
+    }
+  }
+  const guidance = computeGpsGuidance(
+    navigationUxState,
+    player.position.x,
+    player.position.z,
+    isFirstPerson ? -cameraYaw : cameraYaw,
+  );
+  if (!guidance) {
+    if (gpsGuidanceBanner) gpsGuidanceBanner.hidden = true;
+    gpsWaypointGroup.visible = false;
+    gpsPlayerArrow.visible = false;
+    return;
+  }
+  if (guidance.arrived) {
+    const arrivedDest = guidance.destination;
+    clearNavigationDestination(navigationUxState);
+    if (gpsGuidanceBanner) gpsGuidanceBanner.hidden = true;
+    gpsWaypointGroup.visible = false;
+    gpsPlayerArrow.visible = false;
+    if (districtNavBar) {
+      for (const btn of districtNavBar.querySelectorAll('[data-gps-dest]')) {
+        btn.classList.remove('is-active');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    }
+    showToast(`Arrived at ${arrivedDest.name}!`, 3000);
+    drawMap();
+    return;
+  }
+  if (gpsGuidanceBanner) gpsGuidanceBanner.hidden = false;
+  if (gpsDestinationTitle) {
+    setTextIfChanged(
+      gpsDestinationTitle,
+      `${guidance.destination.name} · ${guidance.routeDistanceMeters}m`,
+    );
+  }
+  if (gpsRouteSubtitle) {
+    setTextIfChanged(
+      gpsRouteSubtitle,
+      `${guidance.routeSummary} · ~${guidance.etaSprintSeconds}s run / ~${guidance.etaTaxiSeconds}s taxi`,
+    );
+  }
+  if (gpsCompassArrow) {
+    const deg = Math.round((guidance.relativeTurnRadians * 180) / Math.PI);
+    gpsCompassArrow.style.transform = `rotate(${deg}deg)`;
+  }
+  const destY = groundHeightAt(guidance.destination.x, guidance.destination.z) - PLAYER_FOOT_OFFSET;
+  gpsWaypointGroup.position.set(guidance.destination.x, destY, guidance.destination.z);
+  gpsWaypointGroup.visible = !isInsideHome && !isWorldView && !isWatchingMatch;
+
+  // Position the floating 3D directional arrow 2.2m ahead of the player toward nextTarget
+  const dirX = Math.sin(guidance.bearingRadians);
+  const dirZ = -Math.cos(guidance.bearingRadians);
+  const arrowX = player.position.x + dirX * 2.25;
+  const arrowZ = player.position.z + dirZ * 2.25;
+  const arrowBaseY = groundHeightAt(arrowX, arrowZ) - PLAYER_FOOT_OFFSET;
+  gpsPlayerArrow.position.set(arrowX, arrowBaseY + 0.55 + Math.sin(elapsedWorldTime * 4.2) * 0.08, arrowZ);
+  gpsPlayerArrow.rotation.y = -guidance.bearingRadians;
+  gpsPlayerArrow.visible = !isInsideHome && !isWorldView && !isWatchingMatch && !isRidingPrivateTaxi;
+}
+
+function setGpsWaypoint(destinationId) {
+  const selected = selectNavigationDestination(navigationUxState, destinationId);
+  syncNavigationUxUi();
+  drawMap();
+  if (!selected) {
+    showToast('GPS destination cleared.', 2000);
+    return;
+  }
+  const guidance = computeGpsGuidance(navigationUxState, player.position.x, player.position.z, cameraYaw);
+  const routeNote = guidance?.routeSummary ? ` (${guidance.routeSummary})` : '';
+  showToast(
+    `GPS set to ${selected.name} · ${guidance?.routeDistanceMeters || 0}m${routeNote}. Follow the emerald arrow or tap Hail Taxi!`,
+    3600,
+  );
+}
 
 function showToast(message, duration = 2600) {
   toastMessage.textContent = message;
@@ -5217,6 +5432,9 @@ function refreshRentalBilling(now = Date.now()) {
 function updateWalletBalances() {
   const balance = formatCredits(economy.wallet);
   setTextIfChanged(walletBalanceElement, balance);
+  if (topbarWalletBalance) {
+    setTextIfChanged(topbarWalletBalance, `${Math.max(0, Math.floor(economy.wallet)).toLocaleString()} GC`);
+  }
   setTextIfChanged(cafeWalletBalanceElement, balance);
   setTextIfChanged(marketWalletBalanceElement, balance);
   setTextIfChanged(billboardsWalletBalanceElement, balance);
@@ -6954,7 +7172,10 @@ function setPhonePage(pageName) {
     phoneUnread = false;
     updatePhoneBadge();
   }
-  if (page === 'map') drawMap();
+  if (page === 'map') {
+    syncNavigationUxUi();
+    drawMap();
+  }
   if (isPhoneOpen()) {
     const focusTarget = page === 'home' ? phoneContent.querySelector('[data-phone-app="daily"]') || phoneContent.querySelector('[data-phone-app="map"]') : phoneBackButton;
     focusTarget?.focus({ preventScroll: true });
@@ -7098,6 +7319,72 @@ function openDailyPulseFromHud() {
 
 dailyStreakButton?.addEventListener('click', openDailyPulseFromHud);
 hudOpenDailyButton?.addEventListener('click', openDailyPulseFromHud);
+topbarWalletButton?.addEventListener('click', () => {
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('bank');
+});
+hudHailTaxiButton?.addEventListener('click', () => {
+  const activeDest = getQuickDestinationById(navigationUxState.activeDestinationId);
+  if (activeDest?.taxiDestinationId) {
+    privateTaxiState.selectedDestinationId = activeDest.taxiDestinationId;
+  }
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('taxi');
+});
+districtNavBar?.addEventListener('click', (event) => {
+  const destBtn = event.target.closest('[data-gps-dest]');
+  if (destBtn) {
+    setGpsWaypoint(destBtn.dataset.gpsDest);
+  }
+});
+gpsHailTaxiButton?.addEventListener('click', () => {
+  const activeDest = getQuickDestinationById(navigationUxState.activeDestinationId);
+  if (activeDest?.taxiDestinationId) {
+    privateTaxiState.selectedDestinationId = activeDest.taxiDestinationId;
+  }
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('taxi');
+});
+gpsClearButton?.addEventListener('click', () => {
+  clearNavigationDestination(navigationUxState);
+  syncNavigationUxUi();
+  drawMap();
+  showToast('GPS destination cleared.', 2000);
+});
+hudMapCard?.addEventListener('click', () => {
+  if (!isPhoneOpen()) openPhone();
+  setPhonePage('map');
+});
+hudMapCard?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    if (!isPhoneOpen()) openPhone();
+    setPhonePage('map');
+  }
+});
+phoneMapCanvas?.addEventListener('click', (event) => {
+  const rect = phoneMapCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const cx = ((event.clientX - rect.left) / rect.width) * phoneMapCanvas.width;
+  const cy = ((event.clientY - rect.top) / rect.height) * phoneMapCanvas.height;
+  const centerX = phoneMapCanvas.width / 2;
+  const centerY = phoneMapCanvas.height / 2;
+  const radius = Math.min(phoneMapCanvas.width, phoneMapCanvas.height) * 0.44;
+  const worldX = ((cx - centerX) / radius) * WORLD_RADIUS;
+  const worldZ = ((cy - centerY) / radius) * WORLD_RADIUS;
+  const nearest = findNearestQuickDestination(worldX, worldZ, 38);
+  const feedbackEl = document.querySelector('#phone-map-feedback');
+  if (nearest) {
+    setGpsWaypoint(nearest.id);
+    if (feedbackEl) {
+      feedbackEl.textContent = navigationUxState.activeDestinationId
+        ? `GPS waypoint set to ${nearest.name}. Follow the dashed emerald route or tap Hail Taxi!`
+        : 'GPS destination cleared.';
+    }
+  } else if (feedbackEl) {
+    feedbackEl.textContent = 'Tap near Home, Mall, Governor’s Office, Stadium, Café, or Unity Circle to set a GPS waypoint.';
+  }
+});
 phoneButton.addEventListener('click', togglePhone);
 viewToggleButton.addEventListener('click', toggleCameraMode);
 worldViewButton.addEventListener('click', toggleWorldView);
@@ -7118,6 +7405,18 @@ phoneContent.addEventListener('click', (event) => {
   const appButton = event.target.closest('[data-phone-app]');
   if (appButton) {
     setPhonePage(appButton.dataset.phoneApp);
+    return;
+  }
+  const mapGpsButton = event.target.closest('[data-map-gps]');
+  if (mapGpsButton) {
+    setGpsWaypoint(mapGpsButton.dataset.mapGps);
+    const dest = getQuickDestinationById(navigationUxState.activeDestinationId);
+    const feedbackEl = document.querySelector('#phone-map-feedback');
+    if (feedbackEl) {
+      feedbackEl.textContent = dest
+        ? `GPS waypoint set to ${dest.name}. Follow the emerald arrow on screen or hail a taxi!`
+        : 'GPS destination cleared.';
+    }
     return;
   }
   const selectTaxiDestButton = event.target.closest('[data-select-taxi-dest]');
@@ -7867,6 +8166,7 @@ function updateLocationAndMap() {
         : `Sit in ${nearestSeat?.label || 'the stadium stands'} to watch the live match`,
     );
   }
+  syncNavigationUxUi();
   drawMap();
 }
 
@@ -7886,8 +8186,10 @@ function drawMapCanvasIfNeeded(targetCanvas, ctx) {
   const yaw = player.rotation.y;
   const width = targetCanvas.width;
   const height = targetCanvas.height;
+  const activeDestinationId = navigationUxState.activeDestinationId;
   if (previous
     && previous.seedCount === seedCount
+    && previous.activeDestinationId === activeDestinationId
     && previous.width === width
     && previous.height === height) {
     const dx = x - previous.x;
@@ -7896,7 +8198,7 @@ function drawMapCanvasIfNeeded(targetCanvas, ctx) {
     if (dx * dx + dz * dz < MAP_REDRAW_DISTANCE_SQUARED && Math.abs(angle) < MAP_REDRAW_ANGLE_RADIANS) return;
   }
   drawMapCanvas(targetCanvas, ctx);
-  mapCanvasDrawState.set(targetCanvas, { x, z, yaw, seedCount, width, height });
+  mapCanvasDrawState.set(targetCanvas, { x, z, yaw, seedCount, activeDestinationId, width, height });
 }
 
 function drawMapCanvas(targetCanvas, ctx) {
@@ -8257,6 +8559,46 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.stroke();
   }
 
+  // Active GPS route polyline and destination target ring
+  const gpsGuidance = computeGpsGuidance(
+    navigationUxState,
+    player.position.x,
+    player.position.z,
+    cameraYaw,
+  );
+  if (gpsGuidance && !gpsGuidance.arrived) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(mapX(player.position.x), mapY(player.position.z));
+    for (const wp of gpsGuidance.waypoints) {
+      ctx.lineTo(mapX(wp.x), mapY(wp.z));
+    }
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([Math.max(3, radius * 0.032), Math.max(2, radius * 0.022)]);
+    ctx.strokeStyle = '#1b8c63';
+    ctx.lineWidth = Math.max(2.6, radius * 0.03);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const destMapX = mapX(gpsGuidance.destination.x);
+    const destMapY = mapY(gpsGuidance.destination.z);
+    const pinR = Math.max(4.4, radius * 0.042);
+    ctx.beginPath();
+    ctx.arc(destMapX, destMapY, pinR * 1.45, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(27, 140, 99, 0.72)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(destMapX, destMapY, pinR * 0.82, 0, Math.PI * 2);
+    ctx.fillStyle = '#f2cb6e';
+    ctx.fill();
+    ctx.strokeStyle = '#1b5f47';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   const px = mapX(player.position.x);
   const py = mapY(player.position.z);
   ctx.save();
@@ -8500,7 +8842,7 @@ function animate(timestamp) {
 
   const inputMagnitude = Math.hypot(forwardInput, sideInput);
   const hasMovementInput = inputMagnitude > 0.08;
-  const isRunning = !isDriving && pressedKeys.has('shift');
+  const isRunning = !isDriving && (pressedKeys.has('shift') || navigationUxState.sprintEnabled);
   const desiredDirection = animationScratch.desiredDirection.set(0, 0, 0);
   const followsResident = !isFirstPerson && !isDriving && !isRidingTransit && !isRidingPrivateTaxi && !isWorldView
     && !isWatchingMatch && cameraMode !== 'orbit';
@@ -8723,6 +9065,35 @@ function animate(timestamp) {
           4200,
         );
       }
+    }
+  }
+
+  if (gpsWaypointGroup.visible && !prefersReducedMotion) {
+    gpsDiamond.rotation.y += delta * 1.65;
+    gpsDiamond.position.y = 3.2 + Math.sin(elapsedWorldTime * 2.8) * 0.24;
+    const pulse = 1 + Math.sin(elapsedWorldTime * 3.4) * 0.14;
+    gpsGroundRing.scale.set(pulse, pulse, 1);
+  }
+  if (navigationUxState.activeDestinationId && !isInsideHome && !isWorldView && !isWatchingMatch && !isRidingPrivateTaxi) {
+    const liveGuidance = computeGpsGuidance(
+      navigationUxState,
+      player.position.x,
+      player.position.z,
+      isFirstPerson ? -cameraYaw : cameraYaw,
+    );
+    if (liveGuidance && !liveGuidance.arrived) {
+      const dirX = Math.sin(liveGuidance.bearingRadians);
+      const dirZ = -Math.cos(liveGuidance.bearingRadians);
+      const arrowX = player.position.x + dirX * 2.25;
+      const arrowZ = player.position.z + dirZ * 2.25;
+      const arrowBaseY = groundHeightAt(arrowX, arrowZ) - PLAYER_FOOT_OFFSET;
+      gpsPlayerArrow.position.set(
+        arrowX,
+        arrowBaseY + 0.55 + (prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 4.2) * 0.08),
+        arrowZ,
+      );
+      gpsPlayerArrow.rotation.y = -liveGuidance.bearingRadians;
+      gpsPlayerArrow.visible = true;
     }
   }
 
