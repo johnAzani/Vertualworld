@@ -385,11 +385,29 @@ function findCurveFraction(curve, x, z, samples = 800, wrapAtEnd = true) {
   return wrapAtEnd && bestFraction > 0.98 ? 0 : bestFraction;
 }
 
+function createCanvas2D(width, height) {
+  if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return { canvas, context: canvas.getContext('2d') };
+  }
+  const noopContext = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    textAlign: 'center',
+    textBaseline: 'middle',
+    font: '',
+    fillRect() {},
+    strokeRect() {},
+    fillText() {},
+  };
+  return { canvas: { width, height }, context: noopContext };
+}
+
 function makeStationSignTexture(title, subtitle) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = 160;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(768, 160);
   context.fillStyle = '#173d35';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#d8bf7f';
@@ -413,10 +431,7 @@ function makeStationSignTexture(title, subtitle) {
 }
 
 function makeTrainSignTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = 160;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(768, 160);
   context.fillStyle = '#163c35';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#dfc887';
@@ -681,10 +696,7 @@ function addBusTerminal(scene, terminal, terrainHeight) {
 }
 
 function makeBusSignTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = 160;
-  const context = canvas.getContext('2d');
+  const { canvas, context } = createCanvas2D(768, 160);
   context.fillStyle = '#214f45';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = '#e3c47c';
@@ -862,6 +874,7 @@ export function createTransportNetwork(scene, terrainHeight) {
       const sx = cw.x + lateral * cosY;
       const sz = cw.z - lateral * sinY;
       const stripeGeo = new THREE.BoxGeometry(0.28, 0.008, 1.85);
+      stripeGeo.deleteAttribute('uv');
       stripeGeo.rotateY(cw.yaw);
       stripeGeo.translate(sx, baseY, sz);
       whiteLaneGeometryParts.push(stripeGeo);

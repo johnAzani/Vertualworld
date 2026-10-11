@@ -8,10 +8,12 @@ import {
   BUS_TERMINAL_LAYOUT,
   CROSSWALK_LAYOUT,
   createPlanarCurve,
+  createTransportNetwork,
   RAIL_ROUTE_XZ,
   ROAD_NETWORK_LAYOUT,
   ROUNDABOUT_LAYOUT,
   STATION_LAYOUT,
+  updateTransportNetwork,
 } from '../src/transport.js';
 import {
   ABUJA_RIVER_WATERWAY_POINTS,
@@ -503,6 +505,27 @@ test('Abuja City Rail route passes under elevated flyover main spans without tou
     }
   }
 });
+
+test('createTransportNetwork builds all merged road, curb, lane, crosswalk, roundabout, rail, and vehicle meshes without null geometries', () => {
+  const scene = new THREE.Scene();
+  const network = createTransportNetwork(scene, () => 0);
+  assert.ok(network);
+  assert.equal(network.stations.length, STATION_LAYOUT.length);
+  assert.equal(network.busTerminals.length, BUS_TERMINAL_LAYOUT.length);
+  assert.equal(network.roundabouts.length, ROUNDABOUT_LAYOUT.length);
+  assert.equal(network.crosswalks.length, CROSSWALK_LAYOUT.length);
+
+  scene.traverse((obj) => {
+    if (obj.isMesh) {
+      assert.ok(obj.geometry, `Mesh "${obj.name}" must have a non-null BufferGeometry`);
+      assert.ok(obj.geometry.attributes.position, `Mesh "${obj.name}" must have a position attribute`);
+    }
+  });
+
+  const step = updateTransportNetwork(network, 0.5);
+  assert.ok(step);
+});
+
 
 
 
