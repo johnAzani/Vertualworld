@@ -673,12 +673,13 @@ export function getBridgeFlyoverGuardrailColliders() {
       const z = structure.axis === 'z' ? structure.z : structure.z + side * guardrailOffset;
       colliders.push({
         id: `${structure.id}-guardrail-${side < 0 ? 'left' : 'right'}`,
+        structureId: structure.id,
         x,
         z,
         yaw: 0,
         halfX: structure.axis === 'z' ? 0.24 : halfL,
         halfZ: structure.axis === 'z' ? halfL : 0.24,
-        height: structure.deckHeight + 1.4,
+        height: 1.2,
         onBridgeDeck: true,
       });
     }

@@ -233,14 +233,14 @@ const sprintButtonLabel = document.querySelector('#sprint-button-label');
 const topbarWalletButton = document.querySelector('#topbar-wallet-button');
 const topbarWalletBalance = document.querySelector('#topbar-wallet-balance');
 const districtNavBar = document.querySelector('#district-nav-bar');
-const hudQuickTaxiButton = document.querySelector('#hud-quick-taxi-button');
+const hudHailTaxiButton = document.querySelector('#hud-quick-taxi-button');
 const gpsGuidanceBanner = document.querySelector('#gps-guidance-banner');
 const gpsCompassArrow = document.querySelector('#gps-compass-arrow');
 const gpsDestinationTitle = document.querySelector('#gps-destination-title');
 const gpsRouteSubtitle = document.querySelector('#gps-route-subtitle');
 const gpsHailTaxiButton = document.querySelector('#gps-hail-taxi-button');
 const gpsClearButton = document.querySelector('#gps-clear-button');
-const mapCardElement = document.querySelector('.map-card');
+const hudMapCard = document.querySelector('#hud-map-card') || document.querySelector('.map-card');
 const phoneMapQuickDestinations = document.querySelector('#phone-map-quick-destinations');
 const homeTransitionElement = document.querySelector('#home-transition');
 const mapCanvas = document.querySelector('#map-canvas');
@@ -406,11 +406,11 @@ reducedMotionQuery?.addEventListener?.('change', (event) => {
 const WORLD_RADIUS = 128;
 const SEED_POSITIONS = [
   new THREE.Vector2(-24, -18),
-  new THREE.Vector2(30, -48),
+  new THREE.Vector2(27, -37),
   new THREE.Vector2(-52, 42),
 ];
 const PATH_POINTS_XZ = [
-  [36, -24], [28, -28], [22, -34], [18, -42], [18, -56],
+  [35, -26], [29, -31], [25, -38], [24, -46], [21.5, -52], [18, -56],
 ];
 
 let renderer;
@@ -3039,8 +3039,8 @@ function createBridgesAndFlyovers() {
       }
     }
 
-    // Heavy reinforced concrete T-piers supporting the main elevated span
-    for (const pierAlong of [-9.5, 0, 9.5]) {
+    // Heavy reinforced concrete T-piers supporting the main elevated span while leaving a clear center portal
+    for (const pierAlong of [-8.8, 8.8]) {
       const px = isZAxis ? spec.x : spec.x + pierAlong;
       const pz = isZAxis ? spec.z + pierAlong : spec.z;
       const groundY = terrainHeight(px, pz);
@@ -3484,7 +3484,7 @@ const seedRingMaterial = new THREE.MeshStandardMaterial({ color: 0xffdf94, rough
 for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   const position = SEED_POSITIONS[i];
   const seedGroup = new THREE.Group();
-  seedGroup.position.set(position.x, terrainHeight(position.x, position.y), position.y);
+  seedGroup.position.set(position.x, groundHeightAt(position.x, position.y) - PLAYER_FOOT_OFFSET, position.y);
   const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.31, 1), seedMaterial);
   orb.position.y = 1.16;
   orb.scale.set(0.8, 1.1, 0.8);
@@ -3513,7 +3513,7 @@ const dailyGoldenSeedSpot = getDailyGoldenSeedSpot();
 const dailyGoldenSeedGroup = new THREE.Group();
 dailyGoldenSeedGroup.position.set(
   dailyGoldenSeedSpot.x,
-  terrainHeight(dailyGoldenSeedSpot.x, dailyGoldenSeedSpot.z),
+  groundHeightAt(dailyGoldenSeedSpot.x, dailyGoldenSeedSpot.z) - PLAYER_FOOT_OFFSET,
   dailyGoldenSeedSpot.z,
 );
 const dailyGoldenOrbMaterial = new THREE.MeshStandardMaterial({
@@ -4264,11 +4264,19 @@ function resolveWorldObstacleCollisions() {
   const collisionHeight = isDriving ? CAR_BODY_HEIGHT : PLAYER_BODY_HEIGHT;
   for (let pass = 0; pass < 3; pass += 1) {
     let resolvedAny = false;
-    const bridgeHit = getBridgeFlyoverAt(player.position.x, player.position.z, 0.35);
+    const bridgeHit = getBridgeFlyoverAt(player.position.x, player.position.z, 0.45);
     const bridgeElevation = bridgeHit ? bridgeHit.elevation : 0;
     for (const obstacle of worldObstacleColliders) {
       if (isDriving && obstacle.vehicleGroup === playerCar?.group) continue;
-      const effectiveBottom = obstacle.onBridgeDeck ? jumpHeight : jumpHeight + bridgeElevation;
+      if (obstacle.structureId && bridgeHit?.structure.id !== obstacle.structureId) continue;
+      let effectiveBottom = obstacle.onBridgeDeck ? jumpHeight : jumpHeight + bridgeElevation;
+      if (obstacle.vehicleGroup) {
+        const vx = obstacle.vehicleGroup.position.x;
+        const vz = obstacle.vehicleGroup.position.z;
+        const vehicleBridgeHit = getBridgeFlyoverAt(vx, vz, 0.35);
+        const vehicleElev = vehicleBridgeHit ? vehicleBridgeHit.elevation : 0;
+        effectiveBottom = jumpHeight + bridgeElevation - vehicleElev;
+      }
       const effectiveTop = effectiveBottom + collisionHeight;
       const overlapsVertically = effectiveBottom < obstacle.height && effectiveTop > 0;
       if (!overlapsVertically) continue;

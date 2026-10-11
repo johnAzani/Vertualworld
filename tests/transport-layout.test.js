@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
 import { resolveDiscAgainstOrientedBox } from '../src/collision.js';
+import { DAILY_GOLDEN_SEED_SPOTS } from '../src/daily-return.js';
 import {
   BUS_ROUTE_XZ,
   BUS_TERMINAL_LAYOUT,
@@ -456,5 +457,52 @@ test('indoor mall has an open front entrance portal, central concourse, and 6 wa
   const partitionWall = wallColliders.find((wall) => wall.id === 'mall-partition-l1-l2');
   assert.ok(resolveDiscAgainstOrientedBox({ ...partitionProbe }, partitionWall, 0.42));
 });
+
+test('Abuja City Rail route passes under elevated flyover main spans without touching approach ramps and daily golden seed spots stay clear of roads, rail, and river', () => {
+  const railCurve = createPlanarCurve(RAIL_ROUTE_XZ, true);
+  const riverCurve = createPlanarCurve(ABUJA_RIVER_WATERWAY_POINTS, false);
+  const roadCurves = ROAD_NETWORK_LAYOUT.map((r) => ({ ...r, curve: createPlanarCurve(r.points, false) }));
+
+  for (let i = 0; i <= 500; i += 1) {
+    const pt = railCurve.getPointAt(i / 500);
+    const bridgeHit = getBridgeFlyoverAt(pt.x, pt.z, 0.5);
+    if (bridgeHit) {
+      assert.equal(
+        bridgeHit.onRamp,
+        false,
+        `rail track sample (${pt.x.toFixed(1)}, ${pt.z.toFixed(1)}) should pass under the elevated main span of ${bridgeHit.structure.id}, never through its solid approach ramp`,
+      );
+      assert.ok(
+        bridgeHit.elevation >= 3.4,
+        `flyover ${bridgeHit.structure.id} should provide >=3.4m vertical clearance over the rail track`,
+      );
+    }
+  }
+
+  for (const spot of DAILY_GOLDEN_SEED_SPOTS) {
+    for (let i = 0; i <= 400; i += 1) {
+      const rp = railCurve.getPointAt(i / 400);
+      assert.ok(
+        Math.hypot(rp.x - spot.x, rp.z - spot.z) >= 3.0,
+        `daily golden seed "${spot.id}" should stay clear of the rail track`,
+      );
+      const wp = riverCurve.getPointAt(i / 400);
+      assert.ok(
+        Math.hypot(wp.x - spot.x, wp.z - spot.z) >= 5.5,
+        `daily golden seed "${spot.id}" should stay clear of the river waterway`,
+      );
+    }
+    for (const rc of roadCurves) {
+      for (let i = 0; i <= 240; i += 1) {
+        const p = rc.curve.getPointAt(i / 240);
+        assert.ok(
+          Math.hypot(p.x - spot.x, p.z - spot.z) >= rc.halfWidth + 1.0,
+          `daily golden seed "${spot.id}" should stay clear of road "${rc.id}"`,
+        );
+      }
+    }
+  }
+});
+
 
 

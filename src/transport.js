@@ -18,10 +18,10 @@ export const BUS_ROUTE_XZ = [
 
 export const RAIL_ROUTE_XZ = [
   [42, -24], [40, -38], [30, -48], [18, -50],
-  [0, -54], [-18, -44], [-30, -24], [-32, 0],
-  [-34, 24], [-38, 44], [-44, 56], [-30, 68],
+  [4, -55], [-16, -55], [-31, -53], [-35, -44], [-30, -24], [-26, -4],
+  [-27, 12], [-34, 24], [-28, 36], [-29, 46], [-44, 56], [-30, 68],
   [-6, 74], [20, 82], [44, 82], [52, 68],
-  [47, 56], [42, 36], [38, 16], [41, -4],
+  [48, 56], [44, 29], [38, 16], [44, 3], [43, -10],
 ];
 
 export const STATION_LAYOUT = [
@@ -943,14 +943,39 @@ export function createTransportNetwork(scene, terrainHeight) {
   const lampPoles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.085, 3.6, 7), lampPoleMat, lampCount);
   const lampBulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 8, 6), lampBulbMat, lampCount);
   const lampXform = new THREE.Object3D();
+  const isLampSpotClear = (cx, cz) => {
+    for (const rb of ROUNDABOUT_LAYOUT) {
+      if (Math.hypot(cx - rb.x, cz - rb.z) < rb.outerRadius + 0.85) return false;
+    }
+    for (const seg of roadSegments) {
+      if (distanceSquaredToSegment(cx, cz, seg).distanceSquared < (seg.halfWidth + 0.65) ** 2) {
+        return false;
+      }
+    }
+    return true;
+  };
   for (let i = 0; i < lampCount; i += 1) {
     const frac = (i + 0.5) / lampCount;
     const pt = roadCurve.getPointAt(frac);
     const tan = roadCurve.getTangentAt(frac).setY(0).normalize();
     const normal = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
-    const side = i % 2 === 0 ? 1 : -1;
-    const lx = pt.x + normal.x * side * (ROAD_HALF_WIDTH + 1.15);
-    const lz = pt.z + normal.z * side * (ROAD_HALF_WIDTH + 1.15);
+    let side = i % 2 === 0 ? 1 : -1;
+    let offset = ROAD_HALF_WIDTH + 1.15;
+    let lx = pt.x + normal.x * side * offset;
+    let lz = pt.z + normal.z * side * offset;
+    if (!isLampSpotClear(lx, lz)) {
+      const altX = pt.x - normal.x * side * offset;
+      const altZ = pt.z - normal.z * side * offset;
+      if (isLampSpotClear(altX, altZ)) {
+        side = -side;
+        lx = altX;
+        lz = altZ;
+      } else {
+        offset = ROAD_HALF_WIDTH + 2.45;
+        lx = pt.x + normal.x * side * offset;
+        lz = pt.z + normal.z * side * offset;
+      }
+    }
     const ly = roadTerrainHeight(pt.x, pt.z) + ROAD_SURFACE_OFFSET;
     lampXform.position.set(lx, ly + 1.8, lz);
     lampXform.rotation.set(0, 0, 0);
@@ -1356,6 +1381,11 @@ export function getTransportSurfaceHeight(network, x, z) {
 export function isReservedTransportSpot(network, x, z, padding = 0) {
   if (!network) return false;
   const margin = Math.max(0, padding);
+  if (network.roundabouts) {
+    for (const rb of network.roundabouts) {
+      if (Math.hypot(x - rb.x, z - rb.z) < rb.outerRadius + 1.5 + margin) return true;
+    }
+  }
   for (const segment of network.roadSegments) {
     const reserveWidth = segment.halfWidth + margin;
     if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;

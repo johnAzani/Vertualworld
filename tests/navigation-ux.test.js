@@ -82,9 +82,10 @@ describe('navigation and user experience helpers', () => {
     assert.equal(farCorner, null);
   });
 
-  it('wires HUD quick-nav, live wallet balance pill, GPS banner, and touch sprint toggle into HTML and CSS', () => {
+  it('wires HUD quick-nav, live wallet balance pill, GPS banner, and touch sprint toggle into HTML, CSS, and main.js without undeclared DOM refs', () => {
     const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
     const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    const mainJs = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 
     assert.ok(html.includes('id="topbar-wallet-button"'));
     assert.ok(html.includes('id="topbar-wallet-balance"'));
@@ -92,9 +93,28 @@ describe('navigation and user experience helpers', () => {
     assert.ok(html.includes('id="gps-guidance-banner"'));
     assert.ok(html.includes('id="phone-map-quick-destinations"'));
     assert.ok(html.includes('id="sprint-toggle-button"'));
+    assert.ok(html.includes('id="hud-map-card"'));
 
     assert.ok(css.includes('.district-nav-bar'));
     assert.ok(css.includes('.gps-guidance-banner'));
     assert.ok(css.includes('.sprint-toggle-button'));
+
+    for (const domBinding of [
+      'topbarWalletButton',
+      'topbarWalletBalance',
+      'districtNavBar',
+      'hudHailTaxiButton',
+      'gpsGuidanceBanner',
+      'gpsHailTaxiButton',
+      'gpsClearButton',
+      'hudMapCard',
+      'phoneMapQuickDestinations',
+      'sprintToggleButton',
+    ]) {
+      assert.ok(
+        mainJs.includes(`const ${domBinding} =`),
+        `Expected "const ${domBinding} =" declaration in src/main.js`,
+      );
+    }
   });
 });
