@@ -524,21 +524,21 @@ export function createPrivateTaxiMesh() {
     map: roofSignTexture || null,
   });
 
-  const addPart = (w, h, d, mat, x, y, z) => {
+  const addPart = (w, h, d, mat, x, y, z, castShadow = false) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, y, z);
-    mesh.castShadow = true;
+    mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
     group.add(mesh);
     return mesh;
   };
 
   // Lower chassis, executive emerald body, and gold taxi side stripes
-  addPart(1.94, 0.2, 4.18, trimMaterial, 0, 0.27, 0);
-  addPart(1.88, 0.48, 3.92, bodyMaterial, 0, 0.54, 0);
-  addPart(1.91, 0.12, 3.66, goldTrimMaterial, 0, 0.58, 0);
-  addPart(1.62, 0.48, 2.04, cabinMaterial, 0, 0.98, 0.08);
-  addPart(1.68, 0.4, 1.88, glassMaterial, 0, 0.97, 0.08);
+  addPart(1.94, 0.2, 4.18, trimMaterial, 0, 0.27, 0, false);
+  addPart(1.88, 0.48, 3.92, bodyMaterial, 0, 0.54, 0, true);
+  addPart(1.91, 0.12, 3.66, goldTrimMaterial, 0, 0.58, 0, false);
+  addPart(1.62, 0.48, 2.04, cabinMaterial, 0, 0.98, 0.08, true);
+  addPart(1.68, 0.4, 1.88, glassMaterial, 0, 0.97, 0.08, false);
 
   // Illuminated rooftop TAXI beacon
   const roofPedestal = addPart(0.56, 0.08, 0.28, trimMaterial, 0, 1.24, -0.05);
@@ -569,7 +569,7 @@ export function createPrivateTaxiMesh() {
     pivot.position.set(x, 0.32, z);
     const tire = new THREE.Mesh(wheelGeometry, tireMaterial);
     const hub = new THREE.Mesh(hubGeometry, hubMaterial);
-    tire.castShadow = true;
+    tire.castShadow = false;
     pivot.add(tire, hub);
     group.add(pivot);
     wheelPivots.push({ pivot, tire, isFront });

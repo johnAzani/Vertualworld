@@ -216,10 +216,20 @@ function mergeStaticMeshes(parent, excludedMeshes = new Set()) {
     const geometries = [];
     let mergedGeometry;
     try {
+      const needsNonIndexed = batch.meshes.some((m) => !m.geometry.index);
+      const allHaveUv = batch.meshes.every((m) => Boolean(m.geometry.attributes?.uv));
       for (const mesh of batch.meshes) {
         mesh.updateMatrix();
-        const geometry = mesh.geometry.clone();
+        let geometry = mesh.geometry.clone();
         geometry.clearGroups();
+        if (needsNonIndexed && geometry.index) {
+          const nonIdx = geometry.toNonIndexed();
+          geometry.dispose();
+          geometry = nonIdx;
+        }
+        if (!allHaveUv && geometry.attributes?.uv) {
+          geometry.deleteAttribute('uv');
+        }
         geometry.applyMatrix4(mesh.matrix);
         geometries.push(geometry);
       }
@@ -322,35 +332,49 @@ function createDashedLineGeometry(curve, terrainHeight, dashLength = 1.35, gapLe
 
 function createSurfaceSegments(curve, terrainHeight, sampleCount, halfWidth, heightOffset) {
   const segments = [];
+  const first = new THREE.Vector3();
+  const second = new THREE.Vector3();
   for (let index = 0; index < sampleCount; index += 1) {
-    const first = curve.getPointAt(index / sampleCount);
-    const second = curve.getPointAt((index + 1) / sampleCount);
+    curve.getPointAt(index / sampleCount, first);
+    curve.getPointAt((index + 1) / sampleCount, second);
+    const dx = second.x - first.x;
+    const dz = second.z - first.z;
+    const lengthSquared = dx * dx + dz * dz;
     segments.push({
       ax: first.x,
       az: first.z,
       bx: second.x,
       bz: second.z,
+      dx,
+      dz,
+      invLengthSquared: lengthSquared > 0 ? 1 / lengthSquared : 0,
+      minX: Math.min(first.x, second.x) - halfWidth,
+      maxX: Math.max(first.x, second.x) + halfWidth,
+      minZ: Math.min(first.z, second.z) - halfWidth,
+      maxZ: Math.max(first.z, second.z) + halfWidth,
       ay: terrainHeight(first.x, first.z) + heightOffset,
       by: terrainHeight(second.x, second.z) + heightOffset,
       halfWidth,
+      halfWidthSquared: halfWidth * halfWidth,
     });
   }
   return segments;
 }
 
+const SEGMENT_DIST_SCRATCH = { distanceSquared: 0, height: 0 };
+
 function distanceSquaredToSegment(x, z, segment) {
-  const dx = segment.bx - segment.ax;
-  const dz = segment.bz - segment.az;
-  const lengthSquared = dx * dx + dz * dz;
-  const t = lengthSquared === 0
+  const dx = segment.dx ?? (segment.bx - segment.ax);
+  const dz = segment.dz ?? (segment.bz - segment.az);
+  const invLenSq = segment.invLengthSquared ?? ((dx * dx + dz * dz) > 0 ? 1 / (dx * dx + dz * dz) : 0);
+  const t = invLenSq === 0
     ? 0
-    : THREE.MathUtils.clamp(((x - segment.ax) * dx + (z - segment.az) * dz) / lengthSquared, 0, 1);
+    : THREE.MathUtils.clamp(((x - segment.ax) * dx + (z - segment.az) * dz) * invLenSq, 0, 1);
   const nearestX = segment.ax + dx * t;
   const nearestZ = segment.az + dz * t;
-  return {
-    distanceSquared: (x - nearestX) ** 2 + (z - nearestZ) ** 2,
-    height: THREE.MathUtils.lerp(segment.ay, segment.by, t),
-  };
+  SEGMENT_DIST_SCRATCH.distanceSquared = (x - nearestX) ** 2 + (z - nearestZ) ** 2;
+  SEGMENT_DIST_SCRATCH.height = segment.ay + (segment.by - segment.ay) * t;
+  return SEGMENT_DIST_SCRATCH;
 }
 
 function createOffsetRailCurve(centerCurve, terrainHeight, lateralOffset, sampleCount = 420) {
@@ -470,6 +494,7 @@ function addTrain(scene) {
   addTrainBox(1.9, 0.09, 6.42, trimMaterial, 0, 0.91, 0);
   addTrainBox(1.72, 0.08, 6.0, lowerBodyMaterial, 0, 0.43, 0.02);
 
+  const trainSignMaterial = new THREE.MeshBasicMaterial({ map: makeTrainSignTexture(), toneMapped: false, side: THREE.DoubleSide });
   for (const side of [-1, 1]) {
     addTrainBox(0.06, 0.11, 5.82, trimMaterial, side * 0.946, 0.94, 0);
     for (const z of [-1.95, -0.72, 0.72, 1.95]) {
@@ -486,7 +511,7 @@ function addTrain(scene) {
 
     const sideSign = new THREE.Mesh(
       new THREE.PlaneGeometry(2.42, 0.42),
-      new THREE.MeshBasicMaterial({ map: makeTrainSignTexture(), toneMapped: false, side: THREE.DoubleSide }),
+      trainSignMaterial,
     );
     sideSign.position.set(side * 0.952, 1.04, 0);
     sideSign.rotation.y = side * Math.PI / 2;
@@ -507,7 +532,7 @@ function addTrain(scene) {
     for (const z of [-1.88, 1.88]) {
       const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
       wheel.position.set(side * 0.78, 0.36, z);
-      wheel.castShadow = true;
+      wheel.castShadow = false;
       group.add(wheel);
       wheels.push(wheel);
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.195, 12), trimMaterial);
@@ -522,10 +547,6 @@ function addTrain(scene) {
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.095, 9, 7), headlightMaterial);
     lamp.position.set(side * 0.56, 1.02, -TRAIN_LENGTH / 2 - 0.075);
     group.add(lamp);
-    const light = new THREE.PointLight(0xffdf9a, 0, 12, 2);
-    light.position.copy(lamp.position);
-    group.add(light);
-    headlights.push(light);
     const tail = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.12, 0.06), tailLightMaterial);
     tail.position.set(side * 0.62, 0.98, TRAIN_LENGTH / 2 + 0.045);
     group.add(tail);
@@ -535,32 +556,46 @@ function addTrain(scene) {
   return { group, wheels, headlightMaterial, tailLightMaterial, headlights };
 }
 
+const STATION_SHARED_MATERIALS = {
+  platformMaterial: new THREE.MeshStandardMaterial({ color: 0xb8b29e, roughness: 0.92 }),
+  edgeMaterial: new THREE.MeshStandardMaterial({ color: 0xe3bd66, roughness: 0.72, emissive: 0x453514, emissiveIntensity: 0.12 }),
+  supportMaterial: new THREE.MeshStandardMaterial({ color: 0x50645a, roughness: 0.67, metalness: 0.2 }),
+  roofMaterial: new THREE.MeshStandardMaterial({ color: 0x3a6254, roughness: 0.76, metalness: 0.08 }),
+  terminalWallMaterial: new THREE.MeshStandardMaterial({ color: 0xd5d0b9, roughness: 0.84 }),
+  terminalTrimMaterial: new THREE.MeshStandardMaterial({ color: 0x6e8b73, roughness: 0.62, metalness: 0.08 }),
+  terminalGlassMaterial: new THREE.MeshStandardMaterial({ color: 0x79aeb0, emissive: 0x183c3a, emissiveIntensity: 0.14, roughness: 0.24, metalness: 0.08, side: THREE.DoubleSide }),
+  benchMaterial: new THREE.MeshStandardMaterial({ color: 0x587e69, roughness: 0.72 }),
+  lampMaterial: new THREE.MeshStandardMaterial({ color: 0xffe6aa, emissive: 0xe8aa51, emissiveIntensity: 0.12, roughness: 0.28 }),
+};
+
 function addStation(scene, station, terrainHeight) {
   const root = new THREE.Group();
   root.name = `${station.name} Rail Terminal`;
   root.position.set(station.x, terrainHeight(station.x, station.z) + 0.025, station.z);
   root.rotation.y = station.yaw;
 
-  const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xb8b29e, roughness: 0.92 });
-  const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0xe3bd66, roughness: 0.72, emissive: 0x453514, emissiveIntensity: 0.12 });
-  const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x50645a, roughness: 0.67, metalness: 0.2 });
-  const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x3a6254, roughness: 0.76, metalness: 0.08 });
-  const terminalWallMaterial = new THREE.MeshStandardMaterial({ color: 0xd5d0b9, roughness: 0.84 });
-  const terminalTrimMaterial = new THREE.MeshStandardMaterial({ color: 0x6e8b73, roughness: 0.62, metalness: 0.08 });
-  const terminalGlassMaterial = new THREE.MeshStandardMaterial({ color: 0x79aeb0, emissive: 0x183c3a, emissiveIntensity: 0.14, roughness: 0.24, metalness: 0.08, side: THREE.DoubleSide });
-  const benchMaterial = new THREE.MeshStandardMaterial({ color: 0x587e69, roughness: 0.72 });
-  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffe6aa, emissive: 0xe8aa51, emissiveIntensity: 0.12, roughness: 0.28 });
+  const {
+    platformMaterial,
+    edgeMaterial,
+    supportMaterial,
+    roofMaterial,
+    terminalWallMaterial,
+    terminalTrimMaterial,
+    terminalGlassMaterial,
+    benchMaterial,
+    lampMaterial,
+  } = STATION_SHARED_MATERIALS;
   const stationCanvas = makeStationSignTexture(station.name, 'RAIL TERMINAL  ·  ABUJA CITY RAIL');
   const stationSignMaterial = new THREE.MeshBasicMaterial({ map: stationCanvas, toneMapped: false, side: THREE.DoubleSide });
 
   addBox(root, station.length, 0.34, station.width, platformMaterial, 0, 0.17, 0, false, true);
   addBox(root, station.length - 0.18, 0.035, 0.14, edgeMaterial, 0, 0.36, -station.platformSide * (station.width / 2 - 0.14), false, false);
-  addBox(root, station.length, 0.08, station.width + 0.18, supportMaterial, 0, 0.025, 0, false, true);
+  addBox(root, station.length, 0.08, station.width + 0.18, supportMaterial, 0, 0.025, 0, false, false);
 
   const shelterSide = station.platformSide;
   const shelterZ = shelterSide * 0.66;
   for (const x of [-2.35, 2.35]) {
-    addBox(root, 0.1, 2.08, 0.1, supportMaterial, x, 1.38, shelterZ, true, false);
+    addBox(root, 0.1, 2.08, 0.1, supportMaterial, x, 1.38, shelterZ, false, false);
   }
   addBox(root, 5.05, 0.16, 1.42, roofMaterial, 0, 2.48, shelterZ, true, false);
   addBox(root, 4.84, 0.13, 0.08, edgeMaterial, 0, 2.37, shelterZ - shelterSide * 0.68, false, false);
@@ -597,7 +632,7 @@ function addStation(scene, station, terrainHeight) {
   addBox(root, 4.95, 0.72, 0.12, supportMaterial, 0, 2.05, terminalCenterZ - station.platformSide * 2.08, false, false);
   const terminalSign = new THREE.Mesh(
     new THREE.PlaneGeometry(4.7, 0.58),
-    new THREE.MeshBasicMaterial({ map: makeStationSignTexture(station.name, 'RAIL TERMINAL  ·  PLATFORM 01'), toneMapped: false, side: THREE.DoubleSide }),
+    stationSignMaterial,
   );
   terminalSign.position.set(0, 2.05, terminalCenterZ - station.platformSide * 2.15);
   terminalSign.rotation.y = station.platformSide > 0 ? Math.PI : 0;
@@ -612,10 +647,7 @@ function addStation(scene, station, terrainHeight) {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), lampMaterial);
     bulb.position.set(x, 2.34, shelterZ);
     root.add(bulb);
-    const light = new THREE.PointLight(0xffd792, 0, 11, 2);
-    light.position.set(x, 2.22, shelterZ);
-    root.add(light);
-    bulbs.push({ light, material: lampMaterial });
+    bulbs.push({ material: lampMaterial });
   }
 
   for (const x of [-2.0, 2.0]) {
@@ -634,18 +666,29 @@ function addStation(scene, station, terrainHeight) {
   station.lights = bulbs;
 }
 
+const BUS_TERMINAL_SHARED_MATERIALS = {
+  platformMaterial: new THREE.MeshStandardMaterial({ color: 0xb9b5a3, roughness: 0.91 }),
+  curbMaterial: new THREE.MeshStandardMaterial({ color: 0xe1bf70, roughness: 0.68, emissive: 0x493612, emissiveIntensity: 0.1 }),
+  structureMaterial: new THREE.MeshStandardMaterial({ color: 0x416b59, roughness: 0.72, metalness: 0.08 }),
+  wallMaterial: new THREE.MeshStandardMaterial({ color: 0xd8d1b8, roughness: 0.82 }),
+  glassMaterial: new THREE.MeshStandardMaterial({ color: 0x77aeb1, emissive: 0x163e3d, emissiveIntensity: 0.14, roughness: 0.23, metalness: 0.08, side: THREE.DoubleSide }),
+  lampMaterial: new THREE.MeshStandardMaterial({ color: 0xffe4a8, emissive: 0xe1a751, emissiveIntensity: 0.12, roughness: 0.28 }),
+};
+
 function addBusTerminal(scene, terminal, terrainHeight) {
   const root = new THREE.Group();
   root.name = `${terminal.name} Bus Terminal`;
   root.position.set(terminal.x, terrainHeight(terminal.x, terminal.z) + 0.025, terminal.z);
   root.rotation.y = terminal.yaw;
 
-  const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xb9b5a3, roughness: 0.91 });
-  const curbMaterial = new THREE.MeshStandardMaterial({ color: 0xe1bf70, roughness: 0.68, emissive: 0x493612, emissiveIntensity: 0.1 });
-  const structureMaterial = new THREE.MeshStandardMaterial({ color: 0x416b59, roughness: 0.72, metalness: 0.08 });
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xd8d1b8, roughness: 0.82 });
-  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x77aeb1, emissive: 0x163e3d, emissiveIntensity: 0.14, roughness: 0.23, metalness: 0.08, side: THREE.DoubleSide });
-  const lampMaterial = new THREE.MeshStandardMaterial({ color: 0xffe4a8, emissive: 0xe1a751, emissiveIntensity: 0.12, roughness: 0.28 });
+  const {
+    platformMaterial,
+    curbMaterial,
+    structureMaterial,
+    wallMaterial,
+    glassMaterial,
+    lampMaterial,
+  } = BUS_TERMINAL_SHARED_MATERIALS;
   const signMaterial = new THREE.MeshBasicMaterial({ map: makeStationSignTexture(terminal.name, 'BUS TERMINAL  ·  ABUJA CITY BUS'), toneMapped: false, side: THREE.DoubleSide });
   const roadSide = terminal.roadSide;
   const hallZ = -roadSide * 0.72;
@@ -731,6 +774,7 @@ function addBus(scene) {
   addBox(group, 2.05, 1.28, BUS_LENGTH, bodyMaterial, 0, 1.34, 0);
   addBox(group, 2.1, 0.16, 5.94, roofMaterial, 0, 2.06, 0.02);
   addBox(group, 2.09, 0.1, 5.8, trimMaterial, 0, 0.92, 0);
+  const busSignMaterial = new THREE.MeshBasicMaterial({ map: makeBusSignTexture(), toneMapped: false, side: THREE.DoubleSide });
   for (const side of [-1, 1]) {
     for (const z of [-1.85, -0.55, 0.83, 1.92]) {
       const window = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.57), windowMaterial);
@@ -744,7 +788,7 @@ function addBus(scene) {
     group.add(door);
     const routeSign = new THREE.Mesh(
       new THREE.PlaneGeometry(2.25, 0.45),
-      new THREE.MeshBasicMaterial({ map: makeBusSignTexture(), toneMapped: false, side: THREE.DoubleSide }),
+      busSignMaterial,
     );
     routeSign.position.set(side * 1.045, 1.02, 0.05);
     routeSign.rotation.y = side * Math.PI / 2;
@@ -764,7 +808,7 @@ function addBus(scene) {
     for (const z of [-1.78, 1.78]) {
       const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
       wheel.position.set(side * 0.88, 0.34, z);
-      wheel.castShadow = true;
+      wheel.castShadow = false;
       group.add(wheel);
       wheels.push(wheel);
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.21, 12), trimMaterial);
@@ -942,6 +986,7 @@ export function createTransportNetwork(scene, terrainHeight) {
     flowerTop.position.set(rb.x, baseY + 0.78, rb.z);
     roundaboutsGroup.add(flowerTop);
   }
+  mergeStaticMeshes(roundaboutsGroup);
   scene.add(roundaboutsGroup);
 
   // Arterial Solar/LED Streetlamps lining the Abuja Ring Expressway
@@ -1023,15 +1068,19 @@ export function createTransportNetwork(scene, terrainHeight) {
   sleepers.instanceMatrix.needsUpdate = true;
   scene.add(sleepers);
 
+  const railGeometryParts = [];
   for (const offset of [-RAIL_GAUGE_HALF_WIDTH, RAIL_GAUGE_HALF_WIDTH]) {
-    const railPath = createOffsetRailCurve(railCurve, terrainHeight, offset);
-    const rail = new THREE.Mesh(new THREE.TubeGeometry(railPath, 520, 0.055, 6, true), railMaterial);
-    rail.castShadow = true;
-    rail.receiveShadow = true;
-    scene.add(rail);
+    const railPath = createOffsetRailCurve(railCurve, terrainHeight, offset, 260);
+    railGeometryParts.push(new THREE.TubeGeometry(railPath, 260, 0.055, 4, true));
   }
+  const mergedRails = new THREE.Mesh(mergeGeometries(railGeometryParts, false), railMaterial);
+  mergedRails.geometry.computeBoundingSphere();
+  mergedRails.castShadow = false;
+  mergedRails.receiveShadow = true;
+  scene.add(mergedRails);
+  for (const g of railGeometryParts) g.dispose();
 
-  const railSegments = createSurfaceSegments(railCurve, terrainHeight, 520, TRACK_HALF_WIDTH, 0.16);
+  const railSegments = createSurfaceSegments(railCurve, terrainHeight, 320, TRACK_HALF_WIDTH, 0.16);
   const roadMapPoints = Array.from({ length: 160 }, (_, index) => {
     const point = roadCurve.getPointAt(index / 159);
     return [point.x, point.z];
@@ -1041,6 +1090,7 @@ export function createTransportNetwork(scene, terrainHeight) {
     return [point.x, point.z];
   });
 
+  const walkwayGeometryParts = [];
   const stations = STATION_LAYOUT.map((layout) => {
     const [railX, railZ] = layout.railPoint;
     const fraction = findCurveFraction(railCurve, railX, railZ);
@@ -1065,10 +1115,8 @@ export function createTransportNetwork(scene, terrainHeight) {
     };
     addStation(scene, station, terrainHeight);
     const pathCurve = createPlanarCurve([[station.x, station.z], layout.accessPoint], false);
-    const path = new THREE.Mesh(createRibbonGeometry(pathCurve, terrainHeight, 36, 0.8, 0.075), walkwayMaterial);
-    path.receiveShadow = true;
-    scene.add(path);
-    station.walkwaySegments = createSurfaceSegments(pathCurve, terrainHeight, 36, 0.8, 0.075);
+    walkwayGeometryParts.push(createRibbonGeometry(pathCurve, terrainHeight, 24, 0.8, 0.075));
+    station.walkwaySegments = createSurfaceSegments(pathCurve, terrainHeight, 24, 0.8, 0.075);
     return station;
   }).sort((a, b) => a.distance - b.distance);
   stations.forEach((station, index) => { station.index = index; });
@@ -1100,19 +1148,26 @@ export function createTransportNetwork(scene, terrainHeight) {
     };
     addBusTerminal(scene, terminal, terrainHeight);
     const pathCurve = createPlanarCurve([[terminal.x, terminal.z], [point.x, point.z]], false);
-    const path = new THREE.Mesh(createRibbonGeometry(pathCurve, terrainHeight, 48, 0.92, 0.075), walkwayMaterial);
-    path.receiveShadow = true;
-    scene.add(path);
-    terminal.walkwaySegments = createSurfaceSegments(pathCurve, terrainHeight, 48, 0.92, 0.075);
+    walkwayGeometryParts.push(createRibbonGeometry(pathCurve, terrainHeight, 28, 0.92, 0.075));
+    terminal.walkwaySegments = createSurfaceSegments(pathCurve, terrainHeight, 28, 0.92, 0.075);
     return terminal;
   }).sort((a, b) => a.distance - b.distance);
   busTerminals.forEach((terminal, index) => { terminal.index = index; });
+
+  if (walkwayGeometryParts.length) {
+    const walkwaysMesh = new THREE.Mesh(mergeGeometries(walkwayGeometryParts, false), walkwayMaterial);
+    walkwaysMesh.geometry.computeBoundingSphere();
+    walkwaysMesh.receiveShadow = true;
+    scene.add(walkwaysMesh);
+    for (const g of walkwayGeometryParts) g.dispose();
+  }
 
   const train = addTrain(scene);
   const bus = addBus(scene);
   const network = {
     roadCurve,
     railCurve,
+    roadLength: roadCurve.getLength(),
     terrainHeight,
     roadTerrainHeight,
     roadPoints: BUS_ROUTE_XZ,
@@ -1143,16 +1198,22 @@ export function createTransportNetwork(scene, terrainHeight) {
       dwellDuration: BUS_TERMINAL_DWELL_SECONDS,
     },
   };
-  updateTrainPosition(network, 0);
-  updateBusPosition(network, 0);
+  updateTrainPosition(network, 0, true);
+  updateBusPosition(network, 0, true);
   return network;
 }
 
-function updateTrainPosition(network, distanceDelta) {
+const TRANSIT_POSE_SCRATCH = {
+  point: new THREE.Vector3(),
+  tangent: new THREE.Vector3(),
+};
+
+function updateTrainPosition(network, distanceDelta, force = false) {
+  if (!force && distanceDelta === 0) return;
   const distance = ((network.distanceTravelled % network.length) + network.length) % network.length;
   const fraction = distance / network.length;
-  const point = network.railCurve.getPointAt(fraction);
-  const tangent = network.railCurve.getTangentAt(fraction);
+  const point = network.railCurve.getPointAt(fraction, TRANSIT_POSE_SCRATCH.point);
+  const tangent = network.railCurve.getTangentAt(fraction, TRANSIT_POSE_SCRATCH.tangent);
   const train = network.train;
   train.group.position.set(point.x, network.terrainHeight(point.x, point.z) + 0.25, point.z);
   train.group.rotation.y = Math.atan2(-tangent.x, -tangent.z);
@@ -1162,12 +1223,13 @@ function updateTrainPosition(network, distanceDelta) {
   }
 }
 
-function updateBusPosition(network, distanceDelta) {
+function updateBusPosition(network, distanceDelta, force = false) {
+  if (!force && distanceDelta === 0) return;
   const service = network.busService;
-  const length = network.roadCurve.getLength();
+  const length = network.roadLength || network.roadCurve.getLength();
   const fraction = THREE.MathUtils.clamp(service.distanceTravelled / length, 0, 1);
-  const point = network.roadCurve.getPointAt(fraction);
-  const tangent = network.roadCurve.getTangentAt(fraction).multiplyScalar(service.direction);
+  const point = network.roadCurve.getPointAt(fraction, TRANSIT_POSE_SCRATCH.point);
+  const tangent = network.roadCurve.getTangentAt(fraction, TRANSIT_POSE_SCRATCH.tangent).multiplyScalar(service.direction);
   const bus = network.bus;
   const roadHeightFn = network.roadTerrainHeight || network.terrainHeight;
   bus.group.position.set(point.x, roadHeightFn(point.x, point.z) + 0.24, point.z);
@@ -1332,8 +1394,9 @@ export function getTransportSurfaceHeight(network, x, z) {
   let height = null;
   let nearestDistanceSquared = Infinity;
   for (const segment of network.roadSegments) {
+    if (x < segment.minX || x > segment.maxX || z < segment.minZ || z > segment.maxZ) continue;
     const result = distanceSquaredToSegment(x, z, segment);
-    if (result.distanceSquared <= segment.halfWidth * segment.halfWidth && result.distanceSquared < nearestDistanceSquared) {
+    if (result.distanceSquared <= segment.halfWidthSquared && result.distanceSquared < nearestDistanceSquared) {
       height = result.height;
       nearestDistanceSquared = result.distanceSquared;
     }
@@ -1349,9 +1412,11 @@ export function getTransportSurfaceHeight(network, x, z) {
     }
   }
   for (const station of network.stations) {
+    if (Math.abs(x - station.x) > 22 || Math.abs(z - station.z) > 22) continue;
     for (const segment of station.walkwaySegments) {
+      if (x < segment.minX || x > segment.maxX || z < segment.minZ || z > segment.maxZ) continue;
       const result = distanceSquaredToSegment(x, z, segment);
-      if (result.distanceSquared <= segment.halfWidth * segment.halfWidth && result.distanceSquared < nearestDistanceSquared) {
+      if (result.distanceSquared <= segment.halfWidthSquared && result.distanceSquared < nearestDistanceSquared) {
         height = result.height;
         nearestDistanceSquared = result.distanceSquared;
       }
@@ -1371,9 +1436,11 @@ export function getTransportSurfaceHeight(network, x, z) {
     }
   }
   for (const terminal of network.busTerminals) {
+    if (Math.abs(x - terminal.x) > 22 || Math.abs(z - terminal.z) > 22) continue;
     for (const segment of terminal.walkwaySegments) {
+      if (x < segment.minX || x > segment.maxX || z < segment.minZ || z > segment.maxZ) continue;
       const result = distanceSquaredToSegment(x, z, segment);
-      if (result.distanceSquared <= segment.halfWidth * segment.halfWidth && result.distanceSquared < nearestDistanceSquared) {
+      if (result.distanceSquared <= segment.halfWidthSquared && result.distanceSquared < nearestDistanceSquared) {
         height = result.height;
         nearestDistanceSquared = result.distanceSquared;
       }
@@ -1400,16 +1467,22 @@ export function isReservedTransportSpot(network, x, z, padding = 0) {
     }
   }
   for (const segment of network.roadSegments) {
+    if (x < segment.minX - margin || x > segment.maxX + margin || z < segment.minZ - margin || z > segment.maxZ + margin) continue;
     const reserveWidth = segment.halfWidth + margin;
     if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
   }
   for (const segment of network.railSegments) {
-    const reserveWidth = segment.halfWidth + 2.6 + margin;
+    const pad = 2.6 + margin;
+    if (x < segment.minX - pad || x > segment.maxX + pad || z < segment.minZ - pad || z > segment.maxZ + pad) continue;
+    const reserveWidth = segment.halfWidth + pad;
     if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
   }
   for (const station of network.stations) {
+    if (Math.abs(x - station.x) > 26 + margin || Math.abs(z - station.z) > 26 + margin) continue;
+    const pad = 1.8 + margin;
     for (const segment of station.walkwaySegments) {
-      const reserveWidth = segment.halfWidth + 1.8 + margin;
+      if (x < segment.minX - pad || x > segment.maxX + pad || z < segment.minZ - pad || z > segment.maxZ + pad) continue;
+      const reserveWidth = segment.halfWidth + pad;
       if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
     }
     if (Math.hypot(x - station.x, z - station.z) < 5.4 + margin) return true;
@@ -1424,8 +1497,11 @@ export function isReservedTransportSpot(network, x, z, padding = 0) {
     }
   }
   for (const terminal of network.busTerminals) {
+    if (Math.abs(x - terminal.x) > 26 + margin || Math.abs(z - terminal.z) > 26 + margin) continue;
+    const pad = 1.8 + margin;
     for (const segment of terminal.walkwaySegments) {
-      const reserveWidth = segment.halfWidth + 1.8 + margin;
+      if (x < segment.minX - pad || x > segment.maxX + pad || z < segment.minZ - pad || z > segment.maxZ + pad) continue;
+      const reserveWidth = segment.halfWidth + pad;
       if (distanceSquaredToSegment(x, z, segment).distanceSquared < reserveWidth * reserveWidth) return true;
     }
     const dx = x - terminal.x;

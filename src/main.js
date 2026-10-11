@@ -429,14 +429,14 @@ try {
   throw error;
 }
 
-const RENDER_PIXEL_RATIO_CAP = window.matchMedia?.('(pointer: coarse)').matches ? 1.4 : 1.5;
+const RENDER_PIXEL_RATIO_CAP = window.matchMedia?.('(pointer: coarse)').matches ? 1.25 : 1.35;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RENDER_PIXEL_RATIO_CAP));
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.info.autoReset = !showPerformanceHud;
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
@@ -473,7 +473,6 @@ scene.add(fillLight);
 
 const moonLight = new THREE.DirectionalLight(0xb5c9e2, 0);
 moonLight.position.set(20, 55, 30);
-scene.add(moonLight);
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -633,13 +632,14 @@ function isReservedSpot(x, z, extra = 0) {
 }
 
 // A gently rolling Abuja plateau blends into a warm, dry-season savannah edge.
-const terrainGeometry = new THREE.PlaneGeometry(310, 310, 144, 144);
+const terrainGeometry = new THREE.PlaneGeometry(310, 310, 96, 96);
 const terrainPositions = terrainGeometry.attributes.position;
-const terrainColors = [];
+const terrainColors = new Float32Array(terrainPositions.count * 3);
 const grassDeep = new THREE.Color(0x5d8057);
 const grassBase = new THREE.Color(0x839b63);
 const grassLight = new THREE.Color(0xb0b47a);
 const savannahSoil = new THREE.Color(0xb39a68);
+const scratchTerrainColor = new THREE.Color();
 for (let i = 0; i < terrainPositions.count; i += 1) {
   const x = terrainPositions.getX(i);
   const z = -terrainPositions.getY(i);
@@ -647,12 +647,15 @@ for (let i = 0; i < terrainPositions.count; i += 1) {
   const height = terrainHeight(x, z);
   terrainPositions.setZ(i, height);
   const patch = 0.5 + 0.5 * Math.sin(x * 0.14 + Math.sin(z * 0.11)) * Math.cos(z * 0.13);
-  const color = grassDeep.clone().lerp(grassBase, 0.42 + patch * 0.42);
-  color.lerp(grassLight, Math.max(0, patch - 0.66) * 0.35);
-  color.lerp(savannahSoil, smoothstep01((radius - 92) / 44) * 0.78);
-  terrainColors.push(color.r, color.g, color.b);
+  scratchTerrainColor.copy(grassDeep).lerp(grassBase, 0.42 + patch * 0.42);
+  scratchTerrainColor.lerp(grassLight, Math.max(0, patch - 0.66) * 0.35);
+  scratchTerrainColor.lerp(savannahSoil, smoothstep01((radius - 92) / 44) * 0.78);
+  const cIdx = i * 3;
+  terrainColors[cIdx] = scratchTerrainColor.r;
+  terrainColors[cIdx + 1] = scratchTerrainColor.g;
+  terrainColors[cIdx + 2] = scratchTerrainColor.b;
 }
-terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(terrainColors, 3));
+terrainGeometry.setAttribute('color', new THREE.BufferAttribute(terrainColors, 3));
 terrainGeometry.rotateX(-Math.PI / 2);
 terrainGeometry.computeVertexNormals();
 const terrain = new THREE.Mesh(terrainGeometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
@@ -722,8 +725,12 @@ const blendedSkyColor = new THREE.Color();
 const solarDirection = new THREE.Vector3();
 const moonDirection = new THREE.Vector3();
 
-function updateDaylight() {
+let lastDaylightMinute = -999;
+
+function updateDaylight(force = false) {
   const minuteOfDay = (worldMinutes + elapsedWorldTime / 18) % (24 * 60);
+  if (!force && Math.abs(minuteOfDay - lastDaylightMinute) < 0.08) return;
+  lastDaylightMinute = minuteOfDay;
   const hour = minuteOfDay / 60;
   const solarPhase = ((hour - 6) / 12) * Math.PI;
   const elevation = Math.sin(solarPhase);
@@ -735,12 +742,16 @@ function updateDaylight() {
   const azimuth = (hour / 24) * Math.PI * 2;
 
   solarDirection.set(Math.cos(azimuth), elevation, Math.sin(azimuth)).normalize();
-  sunLight.position.copy(solarDirection).multiplyScalar(120);
-  sunLight.intensity = THREE.MathUtils.lerp(0.035, 3.1, daylight);
+  moonDirection.copy(solarDirection).negate();
+  if (daylight > 0.15) {
+    sunLight.position.copy(solarDirection).multiplyScalar(120);
+  } else {
+    sunLight.position.copy(moonDirection).multiplyScalar(110);
+  }
+  sunLight.intensity = THREE.MathUtils.lerp(0.28, 3.1, daylight);
   sunLight.color.copy(nightSunColor).lerp(daySunColor, daylight).lerp(twilightSunColor, twilight * 0.58);
   fillLight.intensity = THREE.MathUtils.lerp(0.1, 0.55, daylight);
   fillLight.color.copy(nightFillColor).lerp(dayFillColor, daylight);
-  moonDirection.copy(solarDirection).negate();
   moonLight.position.copy(moonDirection).multiplyScalar(110);
   moonLight.intensity = night * 0.26;
   hemi.intensity = THREE.MathUtils.lerp(0.42, 2, daylight);
@@ -1162,7 +1173,7 @@ function makeHomeArtTexture() {
   return texture;
 }
 
-function addHomeBox(parent, dimensions, position, material, castShadow = true, receiveShadow = true) {
+function addHomeBox(parent, dimensions, position, material, castShadow = false, receiveShadow = true) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
   mesh.position.set(...position);
   mesh.castShadow = castShadow;
@@ -1173,6 +1184,13 @@ function addHomeBox(parent, dimensions, position, material, castShadow = true, r
 
 function addHomeCollider(x, z, halfX, halfZ) {
   homeFurnitureColliders.push({ x, z, halfX, halfZ });
+}
+
+function createHomeLightMarker(intensity, x, y, z) {
+  const marker = new THREE.Object3D();
+  marker.position.set(x, y, z);
+  marker.intensity = intensity;
+  return marker;
 }
 
 function registerHomeLightFixture(light, bulb = null) {
@@ -1263,23 +1281,23 @@ function createHomeInterior(houseGroup) {
     const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.44, 0.16), new THREE.MeshStandardMaterial({ color, roughness: 1 }));
     pillow.position.set(x, 1.08, 0.18);
     pillow.rotation.x = -0.16;
-    pillow.castShadow = true;
+    pillow.castShadow = false;
     sofa.add(pillow);
   }
 
   // Low timber coffee table, books, and a small ceramic vase.
   addHomeBox(interior, [1.28, 0.1, 0.72], [2.55, 0.66, -1.95], cabinetLightMaterial);
   for (const [x, z] of [[2.08, -2.22], [3.02, -2.22], [2.08, -1.68], [3.02, -1.68]]) {
-    addHomeBox(interior, [0.07, 0.24, 0.07], [x, 0.52, z], trimMaterial, true, false);
+    addHomeBox(interior, [0.07, 0.24, 0.07], [x, 0.52, z], trimMaterial, false, false);
   }
   addHomeBox(interior, [0.52, 0.045, 0.32], [2.5, 0.74, -1.95], new THREE.MeshStandardMaterial({ color: 0x547d6b, roughness: 0.9 }), false, false);
   const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.31, 12), new THREE.MeshStandardMaterial({ color: 0xd9c79f, roughness: 0.35 }));
   vase.position.set(2.95, 0.86, -1.9);
-  vase.castShadow = true;
+  vase.castShadow = false;
   interior.add(vase);
 
   // A television and floating shelf on the living-room side wall.
-  addHomeBox(interior, [0.11, 0.95, 1.62], [3.83, 1.83, -1.95], darkMaterial, true, false);
+  addHomeBox(interior, [0.11, 0.95, 1.62], [3.83, 1.83, -1.95], darkMaterial, false, false);
   addHomeBox(interior, [0.025, 0.77, 1.42], [3.765, 1.84, -1.95], screenMaterial, false, false);
   addHomeBox(interior, [0.34, 0.08, 1.82], [3.57, 1.25, -1.95], trimMaterial);
   const smallPlantPot = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.22, 0.29, 10), cabinetLightMaterial);
@@ -1289,7 +1307,7 @@ function createHomeInterior(houseGroup) {
     const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 0), estateShrubMaterial);
     leaf.position.set(x, y, z);
     leaf.scale.setScalar(scale);
-    leaf.castShadow = true;
+    leaf.castShadow = false;
     interior.add(leaf);
   }
 
@@ -1328,18 +1346,17 @@ function createHomeInterior(houseGroup) {
 
   // Small dining table, two upholstered chairs, and pendant light.
   addHomeBox(interior, [1.42, 0.12, 0.82], [-1.12, 0.99, -0.58], cabinetLightMaterial);
-  for (const x of [-1.66, -0.58]) addHomeBox(interior, [0.08, 0.64, 0.08], [x, 0.73, -0.86], trimMaterial, true, false);
+  for (const x of [-1.66, -0.58]) addHomeBox(interior, [0.08, 0.64, 0.08], [x, 0.73, -0.86], trimMaterial, false, false);
   for (const z of [-1.2, 0.03]) {
     addHomeBox(interior, [0.56, 0.12, 0.54], [-1.12, 0.59, z], sofaMaterial);
     addHomeBox(interior, [0.56, 0.62, 0.1], [-1.12, 0.92, z + 0.22], sofaMaterial);
-    for (const x of [-1.34, -0.9]) addHomeBox(interior, [0.055, 0.24, 0.055], [x, 0.5, z], trimMaterial, true, false);
+    for (const x of [-1.34, -0.9]) addHomeBox(interior, [0.055, 0.24, 0.055], [x, 0.5, z], trimMaterial, false, false);
   }
   addHomeBox(interior, [0.08, 0.24, 0.08], [-1.12, 2.93, -0.58], trimMaterial, false, false);
   const pendant = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), warmBulbMaterial);
   pendant.position.set(-1.12, 2.79, -0.58);
   interior.add(pendant);
-  const kitchenLight = new THREE.PointLight(0xffdca8, 0.55, 5.5, 2);
-  kitchenLight.position.set(-1.3, 2.65, -0.6);
+  const kitchenLight = createHomeLightMarker(0.55, -1.3, 2.65, -0.6);
   interior.add(kitchenLight);
   registerHomeLightFixture(kitchenLight, pendant);
 
@@ -1357,8 +1374,7 @@ function createHomeInterior(houseGroup) {
     const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.28, 10), warmBulbMaterial);
     lamp.position.set(x, 1.19, 3.1);
     interior.add(lamp);
-    const light = new THREE.PointLight(0xffd6a0, 0.25, 3.2, 2);
-    light.position.set(x, 1.42, 3.1);
+    const light = createHomeLightMarker(0.25, x, 1.42, 3.1);
     interior.add(light);
     registerHomeLightFixture(light, lamp);
   }
@@ -1388,15 +1404,20 @@ function createHomeInterior(houseGroup) {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), warmBulbMaterial);
     bulb.position.set(x, 2.91, z);
     interior.add(bulb);
-    const light = new THREE.PointLight(0xffe1b7, 0.8, 8.5, 2);
-    light.position.set(x, 2.82, z);
+    const light = createHomeLightMarker(0.8, x, 2.82, z);
     interior.add(light);
     registerHomeLightFixture(light, bulb);
   }
-  const livingLight = new THREE.PointLight(0xffe3bf, 0.62, 7, 2);
-  livingLight.position.set(1.5, 2.5, -2.0);
+  const livingLight = createHomeLightMarker(0.62, 1.5, 2.5, -2.0);
   interior.add(livingLight);
   registerHomeLightFixture(livingLight);
+
+  const dynamicHomeObjects = new Set([
+    homeLightSwitchIndicator,
+    ...homeLightFixtures.map((f) => f.bulb).filter(Boolean),
+    ...homeLightFixtures.map((f) => f.light).filter(Boolean),
+  ]);
+  batchStaticVenueMeshes(interior, dynamicHomeObjects);
 
   // Keep movement grounded around the larger furnishings while leaving the central passage clear.
   addHomeCollider(-3.28, -2.05, 0.48, 1.65);
@@ -1629,14 +1650,14 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
 
   const mailboxPost = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.75, 0.13), estateTrimMaterial);
   mailboxPost.position.set(3.62, 0.49, frontZ - 1.95);
-  mailboxPost.castShadow = true;
+  mailboxPost.castShadow = false;
   group.add(mailboxPost);
   const mailbox = new THREE.Mesh(
     new THREE.BoxGeometry(0.56, 0.4, 0.66),
     new THREE.MeshStandardMaterial({ color: isHome ? 0x547d68 : estateDoorMaterials[number - 1].color, roughness: 0.72, metalness: 0.05 }),
   );
   mailbox.position.set(3.62, 0.95, frontZ - 1.95);
-  mailbox.castShadow = true;
+  mailbox.castShadow = false;
   group.add(mailbox);
   const mailSlot = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.035, 0.035), estateTrimMaterial);
   mailSlot.position.set(3.62, 1.02, frontZ - 2.29);
@@ -1647,7 +1668,7 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
     const shrub = new THREE.Mesh(shrubGeometry, estateShrubMaterial);
     shrub.position.set(side * 3.12, 0.54, frontZ - 1.78);
     shrub.scale.set(1.2, 0.8, 0.82);
-    shrub.castShadow = true;
+    shrub.castShadow = false;
     group.add(shrub);
     const flower = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), estateFlowerMaterials[(number + (side > 0 ? 1 : 0)) % estateFlowerMaterials.length]);
     flower.position.set(side * 2.9, 0.48, frontZ - 2.35);
@@ -1659,11 +1680,9 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
   );
   porchLight.position.set(-0.98, 2.52, frontZ - 0.2);
   group.add(porchLight);
-  const porchLightPoint = new THREE.PointLight(0xffcf85, 0, 7, 2);
-  porchLightPoint.position.copy(porchLight.position);
-  group.add(porchLightPoint);
+  const porchLightState = { intensity: 0 };
   exteriorNightLights.push({
-    light: porchLightPoint,
+    light: porchLightState,
     material: porchLight.material,
     dayIntensity: 0,
     nightIntensity: 0.68,
@@ -1671,6 +1690,9 @@ function createEstateHouse({ number, x, z, facing, isHome = false }) {
     nightEmissive: 1.1,
   });
   if (isHome) interiorGroup = createHomeInterior(group);
+
+  batchStaticVenueMeshes(doorPivot);
+  batchStaticVenueMeshes(group, new Set([doorPivot, interiorGroup].filter(Boolean)));
 
   group.position.set(x, terrainHeight(x, z), z);
   group.rotation.y = facing;
@@ -1767,54 +1789,85 @@ function setResidenceInteriorVisible(residence, isVisible) {
   if (residence.interiorGroup) residence.interiorGroup.visible = isVisible;
 }
 
+const ESTATE_LAMP_METAL_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x3f5c50, roughness: 0.65, metalness: 0.25 });
+
 function createEstateLamp(x, z) {
   const group = new THREE.Group();
-  const metal = new THREE.MeshStandardMaterial({ color: 0x3f5c50, roughness: 0.65, metalness: 0.25 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.11, 3.35, 8), metal);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.11, 3.35, 8), ESTATE_LAMP_METAL_MATERIAL);
   pole.position.y = 1.68;
-  pole.castShadow = true;
+  pole.castShadow = false;
   group.add(pole);
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.09, 0.09), metal);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.09, 0.09), ESTATE_LAMP_METAL_MATERIAL);
   arm.position.set(0.34, 3.22, 0);
   group.add(arm);
   const lanternMaterial = new THREE.MeshStandardMaterial({ color: 0xffe2a0, emissive: 0xe9a84e, emissiveIntensity: 0.8, roughness: 0.3 });
   const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), lanternMaterial);
   lantern.position.set(0.74, 3.16, 0);
   group.add(lantern);
-  const lampLight = new THREE.PointLight(0xffcf85, 0, 10, 2);
-  lampLight.position.copy(lantern.position);
-  group.add(lampLight);
+  const lampLightState = { intensity: 0 };
   exteriorNightLights.push({
-    light: lampLight,
+    light: lampLightState,
     material: lanternMaterial,
     dayIntensity: 0.015,
     nightIntensity: 0.82,
     dayEmissive: 0.05,
     nightEmissive: 1.05,
   });
+  batchStaticVenueMeshes(group);
   group.position.set(x, terrainHeight(x, z), z);
   scene.add(group);
 }
 
-function batchStaticVenueMeshes(group) {
+function batchStaticVenueMeshes(rootGroup, excludedSet = new Set()) {
+  rootGroup.updateMatrixWorld(true);
+  const rootInverse = new THREE.Matrix4().copy(rootGroup.matrixWorld).invert();
+  const relMatrix = new THREE.Matrix4();
   const batches = new Map();
-  for (const mesh of group.children) {
-    if (!mesh.isMesh || Array.isArray(mesh.material)) continue;
-    const key = `${mesh.material.id}:${Number(mesh.castShadow)}:${Number(mesh.receiveShadow)}`;
-    if (!batches.has(key)) batches.set(key, { material: mesh.material, castShadow: mesh.castShadow, receiveShadow: mesh.receiveShadow, meshes: [] });
-    batches.get(key).meshes.push(mesh);
+
+  function collect(node) {
+    if (excludedSet.has(node)) return;
+    for (const child of [...node.children]) {
+      if (excludedSet.has(child)) continue;
+      if (child.isInstancedMesh || child.isLine || child.isLineSegments || child.isLight) continue;
+      if (child.isMesh && !Array.isArray(child.material) && child.geometry) {
+        const key = `${child.material.id}:${Number(child.castShadow)}:${Number(child.receiveShadow)}`;
+        if (!batches.has(key)) {
+          batches.set(key, {
+            material: child.material,
+            castShadow: child.castShadow,
+            receiveShadow: child.receiveShadow,
+            meshes: [],
+          });
+        }
+        batches.get(key).meshes.push(child);
+      }
+      if (child.children && child.children.length > 0) {
+        collect(child);
+      }
+    }
   }
+  collect(rootGroup);
 
   for (const batch of batches.values()) {
     if (batch.meshes.length < 2) continue;
     const geometries = [];
-    let mergedGeometry;
+    let mergedGeometry = null;
     try {
+      const needsNonIndexed = batch.meshes.some((m) => !m.geometry.index);
+      const allHaveUv = batch.meshes.every((m) => Boolean(m.geometry.attributes?.uv));
       for (const mesh of batch.meshes) {
-        mesh.updateMatrix();
-        const geometry = mesh.geometry.clone();
+        relMatrix.multiplyMatrices(rootInverse, mesh.matrixWorld);
+        let geometry = mesh.geometry.clone();
         geometry.clearGroups();
-        geometry.applyMatrix4(mesh.matrix);
+        if (needsNonIndexed && geometry.index) {
+          const nonIdx = geometry.toNonIndexed();
+          geometry.dispose();
+          geometry = nonIdx;
+        }
+        if (!allHaveUv && geometry.attributes?.uv) {
+          geometry.deleteAttribute('uv');
+        }
+        geometry.applyMatrix4(relMatrix);
         geometries.push(geometry);
       }
       mergedGeometry = mergeGeometries(geometries, false);
@@ -1832,10 +1885,9 @@ function batchStaticVenueMeshes(group) {
     mergedMesh.receiveShadow = batch.receiveShadow;
     mergedMesh.name = 'Batched static shop geometry';
     for (const mesh of batch.meshes) {
-      group.remove(mesh);
-      mesh.geometry.dispose();
+      if (mesh.parent) mesh.parent.remove(mesh);
     }
-    group.add(mergedMesh);
+    rootGroup.add(mergedMesh);
     for (const geometry of geometries) geometry.dispose();
   }
 }
@@ -1943,11 +1995,42 @@ function makeMallLockupSignTexture(lockup, displayState, accentHex) {
   return texture;
 }
 
+const VIRTUAL_GOOD_MATERIALS = {
+  pedestal: new THREE.MeshStandardMaterial({ color: 0xf2ead7, roughness: 0.68 }),
+  fashionTorso: new THREE.MeshStandardMaterial({ color: 0xd96b43, roughness: 0.55 }),
+  fashionShoulders: new THREE.MeshStandardMaterial({ color: 0xf2b84b, roughness: 0.5 }),
+  artFrame: new THREE.MeshStandardMaterial({ color: 0x5c4632, roughness: 0.6 }),
+  artCanvas: new THREE.MeshStandardMaterial({
+    color: 0xe68449,
+    emissive: 0x8a3d1b,
+    emissiveIntensity: 0.35,
+    roughness: 0.35,
+  }),
+  techCore: new THREE.MeshStandardMaterial({
+    color: 0x5ec2d6,
+    emissive: 0x1d6878,
+    emissiveIntensity: 0.42,
+    metalness: 0.35,
+    roughness: 0.25,
+  }),
+  techRing: new THREE.MeshStandardMaterial({ color: 0xd8ecf2, metalness: 0.4, roughness: 0.3 }),
+  audioDeck: new THREE.MeshStandardMaterial({ color: 0x2f3b46, metalness: 0.3, roughness: 0.45 }),
+  audioSpeaker: new THREE.MeshStandardMaterial({ color: 0xd49a45, roughness: 0.4 }),
+  harvestCrate: new THREE.MeshStandardMaterial({ color: 0x9b6b43, roughness: 0.8 }),
+  harvestJar: new THREE.MeshStandardMaterial({ color: 0x6ea85b, roughness: 0.45 }),
+  craftLantern: new THREE.MeshStandardMaterial({
+    color: 0xf4c76b,
+    emissive: 0x9c651c,
+    emissiveIntensity: 0.4,
+    roughness: 0.38,
+  }),
+};
+
 function createVirtualGoodDisplayMesh(good) {
   const itemGroup = new THREE.Group();
   const pedestal = new THREE.Mesh(
     new THREE.CylinderGeometry(0.22, 0.25, 0.62, 12),
-    new THREE.MeshStandardMaterial({ color: 0xf2ead7, roughness: 0.68 }),
+    VIRTUAL_GOOD_MATERIALS.pedestal,
   );
   pedestal.position.y = 0.31;
   itemGroup.add(pedestal);
@@ -1955,47 +2038,36 @@ function createVirtualGoodDisplayMesh(good) {
   if (style === 'fashion') {
     const torso = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.15, 0.44, 10),
-      new THREE.MeshStandardMaterial({ color: 0xd96b43, roughness: 0.55 }),
+      VIRTUAL_GOOD_MATERIALS.fashionTorso,
     );
     torso.position.y = 0.88;
     const shoulders = new THREE.Mesh(
       new THREE.BoxGeometry(0.32, 0.14, 0.18),
-      new THREE.MeshStandardMaterial({ color: 0xf2b84b, roughness: 0.5 }),
+      VIRTUAL_GOOD_MATERIALS.fashionShoulders,
     );
     shoulders.position.y = 1.02;
     itemGroup.add(torso, shoulders);
   } else if (style === 'art') {
     const frame = new THREE.Mesh(
       new THREE.BoxGeometry(0.38, 0.42, 0.05),
-      new THREE.MeshStandardMaterial({ color: 0x5c4632, roughness: 0.6 }),
+      VIRTUAL_GOOD_MATERIALS.artFrame,
     );
     frame.position.y = 0.88;
     const canvasMesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.3, 0.34, 0.06),
-      new THREE.MeshStandardMaterial({
-        color: 0xe68449,
-        emissive: 0x8a3d1b,
-        emissiveIntensity: 0.35,
-        roughness: 0.35,
-      }),
+      VIRTUAL_GOOD_MATERIALS.artCanvas,
     );
     canvasMesh.position.y = 0.88;
     itemGroup.add(frame, canvasMesh);
   } else if (style === 'tech') {
     const core = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.18, 0),
-      new THREE.MeshStandardMaterial({
-        color: 0x5ec2d6,
-        emissive: 0x1d6878,
-        emissiveIntensity: 0.42,
-        metalness: 0.35,
-        roughness: 0.25,
-      }),
+      VIRTUAL_GOOD_MATERIALS.techCore,
     );
     core.position.y = 0.88;
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.025, 8, 18),
-      new THREE.MeshStandardMaterial({ color: 0xd8ecf2, metalness: 0.4, roughness: 0.3 }),
+      VIRTUAL_GOOD_MATERIALS.techRing,
     );
     ring.position.y = 0.88;
     ring.rotation.x = Math.PI / 3;
@@ -2003,36 +2075,31 @@ function createVirtualGoodDisplayMesh(good) {
   } else if (style === 'audio') {
     const deck = new THREE.Mesh(
       new THREE.BoxGeometry(0.36, 0.12, 0.26),
-      new THREE.MeshStandardMaterial({ color: 0x2f3b46, metalness: 0.3, roughness: 0.45 }),
+      VIRTUAL_GOOD_MATERIALS.audioDeck,
     );
     deck.position.y = 0.7;
     const speaker = new THREE.Mesh(
       new THREE.CylinderGeometry(0.11, 0.11, 0.24, 12),
-      new THREE.MeshStandardMaterial({ color: 0xd49a45, roughness: 0.4 }),
+      VIRTUAL_GOOD_MATERIALS.audioSpeaker,
     );
     speaker.position.set(0, 0.88, 0);
     itemGroup.add(deck, speaker);
   } else if (style === 'harvest') {
     const crate = new THREE.Mesh(
       new THREE.BoxGeometry(0.34, 0.2, 0.28),
-      new THREE.MeshStandardMaterial({ color: 0x9b6b43, roughness: 0.8 }),
+      VIRTUAL_GOOD_MATERIALS.harvestCrate,
     );
     crate.position.y = 0.72;
     const jar = new THREE.Mesh(
       new THREE.CylinderGeometry(0.09, 0.1, 0.22, 10),
-      new THREE.MeshStandardMaterial({ color: 0x6ea85b, roughness: 0.45 }),
+      VIRTUAL_GOOD_MATERIALS.harvestJar,
     );
     jar.position.set(0, 0.9, 0);
     itemGroup.add(crate, jar);
   } else {
     const lantern = new THREE.Mesh(
       new THREE.SphereGeometry(0.18, 12, 10),
-      new THREE.MeshStandardMaterial({
-        color: 0xf4c76b,
-        emissive: 0x9c651c,
-        emissiveIntensity: 0.4,
-        roughness: 0.38,
-      }),
+      VIRTUAL_GOOD_MATERIALS.craftLantern,
     );
     lantern.position.y = 0.84;
     itemGroup.add(lantern);
@@ -2061,6 +2128,7 @@ function syncMallShopBays3D() {
       goodMesh.position.set(offsetX, 0.16, offsetZ);
       bayRuntime.goodsGroup.add(goodMesh);
     }
+    batchStaticVenueMeshes(bayRuntime.goodsGroup);
   }
   for (const lockupRuntime of mallLockupRuntime) {
     const displayState = lockupRuntime.leaseSpaceId
@@ -2189,30 +2257,32 @@ function createShoppingMallVenue(venueLayout) {
     // Concourse-facing lockup shopfront piers + glass display panels leaving a 3.2m wide walk-in doorway
     for (const pierDir of [-1, 1]) {
       const pierZ = lockup.localZ + pierDir * 2.05;
-      addBox([0.26, 3.65, 0.92], [frontWallX, 1.95, pierZ], trimMaterial);
+      addBox([0.26, 3.65, 0.92], [frontWallX, 1.95, pierZ], trimMaterial, false, true);
       addBox([0.1, 2.2, 0.68], [frontWallX, 1.55, pierZ], glassMaterial, false, false);
     }
 
     // Rolled-up metallic security lockup shutter header above doorway
-    addBox([0.34, 0.44, 3.32], [frontWallX, 3.12, lockup.localZ], shutterMaterial);
-    addBox([0.28, 0.52, 5.0], [frontWallX, 3.62, lockup.localZ], accentMaterial);
+    addBox([0.34, 0.44, 3.32], [frontWallX, 3.12, lockup.localZ], shutterMaterial, false, true);
+    addBox([0.28, 0.52, 5.0], [frontWallX, 3.62, lockup.localZ], accentMaterial, false, true);
 
     // Merchant checkout counter & cash register terminal toward the back of the lockup shop
     const counterX = side * 10.45;
-    addBox([1.05, 0.92, 2.45], [counterX, 0.62, lockup.localZ], counterMaterial);
-    addBox([1.16, 0.1, 2.56], [counterX, 1.12, lockup.localZ], counterTopMaterial);
-    addBox([0.38, 0.28, 0.44], [counterX - side * 0.12, 1.3, lockup.localZ - 0.55], shutterMaterial);
+    addBox([1.05, 0.92, 2.45], [counterX, 0.62, lockup.localZ], counterMaterial, false, true);
+    addBox([1.16, 0.1, 2.56], [counterX, 1.12, lockup.localZ], counterTopMaterial, false, true);
+    addBox([0.38, 0.28, 0.44], [counterX - side * 0.12, 1.3, lockup.localZ - 0.55], shutterMaterial, false, true);
 
     // Back-wall merchandise shelving unit with stocked 3D goods
     const shelfX = side * 11.88;
-    addBox([0.46, 2.55, 3.6], [shelfX, 1.44, lockup.localZ], trimMaterial);
+    addBox([0.46, 2.55, 3.6], [shelfX, 1.44, lockup.localZ], trimMaterial, false, true);
     for (const shelfY of [0.85, 1.48, 2.1]) {
-      addBox([0.52, 0.08, 3.48], [shelfX - side * 0.04, shelfY, lockup.localZ], counterMaterial);
+      addBox([0.52, 0.08, 3.48], [shelfX - side * 0.04, shelfY, lockup.localZ], counterMaterial, false, true);
       for (const boxZ of [-1.15, -0.38, 0.38, 1.15]) {
         addBox(
           [0.32, 0.34, 0.46],
           [shelfX - side * 0.06, shelfY + 0.21, lockup.localZ + boxZ],
           accentMaterial,
+          false,
+          true,
         );
       }
     }
@@ -2243,7 +2313,7 @@ function createShoppingMallVenue(venueLayout) {
   for (const canopyX of [15.5, 20.7]) {
     addBox([3.2, 0.14, lot.depth - 1.8], [canopyX, 2.75, lot.localZ], canopyMaterial);
     for (const postZ of [-4.6, 0.6, 5.8]) {
-      addBox([0.16, 2.7, 0.16], [canopyX + (canopyX < lot.localX ? -1.1 : 1.1), 1.38, postZ], shutterMaterial);
+      addBox([0.16, 2.7, 0.16], [canopyX + (canopyX < lot.localX ? -1.1 : 1.1), 1.38, postZ], shutterMaterial, false, true);
     }
   }
 
@@ -2253,14 +2323,14 @@ function createShoppingMallVenue(venueLayout) {
       addBox([3.4, 0.14, 0.12], [bay.localX, 0.072, bay.localZ + borderZ], lineMat, false, true);
     }
     const stopperX = bay.localX + (bay.localX < lot.localX ? -1.25 : 1.25);
-    addBox([0.22, 0.18, 1.85], [stopperX, 0.12, bay.localZ], lineMat);
+    addBox([0.22, 0.18, 1.85], [stopperX, 0.12, bay.localZ], lineMat, false, true);
 
     if (bay.hasParkedCar) {
       const carMat = new THREE.MeshStandardMaterial({ color: bay.carColor, roughness: 0.46, metalness: 0.14 });
       addBox([3.2, 0.46, 1.58], [bay.localX, 0.44, bay.localZ], carMat);
       addBox([1.75, 0.42, 1.38], [bay.localX - 0.1, 0.84, bay.localZ], upperWallMaterial);
       for (const [wx, wz] of [[-0.95, -0.76], [0.95, -0.76], [-0.95, 0.76], [0.95, 0.76]]) {
-        addBox([0.52, 0.48, 0.24], [bay.localX + wx, 0.3, bay.localZ + wz], tireDarkMaterial);
+        addBox([0.52, 0.48, 0.24], [bay.localX + wx, 0.3, bay.localZ + wz], tireDarkMaterial, false, true);
       }
     }
   }
@@ -2273,24 +2343,8 @@ function createShoppingMallVenue(venueLayout) {
   parkingSignBoard.rotation.y = Math.PI;
   group.add(parkingSignBoard);
 
-  batchStaticVenueMeshes(group);
-  batchStaticVenueMeshes(roofCutawayGroup);
-
-  // Dynamic overhead lockup shop signboards & 3D merchandise pedestals inside each lockup shop
+  // Default signature 3D product displays inside each lockup shop (batched with static mall geometry)
   for (const lockup of MALL_LOCKUP_SHOP_LAYOUT) {
-    const accentHex = `#${new THREE.Color(lockup.accentColor).getHexString()}`;
-    const initialState = lockup.leaseSpaceId
-      ? getMallShopDisplayState(economy, lockup.leaseSpaceId)
-      : null;
-    const lockupSignMaterial = new THREE.MeshBasicMaterial({
-      map: makeMallLockupSignTexture(lockup, initialState, accentHex),
-    });
-    const lockupSign = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 0.78), lockupSignMaterial);
-    lockupSign.position.set(lockup.side * 3.36, 3.42, lockup.localZ);
-    lockupSign.rotation.y = lockup.side < 0 ? Math.PI / 2 : -Math.PI / 2;
-    group.add(lockupSign);
-
-    // Default signature 3D product display inside the lockup shop
     const sampleMesh = createVirtualGoodDisplayMesh({
       style:
         lockup.id === 'lockup-l2'
@@ -2303,6 +2357,19 @@ function createShoppingMallVenue(venueLayout) {
     });
     sampleMesh.position.set(lockup.localX - lockup.side * 0.65, 0.16, lockup.localZ + 1.35);
     group.add(sampleMesh);
+  }
+
+  batchStaticVenueMeshes(group, new Set([roofCutawayGroup]));
+  batchStaticVenueMeshes(roofCutawayGroup);
+
+  // Dynamic overhead lockup shop signboards
+  for (const lockup of MALL_LOCKUP_SHOP_LAYOUT) {
+    const accentHex = `#${new THREE.Color(lockup.accentColor).getHexString()}`;
+    const lockupSignMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const lockupSign = new THREE.Mesh(new THREE.PlaneGeometry(3.25, 0.78), lockupSignMaterial);
+    lockupSign.position.set(lockup.side * 3.36, 3.42, lockup.localZ);
+    lockupSign.rotation.y = lockup.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    group.add(lockupSign);
 
     mallLockupRuntime.push({
       lockup,
@@ -2317,10 +2384,7 @@ function createShoppingMallVenue(venueLayout) {
     const bayGroup = new THREE.Group();
     bayGroup.position.set(bay.localX, 0, bay.localZ);
     const accentHex = `#${new THREE.Color(bay.accentColor).getHexString()}`;
-    const initialState = getMallShopDisplayState(economy, bay.spaceId);
-    const baySignMaterial = new THREE.MeshBasicMaterial({
-      map: makeMallBaySignTexture(initialState, accentHex),
-    });
+    const baySignMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const baySign = new THREE.Mesh(
       new THREE.PlaneGeometry(Math.max(2.4, bay.bayWidth - 0.5), 0.68),
       baySignMaterial,
@@ -2765,6 +2829,8 @@ function createStrategicBillboards() {
     backScreen.rotation.y = Math.PI;
     group.add(backScreen);
 
+    batchStaticVenueMeshes(group, new Set([frontScreen, backScreen]));
+
     const groundY = terrainHeight(spec.x, spec.z);
     group.position.set(spec.x, groundY, spec.z);
     group.rotation.y = spec.facing;
@@ -2848,16 +2914,18 @@ function createParkedCar(x, z, heading) {
       pivot.position.set(side * 0.91, 0.34, wheelZ);
       group.add(pivot);
       const tire = new THREE.Mesh(wheelGeometry, tireMaterial);
-      tire.castShadow = true;
+      tire.castShadow = false;
       tire.receiveShadow = true;
       pivot.add(tire);
       const hub = new THREE.Mesh(hubGeometry, hubMaterial);
       hub.position.x = side * 0.015;
-      hub.castShadow = true;
+      hub.castShadow = false;
       pivot.add(hub);
       wheelPivots.push({ pivot, tire, isFront: wheelZ < 0 });
     }
   }
+
+  batchStaticVenueMeshes(group, new Set(wheelPivots.map((w) => w.pivot)));
 
   group.position.set(x, groundHeightAt(x, z) - PLAYER_FOOT_OFFSET, z);
   group.rotation.y = heading;
@@ -3004,7 +3072,7 @@ function createBridgesAndFlyovers() {
           darkConcreteMat,
         );
         rampWall.position.set(wx, baseY + elev / 2, wz);
-        rampWall.castShadow = true;
+        rampWall.castShadow = false;
         rampWall.receiveShadow = true;
         structGroup.add(rampWall);
       }
@@ -3023,7 +3091,7 @@ function createBridgesAndFlyovers() {
           concreteMat,
         );
         parapet.position.set(gx, baseY + elev + 0.34, gz);
-        parapet.castShadow = true;
+        parapet.castShadow = false;
         structGroup.add(parapet);
 
         const topRail = new THREE.Mesh(
@@ -3149,7 +3217,7 @@ function createBridgesAndFlyovers() {
         const postZ = isZAxis ? gz : gz + side * (halfW + 0.45);
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, gantryH, 10), guardrailMat);
         post.position.set(postX, gBaseY + gantryH / 2, postZ);
-        post.castShadow = true;
+        post.castShadow = false;
         structGroup.add(post);
       }
       const beam = new THREE.Mesh(
@@ -3174,6 +3242,7 @@ function createBridgesAndFlyovers() {
     infraGroup.add(structGroup);
   }
 
+  batchStaticVenueMeshes(infraGroup);
   scene.add(infraGroup);
   worldObstacleColliders.push(...getBridgeFlyoverGuardrailColliders());
 }
@@ -3488,7 +3557,7 @@ for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.31, 1), seedMaterial);
   orb.position.y = 1.16;
   orb.scale.set(0.8, 1.1, 0.8);
-  orb.castShadow = true;
+  orb.castShadow = false;
   seedGroup.add(orb);
   const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.035, 7, 32), seedRingMaterial);
   hoop.rotation.x = Math.PI / 2;
@@ -3501,9 +3570,6 @@ for (let i = 0; i < SEED_POSITIONS.length; i += 1) {
   halo.rotation.x = Math.PI / 2;
   halo.position.y = 1.12;
   seedGroup.add(halo);
-  const light = new THREE.PointLight(0xffd174, 1.4, 5, 2);
-  light.position.y = 1.2;
-  seedGroup.add(light);
   scene.add(seedGroup);
   seeds.push({ index: i + 1, group: seedGroup, orb, hoop, halo, x: position.x, z: position.y, phase: random() * Math.PI * 2, collected: false });
 }
@@ -3526,7 +3592,7 @@ const dailyGoldenOrbMaterial = new THREE.MeshStandardMaterial({
 const dailyGoldenOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 1), dailyGoldenOrbMaterial);
 dailyGoldenOrb.position.y = 1.32;
 dailyGoldenOrb.scale.set(0.88, 1.22, 0.88);
-dailyGoldenOrb.castShadow = true;
+dailyGoldenOrb.castShadow = false;
 dailyGoldenSeedGroup.add(dailyGoldenOrb);
 const dailyGoldenHoop = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.042, 8, 36), seedRingMaterial);
 dailyGoldenHoop.rotation.x = Math.PI / 2;
@@ -3539,9 +3605,6 @@ const dailyGoldenHalo = new THREE.Mesh(
 dailyGoldenHalo.rotation.x = Math.PI / 3;
 dailyGoldenHalo.position.y = 1.28;
 dailyGoldenSeedGroup.add(dailyGoldenHalo);
-const dailyGoldenLight = new THREE.PointLight(0xffca58, 2.1, 7.5, 2);
-dailyGoldenLight.position.y = 1.4;
-dailyGoldenSeedGroup.add(dailyGoldenLight);
 dailyGoldenSeedGroup.visible = !isDailyGoldenSeedCollected(dailyReturn);
 scene.add(dailyGoldenSeedGroup);
 const dailyGoldenSeed = {
@@ -3623,7 +3686,7 @@ const eyeGlintMaterial = new THREE.MeshBasicMaterial({ color: 0xfff8e9 });
 function avatarMesh(geometry, material, x, y, z, parent = avatarModel) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, y, z);
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   mesh.receiveShadow = true;
   parent.add(mesh);
   return mesh;
@@ -3683,6 +3746,7 @@ const jacketProfile = [
 const jacketGeometry = new THREE.LatheGeometry(jacketProfile, 24);
 jacketGeometry.computeVertexNormals();
 const torsoMesh = avatarMesh(jacketGeometry, shirtMaterial, 0, 1.23, 0);
+torsoMesh.castShadow = true;
 
 // Soft collar and a glimpse of the shirt underneath.
 avatarMesh(new THREE.CylinderGeometry(0.105, 0.12, 0.17, 16), skinMaterial, 0, 1.565, 0);
@@ -3713,6 +3777,7 @@ headGroup.position.y = 1.655;
 avatarModel.add(headGroup);
 const headShape = avatarMesh(new THREE.SphereGeometry(1, 22, 16), skinMaterial, 0, 0.075, 0, headGroup);
 headShape.scale.set(0.15, 0.185, 0.142);
+headShape.castShadow = true;
 const jawShape = avatarMesh(new THREE.SphereGeometry(1, 18, 13), skinMaterial, 0, -0.045, -0.003, headGroup);
 jawShape.scale.set(0.12, 0.095, 0.12);
 
@@ -3799,6 +3864,8 @@ for (const side of [-1, 1]) {
     const digit = avatarMesh(new THREE.SphereGeometry(1, 9, 7), skinMaterial, fingerX, -0.393, -0.008, elbow);
     digit.scale.set(0.012, length, 0.014);
   }
+  batchStaticVenueMeshes(elbow);
+  batchStaticVenueMeshes(shoulder, new Set([elbow]));
   armPivots.push(shoulder);
   elbowPivots.push(elbow);
 }
@@ -3836,10 +3903,19 @@ for (const side of [-1, 1]) {
     const laceZ = -0.11 - lace * 0.027;
     avatarTube([[-0.026, -0.044, laceZ], [0, -0.039, laceZ - 0.006], [0.026, -0.044, laceZ]], 0.0035, zipperMaterial, ankle, 6);
   }
+  batchStaticVenueMeshes(ankle);
+  batchStaticVenueMeshes(lowerLeg, new Set([ankle]));
+  batchStaticVenueMeshes(hip, new Set([lowerLeg]));
   legPivots.push(hip);
   kneePivots.push(lowerLeg);
   footPivots.push(ankle);
 }
+for (const eyeGroup of eyeGroups) {
+  batchStaticVenueMeshes(eyeGroup);
+}
+batchStaticVenueMeshes(backpack);
+batchStaticVenueMeshes(headGroup, new Set(eyeGroups));
+batchStaticVenueMeshes(avatarModel, new Set([backpack, headGroup, torsoMesh, pelvis, ...armPivots, ...legPivots]));
 
 const playerShadow = new THREE.Mesh(
   new THREE.CircleGeometry(0.65, 24),
@@ -8179,6 +8255,7 @@ function updateLocationAndMap() {
 }
 
 const mapCanvasDrawState = new WeakMap();
+const staticMapLayerCache = new Map();
 const MAP_REDRAW_DISTANCE_SQUARED = 0.12 * 0.12;
 const MAP_REDRAW_ANGLE_RADIANS = 0.035;
 
@@ -8195,9 +8272,15 @@ function drawMapCanvasIfNeeded(targetCanvas, ctx) {
   const width = targetCanvas.width;
   const height = targetCanvas.height;
   const activeDestinationId = navigationUxState.activeDestinationId;
+  const taxiStatus = privateTaxiState?.status || 'idle';
+  const taxiX = Math.round((privateTaxiState?.x || 0) * 2);
+  const taxiZ = Math.round((privateTaxiState?.z || 0) * 2);
   if (previous
     && previous.seedCount === seedCount
     && previous.activeDestinationId === activeDestinationId
+    && previous.taxiStatus === taxiStatus
+    && previous.taxiX === taxiX
+    && previous.taxiZ === taxiZ
     && previous.width === width
     && previous.height === height) {
     const dx = x - previous.x;
@@ -8206,12 +8289,21 @@ function drawMapCanvasIfNeeded(targetCanvas, ctx) {
     if (dx * dx + dz * dz < MAP_REDRAW_DISTANCE_SQUARED && Math.abs(angle) < MAP_REDRAW_ANGLE_RADIANS) return;
   }
   drawMapCanvas(targetCanvas, ctx);
-  mapCanvasDrawState.set(targetCanvas, { x, z, yaw, seedCount, activeDestinationId, width, height });
+  mapCanvasDrawState.set(targetCanvas, {
+    x,
+    z,
+    yaw,
+    seedCount,
+    activeDestinationId,
+    taxiStatus,
+    taxiX,
+    taxiZ,
+    width,
+    height,
+  });
 }
 
-function drawMapCanvas(targetCanvas, ctx) {
-  const width = targetCanvas.width;
-  const height = targetCanvas.height;
+function drawStaticMapBase(ctx, width, height) {
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = Math.min(width, height) * 0.44;
@@ -8516,16 +8608,6 @@ function drawMapCanvas(targetCanvas, ctx) {
     ctx.fillStyle = '#39775c';
     ctx.fill();
   }
-  for (const seed of seeds) {
-    if (seed.collected) continue;
-    ctx.beginPath();
-    ctx.arc(mapX(seed.x), mapY(seed.z), Math.max(2.4, radius * 0.019), 0, Math.PI * 2);
-    ctx.fillStyle = '#f0b856';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.9)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-  }
 
   // Abuja Community Stadium's tiny pitch marker helps visitors find the live match on either map.
   const stadiumMapX = mapX(STADIUM.x);
@@ -8554,6 +8636,75 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.strokeStyle = '#eff4d9';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+
+  ctx.restore();
+}
+
+function getStaticMapLayer(width, height) {
+  const leaseKey = Object.keys(billboards.leases || {}).sort().join(',');
+  const cacheKey = `${width}x${height}:${leaseKey}`;
+  let cachedCanvas = staticMapLayerCache.get(cacheKey);
+  if (!cachedCanvas) {
+    cachedCanvas = document.createElement('canvas');
+    cachedCanvas.width = width;
+    cachedCanvas.height = height;
+    const baseCtx = cachedCanvas.getContext('2d');
+    drawStaticMapBase(baseCtx, width, height);
+    staticMapLayerCache.set(cacheKey, cachedCanvas);
+  }
+  return cachedCanvas;
+}
+
+function drawMapCanvas(targetCanvas, ctx) {
+  const width = targetCanvas.width;
+  const height = targetCanvas.height;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = Math.min(width, height) * 0.44;
+  const mapLeft = centerX - radius;
+  const mapRight = centerX + radius;
+  const mapTop = centerY - radius;
+  const mapBottom = centerY + radius;
+  const corner = radius * 0.12;
+  const traceMapBoundary = () => {
+    ctx.beginPath();
+    ctx.moveTo(mapLeft + corner, mapTop);
+    ctx.lineTo(mapRight - corner, mapTop);
+    ctx.quadraticCurveTo(mapRight, mapTop, mapRight, mapTop + corner);
+    ctx.lineTo(mapRight, mapBottom - corner);
+    ctx.quadraticCurveTo(mapRight, mapBottom, mapRight - corner, mapBottom);
+    ctx.lineTo(mapLeft + corner, mapBottom);
+    ctx.quadraticCurveTo(mapLeft, mapBottom, mapLeft, mapBottom - corner);
+    ctx.lineTo(mapLeft, mapTop + corner);
+    ctx.quadraticCurveTo(mapLeft, mapTop, mapLeft + corner, mapTop);
+    ctx.closePath();
+  };
+
+  if (typeof ctx.drawImage === 'function') {
+    const baseLayer = getStaticMapLayer(width, height);
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(baseLayer, 0, 0);
+  } else {
+    drawStaticMapBase(ctx, width, height);
+  }
+
+  const mapX = (x) => centerX + (x / WORLD_RADIUS) * radius;
+  const mapY = (z) => centerY + (z / WORLD_RADIUS) * radius;
+
+  ctx.save();
+  traceMapBoundary();
+  ctx.clip();
+
+  for (const seed of seeds) {
+    if (seed.collected) continue;
+    ctx.beginPath();
+    ctx.arc(mapX(seed.x), mapY(seed.z), Math.max(2.4, radius * 0.019), 0, Math.PI * 2);
+    ctx.fillStyle = '#f0b856';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
 
   if (privateTaxiState) {
     const tx = mapX(privateTaxiState.x);
@@ -8648,7 +8799,7 @@ const animationScratch = {
   yawAxis: new THREE.Vector3(0, 1, 0),
 };
 const FRAME_INTERVAL_MS = 1000 / 60;
-const SHADOW_UPDATE_INTERVAL_MS = 1000 / 30;
+const SHADOW_UPDATE_INTERVAL_MS = 1000 / 12;
 let animationFrameHandle = null;
 let hasRenderedInitialFrame = false;
 let lastAnimationTimestamp = null;
@@ -8742,12 +8893,23 @@ function animate(timestamp) {
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
   const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
-  const crowdUpdateInterval = isWatchingMatch || stadiumDistance < 28
-    ? 0
-    : stadiumDistance < 48
-      ? 1 / 30
-      : 1 / 15;
-  updateStadiumMatch(stadium, delta, prefersReducedMotion, crowdUpdateInterval);
+  const stadiumInteriorVisible = isWatchingMatch || isWorldView || stadiumDistance < 58;
+  if (stadium.interiorActors) {
+    for (const actor of stadium.interiorActors) actor.visible = stadiumInteriorVisible;
+  }
+  if (stadiumInteriorVisible) {
+    const crowdUpdateInterval = isWatchingMatch || stadiumDistance < 28
+      ? 0
+      : stadiumDistance < 48
+        ? 1 / 30
+        : 1 / 15;
+    updateStadiumMatch(stadium, delta, prefersReducedMotion, crowdUpdateInterval);
+  }
+  if (homeHouse?.interiorGroup && activeResidence === homeHouse) {
+    const doorOpen = Math.abs(homeDoorPivot?.rotation.y || 0) > 0.04 || Math.abs(homeDoorTargetAngle) > 0.04;
+    const homeDist = Math.hypot(player.position.x - homeHouse.x, player.position.z - homeHouse.z);
+    homeHouse.interiorGroup.visible = isInsideHome || (doorOpen && homeDist < 18);
+  }
   const transitUpdate = updateTransportNetwork(transitNetwork, delta);
   const arrivedRideStop = transitRideMode === 'bus' ? transitUpdate.arrivedBusTerminal : transitUpdate.arrivedStation;
   if (isRidingTransit && transitStopRequested && arrivedRideStop

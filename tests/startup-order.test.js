@@ -125,6 +125,7 @@ test('executes src/main.js end-to-end, builds all 3D scene geometry, and calls v
     },
   };
 
+  let renderedScene = null;
   globalThis.__createMockRenderer = () => ({
     shadowMap: { enabled: true, type: null, autoUpdate: false, needsUpdate: true },
     info: { autoReset: true, reset: noopFn, render: { calls: 10, triangles: 1000 } },
@@ -133,7 +134,7 @@ test('executes src/main.js end-to-end, builds all 3D scene geometry, and calls v
     setPixelRatio(r) { this._pixelRatio = r; },
     getPixelRatio() { return this._pixelRatio; },
     setSize() {},
-    render() {},
+    render(scene) { renderedScene = scene; },
   });
 
   register(`data:text/javascript,${encodeURIComponent(`
@@ -158,4 +159,31 @@ test('executes src/main.js end-to-end, builds all 3D scene geometry, and calls v
   rafCallback(16);
   assert.equal(bootFailCalled, null, 'vertualworldBoot.fail must not be called');
   assert.equal(bootReadyCalled, true, 'vertualworldBoot.ready must be called on first frame');
+  assert.ok(renderedScene, 'renderer.render should receive the 3D scene');
+
+  let totalLights = 0;
+  let pointLights = 0;
+  let visibleMeshes = 0;
+  let visibleShadowCasters = 0;
+  renderedScene.traverse((obj) => {
+    if (obj.isMesh) {
+      assert.ok(obj.geometry, `Mesh ${obj.name || obj.uuid} must have non-null geometry`);
+    }
+    if (obj.isLight) {
+      totalLights += 1;
+      if (obj.isPointLight) pointLights += 1;
+    }
+  });
+  renderedScene.traverseVisible((obj) => {
+    if (obj.isMesh) {
+      visibleMeshes += 1;
+      if (obj.castShadow) visibleShadowCasters += 1;
+    }
+  });
+
+  assert.ok(pointLights <= 2, `Expected at most 2 PointLights in scene, found ${pointLights}`);
+  assert.ok(totalLights <= 5, `Expected at most 5 total lights in scene, found ${totalLights}`);
+  assert.ok(visibleMeshes < 750, `Expected batched visible meshes < 750, found ${visibleMeshes}`);
+  assert.ok(visibleShadowCasters < 220, `Expected visible shadow casters < 220, found ${visibleShadowCasters}`);
 });
+
