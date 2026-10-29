@@ -14,6 +14,7 @@
     <div id="app">
       <canvas id="world-canvas" tabindex="0" role="img" aria-label="An interactive, stylised Abuja neighbourhood. Use WASD or the arrow keys to move. Press V to cycle follow, orbit, overhead, and first-person cameras. Drag in Orbit or first-person; drag World View to orbit the neighbourhood.">Your browser does not support the 3D canvas.</canvas>
       <div class="world-wash" aria-hidden="true"></div>
+      <div class="world-vignette" id="world-vignette" aria-hidden="true"></div>
       <div class="home-transition" id="home-transition" aria-hidden="true"></div>
 
       <header class="topbar">
@@ -68,6 +69,12 @@
           </button>
           <button class="icon-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-button" id="sound-toggle" type="button" aria-label="Toggle world sound" title="World sound: on — click to mute" aria-pressed="true">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9.5v5h3.4L12 18.6V5.4L7.4 9.5H4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path class="sound-wave" d="M15.2 9.1a4.1 4.1 0 0 1 0 5.8M17.7 6.7a7.5 7.5 0 0 1 0 10.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path class="sound-muted-mark" d="M15.4 9.8 20 14.4M20 9.8l-4.6 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-button" id="weather-toggle" type="button" aria-label="Cycle world weather" title="Weather: Clear skies" aria-pressed="false">
+            <span class="weather-icon" id="weather-icon" aria-hidden="true">☀</span>
           </button>
         </div>
       </header>

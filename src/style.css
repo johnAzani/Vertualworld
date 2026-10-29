@@ -56,6 +56,18 @@ button { -webkit-tap-highlight-color: transparent; }
     linear-gradient(90deg, rgba(240, 245, 228, .16), transparent 56%);
 }
 
+/* Cinematic vignette: darkens the frame edges over the 3D canvas so the
+   world reads like a lens view. Pure static gradients — zero GPU cost. */
+.world-vignette {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(128% 100% at 50% 42%, rgba(10, 16, 22, 0) 52%, rgba(10, 16, 22, .17) 82%, rgba(8, 13, 19, .38) 100%),
+    linear-gradient(180deg, rgba(10, 16, 22, .16) 0%, rgba(10, 16, 22, 0) 12%, rgba(10, 16, 22, 0) 86%, rgba(8, 13, 19, .2) 100%);
+}
+
 .topbar {
   position: absolute;
   z-index: 12;
@@ -109,6 +121,10 @@ button { -webkit-tap-highlight-color: transparent; }
   color: #43695a; cursor: pointer; transition: background .2s, transform .2s, color .2s;
 }
 .icon-button svg { width: 17px; height: 17px; }
+.weather-icon { font-size: 15px; line-height: 1; }
+#sound-toggle .sound-muted-mark { display: none; }
+#sound-toggle.is-muted .sound-wave { display: none; }
+#sound-toggle.is-muted .sound-muted-mark { display: inline; }
 .icon-button:hover { background: white; color: #27563f; transform: translateY(-1px); }
 .view-toggle.is-active { border-color: rgba(42,93,73,.35); color: #f4f4e6; background: #397b63; box-shadow: 0 4px 11px rgba(41,94,68,.2); }
 .view-toggle.is-active:hover { color: #fff; background: #306f59; }

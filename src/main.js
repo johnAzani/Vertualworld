@@ -3,6 +3,24 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { resolveDiscAgainstOrientedBox } from './collision.js';
 import { getFrameTiming } from './frame-timing.js';
 import { computeSeatedPose, computeWalkCyclePose } from './walk-cycle.js';
+import {
+  computeHeadBob,
+  computeWeatherMix,
+  createFootstepTracker,
+  createLandingSpring,
+  smoothTowards,
+} from './immersion.js';
+import { createAtmosphereAudio } from './atmosphere-audio.js';
+import {
+  WEATHER_ICONS,
+  WEATHER_LABELS,
+  createRainField,
+  createWeatherState,
+  nextWeatherMode,
+  resolveWeatherMode,
+} from './weather.js';
+import { createBirdFlock, createFireflies } from './sky-life.js';
+import { createPedestrianCrowd } from './pedestrians.js';
 import { createAbujaLandscape } from './abuja-world.js';
 import {
   ABUJA_RIVER_WATERWAY_POINTS,
@@ -710,6 +728,7 @@ stars.visible = false;
 scene.add(stars);
 
 const nightSkyColor = new THREE.Color(0x172b43);
+const scratchWeatherTint = new THREE.Color();
 const daySkyColor = new THREE.Color(0xb5dce0);
 const twilightSkyColor = new THREE.Color(0xe9a889);
 const nightHemiColor = new THREE.Color(0x7f9ec1);
@@ -736,6 +755,7 @@ function updateDaylight(force = false) {
   const elevation = Math.sin(solarPhase);
   const daylight = smoothstep01((elevation + 0.13) / 0.6);
   const night = 1 - daylight;
+  currentNightAmount = night;
   const sunrise = Math.exp(-0.5 * ((hour - 6.2) / 1.7) ** 2);
   const sunset = Math.exp(-0.5 * ((hour - 17.8) / 1.7) ** 2);
   const twilight = clamp(Math.max(sunrise, sunset), 0, 1);
@@ -759,6 +779,22 @@ function updateDaylight(force = false) {
   hemi.groundColor.copy(nightGroundColor).lerp(dayGroundColor, daylight);
 
   blendedSkyColor.copy(nightSkyColor).lerp(daySkyColor, daylight).lerp(twilightSkyColor, twilight * 0.52);
+
+  // Weather layers: rain cools and closes the sky in, harmattan dusts it warm.
+  const weatherMix = computeWeatherMix({ rain: weatherState.rain, harmattan: weatherState.harmattan });
+  if (weatherMix.skyTintWeight > 0.001) {
+    blendedSkyColor.lerp(
+      scratchWeatherTint.setRGB(weatherMix.skyTint.r, weatherMix.skyTint.g, weatherMix.skyTint.b),
+      weatherMix.skyTintWeight,
+    );
+  }
+  scene.fog.near = weatherMix.fogNear;
+  scene.fog.far = weatherMix.fogFar;
+  sunLight.intensity *= weatherMix.sunScale;
+  hemi.intensity *= weatherMix.hemiScale;
+  cloudMaterial.opacity = weatherMix.cloudOpacity;
+  cloudMaterial.color.copy(cloudBaseColor).lerp(cloudStormColor, weatherMix.cloudShade);
+
   scene.background.copy(blendedSkyColor);
   scene.fog.color.copy(blendedSkyColor);
   sunDisc.position.copy(solarDirection).multiplyScalar(148);
@@ -779,6 +815,8 @@ function updateDaylight(force = false) {
   updateTransitLighting(transitNetwork, night);
 }
 
+const cloudBaseColor = new THREE.Color(0xf2f8e9);
+const cloudStormColor = new THREE.Color(0x8d99a4);
 const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f8e9, roughness: 1, transparent: true, opacity: 0.84, depthWrite: false });
 const cloudGeometry = new THREE.SphereGeometry(1, 12, 9);
 const clouds = [];
@@ -802,6 +840,19 @@ for (let i = 0; i < 7; i += 1) {
   clouds.push(cloud);
   scene.add(cloud);
 }
+
+// — Living atmosphere: weather, rain, birds, fireflies and neighbourhood life —
+const weatherState = createWeatherState();
+const rainField = createRainField({ count: 520 });
+scene.add(rainField.object3D);
+const birdFlock = createBirdFlock({ count: 9, center: { x: 0, z: 0 } });
+scene.add(birdFlock.mesh);
+const fireflies = createFireflies({ count: 42, center: { x: 0, z: 0 } });
+scene.add(fireflies.points);
+const pedestrianCrowd = createPedestrianCrowd({ groundHeightAt, count: 6 });
+scene.add(pedestrianCrowd.group);
+let currentNightAmount = 0;
+let manualWeatherMode = null;
 
 // A flat, terrain-following ribbon keeps the path walkable instead of burying the avatar in a raised tube.
 const trailPoints = PATH_POINTS_XZ.map(([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET, z));
@@ -3960,6 +4011,17 @@ const velocity = new THREE.Vector3();
 const pressedKeys = new Set();
 const joystickInput = { x: 0, y: 0 };
 let elapsedWorldTime = 0;
+// — Immersion state: atmosphere audio, camera feel, weather HUD —
+const atmosphereAudio = createAtmosphereAudio();
+let atmosphereAudioStarted = false;
+const footstepTracker = createFootstepTracker();
+const landingSpring = createLandingSpring();
+let cameraFovBoost = 0;
+let landingImpact = 0;
+let lastWeatherChipMode = null;
+const soundToggleButton = document.querySelector('#sound-toggle');
+const weatherToggleButton = document.querySelector('#weather-toggle');
+const weatherIconElement = document.querySelector('#weather-icon');
 let activePhonePage = 'home';
 let phoneUnread = true;
 let phoneCloseTimer = 0;
@@ -4591,6 +4653,55 @@ if (sprintToggleButton) {
   sprintToggleButton.addEventListener('contextmenu', (event) => event.preventDefault());
   sprintToggleButton.addEventListener('click', () => {
     handleToggleSprint();
+  });
+}
+
+// — Atmosphere sound & weather HUD controls —
+function ensureAtmosphereAudioStarted() {
+  if (atmosphereAudioStarted) return;
+  atmosphereAudioStarted = true;
+  atmosphereAudio.start();
+  atmosphereAudio.setEnvironment({
+    night: currentNightAmount,
+    indoors: isInsideHome ? 1 : 0,
+    rain: weatherState.rain,
+    harmattan: weatherState.harmattan,
+  });
+}
+for (const startEvent of ['pointerdown', 'keydown', 'touchstart']) {
+  window.addEventListener(startEvent, ensureAtmosphereAudioStarted, { once: true, passive: true });
+}
+
+function renderSoundToggle() {
+  if (!soundToggleButton) return;
+  const enabled = atmosphereAudio.isEnabled();
+  soundToggleButton.classList.toggle('is-muted', !enabled);
+  soundToggleButton.setAttribute('aria-pressed', String(enabled));
+  soundToggleButton.title = enabled ? 'World sound: on — click to mute' : 'World sound: muted — click to unmute';
+}
+if (soundToggleButton) {
+  soundToggleButton.addEventListener('contextmenu', (event) => event.preventDefault());
+  soundToggleButton.addEventListener('click', () => {
+    ensureAtmosphereAudioStarted();
+    atmosphereAudio.setEnabled(!atmosphereAudio.isEnabled());
+    renderSoundToggle();
+    if (atmosphereAudio.isEnabled()) atmosphereAudio.playUiBlip('success');
+    showToast(atmosphereAudio.isEnabled()
+      ? 'World sound on: wind, rain, birds and footsteps.'
+      : 'World sound muted.', 2200);
+  });
+}
+renderSoundToggle();
+
+if (weatherToggleButton) {
+  weatherToggleButton.addEventListener('contextmenu', (event) => event.preventDefault());
+  weatherToggleButton.addEventListener('click', () => {
+    const nextMode = nextWeatherMode(manualWeatherMode ?? lastWeatherChipMode ?? 'clear');
+    manualWeatherMode = nextMode;
+    lastWeatherChipMode = null;
+    ensureAtmosphereAudioStarted();
+    atmosphereAudio.playUiBlip('tap');
+    showToast(`Weather set to ${WEATHER_LABELS[nextMode]} ${WEATHER_ICONS[nextMode]}. Tap again to change.`, 3000);
   });
 }
 
@@ -8784,6 +8895,19 @@ function drawMapCanvas(targetCanvas, ctx) {
   ctx.stroke();
 }
 
+// Footstep surface detection for the atmosphere audio (road / stone / grass).
+function surfaceUnderFoot() {
+  const px = player.position.x;
+  const pz = player.position.z;
+  for (const surface of estateRoadSurfaces) {
+    if (px >= surface.minX && px <= surface.maxX && pz >= surface.minZ && pz <= surface.maxZ) return 'road';
+  }
+  if (getTransportSurfaceHeight(transitNetwork, px, pz) !== null) return 'road';
+  if (getBridgeFlyoverSurfaceHeight(px, pz, terrainHeight(px, pz)) !== null) return 'stone';
+  if (distanceToPath(px, pz) <= TRAIL_HALF_WIDTH) return 'stone';
+  return 'grass';
+}
+
 const clock = new THREE.Clock();
 const animationScratch = {
   desiredDirection: new THREE.Vector3(),
@@ -8892,6 +9016,26 @@ function animate(timestamp) {
   vehicleAccelerateTapTimer = Math.max(0, vehicleAccelerateTapTimer - delta);
   updateClock();
   if (!prefersReducedMotion) updateDaylight();
+
+  // — Living atmosphere per-frame updates —
+  const gameMinuteOfDay = (worldMinutes + elapsedWorldTime / 18) % (24 * 60);
+  const targetWeatherMode = resolveWeatherMode({ manualMode: manualWeatherMode, hourOfDay: gameMinuteOfDay / 60 });
+  weatherState.update(delta, targetWeatherMode);
+  if (targetWeatherMode !== lastWeatherChipMode) {
+    lastWeatherChipMode = targetWeatherMode;
+    if (weatherToggleButton) {
+      weatherToggleButton.title = `Weather: ${WEATHER_LABELS[targetWeatherMode]}${manualWeatherMode ? ' (manual)' : ''}`;
+      weatherToggleButton.setAttribute('aria-label', `Weather: ${WEATHER_LABELS[targetWeatherMode]}. Activate to change.`);
+    }
+    if (weatherIconElement) weatherIconElement.textContent = WEATHER_ICONS[targetWeatherMode];
+  }
+  atmosphereAudio.setEnvironment({
+    night: currentNightAmount,
+    indoors: isInsideHome ? 1 : 0,
+    rain: weatherState.rain,
+    harmattan: weatherState.harmattan,
+  });
+  atmosphereAudio.update(delta);
   const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
   const stadiumInteriorVisible = isWatchingMatch || isWorldView || stadiumDistance < 58;
   if (stadium.interiorActors) {
@@ -9108,15 +9252,17 @@ function animate(timestamp) {
         isGrounded = false;
         coyoteTimer = 0;
         jumpBufferTimer = 0;
+        atmosphereAudio.jump();
       }
       if (!isGrounded) {
         jumpHeight += jumpVelocity * movementStepDelta;
         jumpVelocity -= PLAYER_GRAVITY * movementStepDelta;
-        if (jumpHeight <= 0) {
-          jumpHeight = 0;
-          jumpVelocity = 0;
-          isGrounded = true;
-        }
+          if (jumpHeight <= 0) {
+            landingImpact = Math.max(landingImpact, -jumpVelocity);
+            jumpHeight = 0;
+            jumpVelocity = 0;
+            isGrounded = true;
+          }
       }
     }
     if (!isRidingTransit && !isRidingPrivateTaxi) player.position.y = ground + jumpHeight;
@@ -9139,6 +9285,31 @@ function animate(timestamp) {
     walkCyclePhase += delta * (isRunning ? 12.6 : 8.8) * Math.max(0.45, strideAmount);
   }
   const gait = isMoving ? Math.sin(walkCyclePhase) : 0;
+
+  // — Immersion: footstep cadence, landing dips, head bob, sprint FOV —
+  if (landingImpact > 0) {
+    landingSpring.impact(landingImpact);
+    if (landingImpact > 3.4 && !prefersReducedMotion) atmosphereAudio.land(Math.min(2.6, landingImpact / 9));
+    landingImpact = 0;
+  }
+  const landingDip = prefersReducedMotion ? 0 : landingSpring.update(delta);
+  const onFoot = !isDriving && !isRidingTransit && !isRidingPrivateTaxi && !isWatchingMatch;
+  if (onFoot && isGrounded && footstepTracker.step(walkCyclePhase, isMoving)) {
+    atmosphereAudio.footstep(surfaceUnderFoot(), isRunning ? 1.12 : 0.85);
+  }
+  const headBob = computeHeadBob({
+    phase: walkCyclePhase,
+    strideAmount,
+    isRunning,
+    isFirstPerson,
+    prefersReducedMotion,
+    planarSpeed,
+    referenceSpeed,
+  });
+  const fovBoostTarget = isRunning && isMoving && onFoot && !isWorldView && !prefersReducedMotion
+    ? (isFirstPerson ? 7.5 : 5)
+    : 0;
+  cameraFovBoost = smoothTowards(cameraFovBoost, fovBoostTarget, delta, 5.5);
   const idleSway = prefersReducedMotion ? 0 : Math.sin(elapsedWorldTime * 1.35);
   if (isWatchingMatch && seatedStadiumSeat) {
     player.position.set(seatedStadiumSeat.worldX, seatedStadiumSeat.worldY, seatedStadiumSeat.worldZ);
@@ -9360,8 +9531,17 @@ function animate(timestamp) {
       player.position.y + (isDriving ? 1.38 : isRidingTransit ? 1.25 : avatarModel.position.y + 1.92),
       player.position.z + seatOffset.z + Math.cos(viewYaw) * eyeBackOffset,
     );
+    // Head bob and landing dips give the eye view a lived-in body feel.
+    eyePosition.y += headBob.y - landingDip * 1.15;
+    if (headBob.side !== 0) {
+      eyePosition.x += headBob.side * Math.cos(viewYaw);
+      eyePosition.z += headBob.side * Math.sin(viewYaw);
+    }
     camera.position.lerp(eyePosition, 1 - Math.exp(-18 * delta));
-    camera.lookAt(animationScratch.lookAtPosition.copy(eyePosition).addScaledVector(viewDirection, 18));
+    const lookTarget = animationScratch.lookAtPosition.copy(eyePosition).addScaledVector(viewDirection, 18);
+    if (headBob.pitch !== 0) lookTarget.y += headBob.pitch * 5;
+    camera.lookAt(lookTarget);
+    if (headBob.roll !== 0) camera.rotateZ(headBob.roll);
   } else if (cameraMode === 'overhead') {
     const cameraDistance = isInsideHome ? 2.4 : isDriving ? 4.2 : 3.8;
     const cameraHeight = isInsideHome ? 8.5 : isDriving ? 15.5 : 16.5;
@@ -9376,9 +9556,11 @@ function animate(timestamp) {
       player.position.y + cameraHeight + jumpHeight * 0.12,
       player.position.z + behindOffset.z,
     );
+    desiredCameraPosition.y += headBob.y * 0.5 - landingDip * 0.8;
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-6 * delta));
     camera.up.set(0, 1, 0);
     camera.lookAt(player.position.x, player.position.y + lookHeight + jumpHeight * 0.08, player.position.z);
+    if (headBob.roll !== 0) camera.rotateZ(headBob.roll * 0.35);
   } else if (isInsideHome && getCurrentResidence()) {
     const residence = getCurrentResidence();
     const local = homeWorldToLocal(player.position.x, player.position.z);
@@ -9395,8 +9577,10 @@ function animate(timestamp) {
       player.position.y + 2.35 + jumpHeight * 0.12,
       cameraLocal.z,
     );
+    desiredCameraPosition.y += headBob.y * 0.5 - landingDip * 0.8;
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-7 * delta));
     camera.lookAt(player.position.x, player.position.y + 1.2 + jumpHeight * 0.08, player.position.z);
+    if (headBob.roll !== 0) camera.rotateZ(headBob.roll * 0.35);
   } else {
     const cameraDistance = isDriving ? 12.6 : 10.8;
     const cameraHeight = isDriving ? 4.8 : 6.2;
@@ -9412,8 +9596,31 @@ function animate(timestamp) {
       player.position.y + cameraHeight + jumpHeight * 0.16,
       player.position.z + behindOffset.z,
     );
+    desiredCameraPosition.y += headBob.y * 0.55 - landingDip * 0.85;
     camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-5.2 * delta));
     camera.lookAt(player.position.x, player.position.y + lookHeight + jumpHeight * 0.12, player.position.z);
+    if (headBob.roll !== 0) camera.rotateZ(headBob.roll * 0.35);
+  }
+
+  // Sprint FOV kick: a gentle zoom-out while running, eased both ways.
+  if (!isWorldView && !isWatchingMatch) {
+    const targetFov = getGameplayCameraFov(cameraMode, window.innerWidth / Math.max(window.innerHeight, 1)) + cameraFovBoost;
+    if (Math.abs(camera.fov - targetFov) > 0.02) {
+      camera.fov = targetFov;
+      camera.updateProjectionMatrix();
+    }
+  }
+
+  // — Living sky & neighbourhood life —
+  rainField.update(delta, camera.position, weatherState.rain);
+  birdFlock.update(elapsedWorldTime);
+  fireflies.update(elapsedWorldTime, currentNightAmount);
+  pedestrianCrowd.update(delta, player.position);
+  if (!prefersReducedMotion) {
+    for (const cloud of clouds) {
+      cloud.position.x += cloud.userData.speed * delta * 0.85;
+      if (cloud.position.x > 140) cloud.position.x = -140;
+    }
   }
 
   uiAccumulator += delta;
