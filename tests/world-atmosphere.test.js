@@ -6,6 +6,7 @@ import { createAtmosphereAudio } from '../src/atmosphere-audio.js';
 import {
   WEATHER_MODES,
   createRainField,
+  createStormFlash,
   createWeatherState,
   getScheduledWeather,
   nextWeatherMode,
@@ -155,6 +156,58 @@ test('weather state crossfades smoothly between modes', () => {
   for (let i = 0; i < 200; i += 1) weather.update(0.05, 'clear');
   assert.ok(weather.rain < 0.01, 'rain should ease back to 0');
   assert.ok(weather.harmattan === 0, 'harmattan untouched by rain mode');
+});
+
+test('storm flash only strikes in heavy rain, and each strike decays', () => {
+  const flash = createStormFlash({ random: () => 0.5, minInterval: 1, maxInterval: 1, threshold: 0.55 });
+  // Clear skies: no flashes no matter how long we wait.
+  for (let i = 0; i < 200; i += 1) {
+    const intensity = flash.update(0.1, 0);
+    assert.equal(flash.fired, false);
+    assert.equal(intensity, 0);
+  }
+  // Heavy rain: once the interval elapses the sky flashes and thunder is flagged.
+  let sawFlash = false;
+  let sawFire = false;
+  for (let i = 0; i < 40; i += 1) {
+    const intensity = flash.update(0.1, 0.9);
+    if (flash.fired) {
+      sawFire = true;
+      assert.ok(intensity > 0.6, 'a fresh strike is bright');
+    }
+    if (intensity > 0) sawFlash = true;
+  }
+  assert.ok(sawFire, 'storm fires under heavy rain');
+  assert.ok(sawFlash, 'flash intensity rises above zero');
+  // Once the rain lets up, the flash decays fully and no new strikes fire.
+  let last = 1;
+  for (let i = 0; i < 80; i += 1) last = flash.update(0.1, 0);
+  assert.equal(last, 0, 'flash fully decays after the storm passes');
+  assert.equal(flash.fired, false, 'no strikes without rain');
+});
+
+test('atmosphere audio plays thunder on demand and honks during the day', () => {
+  const { StubAudioContext, created } = createStubAudioContextClass();
+  const audio = createAtmosphereAudio({ audioContextClass: StubAudioContext, storage: null, random: () => 0.5 });
+  audio.start();
+
+  const sourcesBeforeThunder = created.sources;
+  audio.playThunder();
+  assert.ok(created.sources > sourcesBeforeThunder, 'thunder builds a rumble source');
+  assert.equal(audio.stats.thunders, 1, 'thunder is counted');
+
+  // Daytime: distant honks are scheduled over time; birds chirp too.
+  audio.setEnvironment({ night: 0, rain: 0 });
+  for (let i = 0; i < 200; i += 1) audio.update(0.5);
+  assert.ok(audio.stats.honks >= 2, `daytime honks fire over two minutes, got ${audio.stats.honks}`);
+  assert.ok(audio.stats.birds >= 2, `daytime birds chirp too, got ${audio.stats.birds}`);
+
+  // Quiet night: no honks once the sun is down.
+  const honksAtDusk = audio.stats.honks;
+  audio.setEnvironment({ night: 1, rain: 0 });
+  for (let i = 0; i < 200; i += 1) audio.update(0.5);
+  assert.equal(audio.stats.honks, honksAtDusk, 'no daytime honks at night');
+  assert.ok(audio.stats.crickets > 0, 'crickets take over after dark');
 });
 
 test('rain drops fall, slant with the wind, and recycle around the camera', () => {

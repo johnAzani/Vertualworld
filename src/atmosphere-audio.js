@@ -25,11 +25,13 @@ function createSilentAudio() {
     start: noop,
     setEnabled: noop,
     isEnabled: () => false,
+    stats: { birds: 0, crickets: 0, honks: 0, thunders: 0 },
     setEnvironment: noop,
     update: noop,
     footstep: noop,
     jump: noop,
     land: noop,
+    playThunder: noop,
     playUiBlip: noop,
     dispose: noop,
   };
@@ -68,8 +70,9 @@ export function createAtmosphereAudio({
     harmattan: 0,
     nextBirdAt: 0,
     nextCricketAt: 0,
-    nextThunderAt: 0,
+    nextHonkAt: 0,
     clock: 0,
+    stats: { birds: 0, crickets: 0, honks: 0, thunders: 0 },
   };
 
   try {
@@ -166,6 +169,7 @@ export function createAtmosphereAudio({
   }
 
   function birdChirp() {
+    state.stats.birds += 1;
     const notes = 2 + Math.floor(safeRandom() * 3);
     const base = 2100 + safeRandom() * 900;
     for (let i = 0; i < notes; i += 1) {
@@ -177,6 +181,7 @@ export function createAtmosphereAudio({
   }
 
   function cricketBurst() {
+    state.stats.crickets += 1;
     const pulses = 4 + Math.floor(safeRandom() * 3);
     for (let i = 0; i < pulses; i += 1) {
       oneShotTone({ type: 'triangle', from: 4100 + safeRandom() * 320, peak: 0.011, attack: 0.004, release: 0.028, when: i * 0.046 });
@@ -185,6 +190,7 @@ export function createAtmosphereAudio({
 
   function thunderRumble() {
     if (!state.started || !state.enabled) return;
+    state.stats.thunders += 1;
     const now = context.currentTime;
     const source = track(context.createBufferSource());
     source.buffer = noiseBuffer;
@@ -199,6 +205,15 @@ export function createAtmosphereAudio({
     source.connect(filter).connect(gainNode).connect(masterGain);
     source.start(now);
     source.stop(now + 3.4);
+  }
+
+  function distantHonk() {
+    state.stats.honks += 1;
+    const base = 360 + safeRandom() * 180;
+    oneShotTone({ type: 'square', from: base, to: base * 0.94, peak: 0.016, attack: 0.012, release: 0.16 });
+    if (safeRandom() > 0.45) {
+      oneShotTone({ type: 'square', from: base * 1.18, to: base * 1.1, peak: 0.013, attack: 0.01, release: 0.13, when: 0.22 });
+    }
   }
 
   return {
@@ -235,7 +250,7 @@ export function createAtmosphereAudio({
       state.clock = now;
       state.nextBirdAt = now + 1.2 + safeRandom() * 3;
       state.nextCricketAt = now + 2 + safeRandom() * 3;
-      state.nextThunderAt = now + 30 + safeRandom() * 45;
+      state.nextHonkAt = now + 14 + safeRandom() * 24;
 
       if (!state.enabled && typeof context.suspend === 'function') context.suspend();
     },
@@ -258,6 +273,11 @@ export function createAtmosphereAudio({
 
     isEnabled() {
       return state.enabled;
+    },
+
+    /** Introspection for tests and debuggers: how many ambient events fired. */
+    get stats() {
+      return { ...state.stats };
     },
 
     setEnvironment({ night = 0, indoors = 0, rain = 0, harmattan = 0 } = {}) {
@@ -288,9 +308,9 @@ export function createAtmosphereAudio({
         cricketBurst();
         state.nextCricketAt = now + 0.55 + safeRandom() * 1.15;
       }
-      if (state.rain > 0.62 && now >= state.nextThunderAt) {
-        thunderRumble();
-        state.nextThunderAt = now + 42 + safeRandom() * 80;
+      if (state.night < 0.62 && state.rain < 0.45 && now >= state.nextHonkAt) {
+        distantHonk();
+        state.nextHonkAt = now + 16 + safeRandom() * 38;
       }
     },
 
@@ -299,6 +319,10 @@ export function createAtmosphereAudio({
       const base = frequencies[surface] ?? 520;
       const gain = 0.085 * clamp(Number(intensity) || 1, 0.35, 1.4);
       oneShotNoise({ filterType: 'bandpass', from: base * (0.88 + safeRandom() * 0.26), q: 1.05, peak: gain, attack: 0.006, release: 0.075, playbackRate: 0.82 + safeRandom() * 0.36 });
+      // Wet-weather splash layer on top of the step.
+      if (state.rain > 0.28) {
+        oneShotNoise({ filterType: 'highpass', from: 1500, peak: gain * 0.5 * state.rain, attack: 0.004, release: 0.09, playbackRate: 1.1 + safeRandom() * 0.3 });
+      }
     },
 
     jump() {
@@ -309,6 +333,10 @@ export function createAtmosphereAudio({
       const force = clamp(Number(impact) || 1, 0.4, 3.2);
       oneShotTone({ type: 'sine', from: 92, to: 48, peak: 0.13 * force, attack: 0.008, release: 0.22 });
       oneShotNoise({ filterType: 'lowpass', from: 280, peak: 0.075 * force, attack: 0.005, release: 0.12 });
+    },
+
+    playThunder() {
+      thunderRumble();
     },
 
     playUiBlip(kind = 'tap') {

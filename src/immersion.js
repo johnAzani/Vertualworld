@@ -11,6 +11,19 @@ function clamp(value, min, max) {
 }
 
 /**
+ * Wet-surface look: rain slicks materials down in roughness and adds a touch
+ * of metalness so roads and trails catch the sky.
+ */
+export function computeWetSurface(rain = 0) {
+  const wet = clamp(Number(rain) || 0, 0, 1);
+  return {
+    roughnessScale: 1 - 0.66 * wet,
+    metalnessBoost: 0.16 * wet,
+    wet,
+  };
+}
+
+/**
  * Exponential smoothing toward a target that is framerate independent.
  */
 export function smoothTowards(current, target, delta, rate = 5.5) {

@@ -8,6 +8,33 @@
 import * as THREE from 'three';
 import { computeWalkCyclePose } from './walk-cycle.js';
 
+/** Friendly names so greetings feel personal. */
+export const PEDESTRIAN_NAMES = Object.freeze(['Amaka', 'Musa', 'Chidi', 'Fatima', 'Emeka', 'Aisha', 'Ngozi', 'Bola', 'Sade', 'Tunde']);
+
+/** Find the closest walker within `maxDistance` of a world position. */
+export function findNearestWalker(walkers, x, z, maxDistance = 11) {
+  let nearest = null;
+  let best = maxDistance * maxDistance;
+  for (const walker of walkers) {
+    const rigGroup = walker.rig.group;
+    const dx = rigGroup.position.x - x;
+    const dz = rigGroup.position.z - z;
+    const sq = dx * dx + dz * dz;
+    if (sq < best) {
+      best = sq;
+      nearest = walker;
+    }
+  }
+  return nearest;
+}
+
+/** Ask a walker to wave back for `duration` seconds. */
+export function triggerWalkerWave(walker, duration = 2.2) {
+  if (!walker) return false;
+  walker.waveTimer = Math.max(walker.waveTimer, duration);
+  return true;
+}
+
 function angleDelta(from, to) {
   return Math.atan2(Math.sin(to - from), Math.cos(to - from));
 }
@@ -150,6 +177,8 @@ export function createPedestrianCrowd({
       yaw: safeRandom() * Math.PI * 2,
       phase: safeRandom() * Math.PI * 2,
       cadence: 4.4 + speed * 1.15,
+      waveTimer: 0,
+      name: PEDESTRIAN_NAMES[i % PEDESTRIAN_NAMES.length],
       visible: true,
     });
   }
@@ -206,7 +235,17 @@ export function createPedestrianCrowd({
         walker.rig.kneePivots[0].rotation.x = pose.leftLeg.kneePitch;
         walker.rig.kneePivots[1].rotation.x = pose.rightLeg.kneePitch;
         walker.rig.armPivots[0].rotation.x = pose.leftArmPitch;
+        walker.rig.armPivots[0].rotation.z = 0;
         walker.rig.armPivots[1].rotation.x = pose.rightArmPitch;
+        walker.rig.armPivots[1].rotation.z = 0;
+
+        // Greeting: the walker raises their arm and waves back for a moment.
+        if (walker.waveTimer > 0) {
+          walker.waveTimer = Math.max(0, walker.waveTimer - safeDelta);
+          const waveSwing = Math.sin(walker.waveTimer * 9.5) * 0.32;
+          walker.rig.armPivots[1].rotation.x = -2.35 + waveSwing * 0.25;
+          walker.rig.armPivots[1].rotation.z = -0.55 + waveSwing;
+        }
       }
     },
   };

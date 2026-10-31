@@ -3,11 +3,23 @@ import test from 'node:test';
 
 import {
   computeHeadBob,
+  computeWetSurface,
   computeWeatherMix,
   createFootstepTracker,
   createLandingSpring,
   smoothTowards,
 } from '../src/immersion.js';
+
+test('wet surface mix glosses roads up as rain falls and is clamped', () => {
+  const dry = computeWetSurface(0);
+  assert.equal(dry.roughnessScale, 1);
+  assert.equal(dry.metalnessBoost, 0);
+  const soaked = computeWetSurface(1);
+  assert.ok(Math.abs(soaked.roughnessScale - 0.34) < 1e-9, 'soaked roads are glossy');
+  assert.ok(Math.abs(soaked.metalnessBoost - 0.16) < 1e-9, 'soaked roads pick up metalness');
+  const clamped = computeWetSurface(9);
+  assert.ok(clamped.roughnessScale === soaked.roughnessScale, 'inputs clamp to 1');
+});
 
 test('smoothTowards is framerate independent and eases toward the target', () => {
   const oneBigStep = smoothTowards(0, 10, 1, 5.5);

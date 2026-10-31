@@ -130,6 +130,46 @@ export function updateRainDrops({
 }
 
 /**
+ * Storm lightning: while rain is heavy, occasional double-peak sky flashes.
+ * `update` returns the current flash intensity (0..1) and sets `.fired` on the
+ * frame where a new strike begins so the caller can trigger thunder.
+ */
+export function createStormFlash({ random = Math.random, minInterval = 26, maxInterval = 72, threshold = 0.55 } = {}) {
+  const safeRandom = typeof random === 'function' ? random : Math.random;
+  const state = {
+    elapsed: 0,
+    flash: 0,
+    nextFlashAt: minInterval + safeRandom() * (maxInterval - minInterval),
+    fired: false,
+  };
+  return {
+    get fired() {
+      return state.fired;
+    },
+    get flash() {
+      return state.flash;
+    },
+    update(delta, rainAmount) {
+      const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.min(delta, 0.5) : 0;
+      state.elapsed += safeDelta;
+      state.fired = false;
+      // Fast attack, double-peak decay: bright strike then a softer echo.
+      if (state.flash > 0) {
+        const decay = state.flash > 0.5 ? 3.1 : 1.35;
+        state.flash = Math.max(0, state.flash - safeDelta * decay * (0.55 + state.flash));
+      }
+      const rain = Math.max(0, Math.min(1, Number(rainAmount) || 0));
+      if (rain >= threshold && state.elapsed >= state.nextFlashAt) {
+        state.flash = 0.72 + safeRandom() * 0.28;
+        state.fired = true;
+        state.nextFlashAt = state.elapsed + minInterval + safeRandom() * (maxInterval - minInterval);
+      }
+      return state.flash;
+    },
+  };
+}
+
+/**
  * Rain field object: LineSegments streaks with a single shared material.
  * `update` follows the camera and drives fall speed + opacity from intensity.
  */

@@ -1168,6 +1168,7 @@ export function createTransportNetwork(scene, terrainHeight) {
     roadCurve,
     railCurve,
     roadLength: roadCurve.getLength(),
+    roadMaterial: asphalt,
     terrainHeight,
     roadTerrainHeight,
     roadPoints: BUS_ROUTE_XZ,

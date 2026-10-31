@@ -5,6 +5,7 @@ import { getFrameTiming } from './frame-timing.js';
 import { computeSeatedPose, computeWalkCyclePose } from './walk-cycle.js';
 import {
   computeHeadBob,
+  computeWetSurface,
   computeWeatherMix,
   createFootstepTracker,
   createLandingSpring,
@@ -15,12 +16,23 @@ import {
   WEATHER_ICONS,
   WEATHER_LABELS,
   createRainField,
+  createStormFlash,
   createWeatherState,
   nextWeatherMode,
   resolveWeatherMode,
 } from './weather.js';
 import { createBirdFlock, createFireflies } from './sky-life.js';
-import { createPedestrianCrowd } from './pedestrians.js';
+import {
+  createPedestrianCrowd,
+  findNearestWalker,
+  triggerWalkerWave,
+} from './pedestrians.js';
+import {
+  createHarmattanDust,
+  createRiverCanoes,
+  createStreetStalls,
+  createStreetTraffic,
+} from './street-life.js';
 import { createAbujaLandscape } from './abuja-world.js';
 import {
   ABUJA_RIVER_WATERWAY_POINTS,
@@ -557,6 +569,22 @@ const estateHouses = [];
 const commerceVenues = [];
 const estateRoadSurfaces = [];
 const exteriorNightLights = [];
+// — Night window glow, wet-weather surfaces, and waving civic flags —
+const nightWindowGlows = [];
+function registerNightWindowGlow(material, nightEmissiveHex, nightIntensity = 1) {
+  nightWindowGlows.push({
+    material,
+    dayEmissive: material.emissive.clone(),
+    dayIntensity: material.emissiveIntensity,
+    nightEmissive: new THREE.Color(nightEmissiveHex),
+    nightIntensity,
+  });
+}
+const wetSurfaceMaterials = [];
+function registerWetSurface(material, dryRoughness, dryMetalness = 0.01) {
+  wetSurfaceMaterials.push({ material, dryRoughness, dryMetalness });
+}
+const wavingFlagMeshes = [];
 const worldObstacleColliders = [];
 let playerCar = null;
 let transitNetwork = null;
@@ -795,6 +823,18 @@ function updateDaylight(force = false) {
   cloudMaterial.opacity = weatherMix.cloudOpacity;
   cloudMaterial.color.copy(cloudBaseColor).lerp(cloudStormColor, weatherMix.cloudShade);
 
+  // Night window glow: buildings warm up from the inside after dark.
+  for (const glow of nightWindowGlows) {
+    glow.material.emissive.copy(glow.dayEmissive).lerp(glow.nightEmissive, night);
+    glow.material.emissiveIntensity = THREE.MathUtils.lerp(glow.dayIntensity, glow.nightIntensity, night);
+  }
+  // Rain-soaked surfaces: roads, trails and bridges gloss up when wet.
+  const wetSurface = computeWetSurface(weatherState.rain);
+  for (const wet of wetSurfaceMaterials) {
+    wet.material.roughness = wet.dryRoughness * wetSurface.roughnessScale;
+    wet.material.metalness = wet.dryMetalness + wetSurface.metalnessBoost;
+  }
+
   scene.background.copy(blendedSkyColor);
   scene.fog.color.copy(blendedSkyColor);
   sunDisc.position.copy(solarDirection).multiplyScalar(148);
@@ -851,8 +891,23 @@ const fireflies = createFireflies({ count: 42, center: { x: 0, z: 0 } });
 scene.add(fireflies.points);
 const pedestrianCrowd = createPedestrianCrowd({ groundHeightAt, count: 6 });
 scene.add(pedestrianCrowd.group);
+const riverCanoes = createRiverCanoes({ terrainHeight, count: 2 });
+scene.add(riverCanoes.group);
+const streetStalls = createStreetStalls({
+  terrainHeight,
+  stalls: [
+    { x: 33.2, z: -20.6, facing: Math.PI / 2 },
+    { x: 53.4, z: 57.2, facing: -Math.PI * 0.62 },
+  ],
+});
+scene.add(streetStalls.group);
+const harmattanDust = createHarmattanDust({ count: 36 });
+scene.add(harmattanDust.points);
+const stormFlash = createStormFlash();
+const stormFlashColor = new THREE.Color(0xdfe9ff);
 let currentNightAmount = 0;
 let manualWeatherMode = null;
+let playerGreetTimer = 0;
 
 // A flat, terrain-following ribbon keeps the path walkable instead of burying the avatar in a raised tube.
 const trailPoints = PATH_POINTS_XZ.map(([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET, z));
@@ -904,6 +959,7 @@ const trail = new THREE.Mesh(
   createTrailRibbonGeometry(trailCurve, 180, TRAIL_HALF_WIDTH),
   new THREE.MeshStandardMaterial({ color: 0xd5c493, roughness: 0.95, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }),
 );
+registerWetSurface(trail.material, 0.95, 0.02);
 trail.receiveShadow = true;
 scene.add(trail);
 
@@ -1049,9 +1105,12 @@ function random() {
 // Unity Court: four small homes share a landscaped lane just east of the trail.
 const estateRoadMaterial = new THREE.MeshStandardMaterial({ color: 0xaaa68c, roughness: 0.94, metalness: 0.01 });
 const estateRoadEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xd0c6a2, roughness: 0.92 });
+registerWetSurface(estateRoadMaterial, 0.94, 0.01);
+registerWetSurface(estateRoadEdgeMaterial, 0.92, 0.01);
 const estateFoundationMaterial = new THREE.MeshStandardMaterial({ color: 0xb3ad98, roughness: 0.95 });
 const estateTrimMaterial = new THREE.MeshStandardMaterial({ color: 0xf2e9d4, roughness: 0.84 });
 const estateWindowMaterial = new THREE.MeshStandardMaterial({ color: 0x6caaa5, roughness: 0.24, metalness: 0.12, emissive: 0x1c4140, emissiveIntensity: 0.2, transparent: true, opacity: 0.74, side: THREE.DoubleSide, depthWrite: false });
+registerNightWindowGlow(estateWindowMaterial, 0xffc47a, 1.08);
 const estateDoorMaterials = [
   new THREE.MeshStandardMaterial({ color: 0x527e70, roughness: 0.72 }),
   new THREE.MeshStandardMaterial({ color: 0x8f6247, roughness: 0.78 }),
@@ -2237,6 +2296,7 @@ function createShoppingMallVenue(venueLayout) {
     opacity: 0.54,
     side: THREE.DoubleSide,
   });
+  registerNightWindowGlow(glassMaterial, 0xffd9a0, 1.0);
   const signMaterial = new THREE.MeshBasicMaterial({
     map: makeCommerceSignTexture(`${sign} · 6 LOCKUP SHOPS`, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8'),
   });
@@ -2512,6 +2572,7 @@ function createCommerceVenue(venueLayout) {
   const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xf1e5c9, roughness: 0.7 });
   const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x76533f, roughness: 0.72 });
   const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x9bcac3, roughness: 0.22, metalness: 0.04, transparent: true, opacity: 0.72, side: THREE.DoubleSide });
+  registerNightWindowGlow(glassMaterial, 0xffd9a0, 0.9);
   const signMaterial = new THREE.MeshBasicMaterial({ map: makeCommerceSignTexture(sign, `#${new THREE.Color(awningColor).getHexString()}`, '#fff9e8') });
   const addBox = (dimensions, position, material, castShadow = true, receiveShadow = true) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions), material);
@@ -2647,6 +2708,7 @@ function createCommunityHall() {
   const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x775c43, roughness: 0.82 });
   const civicGreenMaterial = new THREE.MeshStandardMaterial({ color: 0x2f6b4f, roughness: 0.65 });
   const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x91bcb5, roughness: 0.3, metalness: 0.04, transparent: true, opacity: 0.74, side: THREE.DoubleSide });
+  registerNightWindowGlow(glassMaterial, 0xffd9a0, 0.85);
   communityHallSignMaterial = new THREE.MeshBasicMaterial({
     map: makeCommunityHallSignTexture(),
     toneMapped: false,
@@ -2673,7 +2735,9 @@ function createCommunityHall() {
     addBox([1.48, 1.26, 0.12], [side * 2.12, 2.1, frontZ - 0.14], glassMaterial, false, false);
     // Flanking civic flagpoles
     addBox([0.07, 2.35, 0.07], [side * 2.65, 1.35, frontZ - 1.25], trimMaterial);
-    addBox([0.48, 0.28, 0.04], [side * 2.65 + 0.24, 2.32, frontZ - 1.25], civicGreenMaterial);
+    const flag = addBox([0.48, 0.28, 0.04], [side * 2.65 + 0.24, 2.32, frontZ - 1.25], civicGreenMaterial, false, false);
+    flag.userData.wavePhase = side * 1.7;
+    wavingFlagMeshes.push(flag);
   }
   addBox([1.58, 2.32, 0.12], [0, 1.4, frontZ - 0.08], trimMaterial, false, false);
   addBox([1.32, 2.06, 0.14], [0, 1.38, frontZ - 0.16], doorMaterial);
@@ -2690,7 +2754,7 @@ function createCommunityHall() {
     }
   }
 
-  batchStaticVenueMeshes(group);
+  batchStaticVenueMeshes(group, new Set(wavingFlagMeshes));
   const signBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.8, 0.88), communityHallSignMaterial);
   signBoard.position.set(0, 3.05, frontZ - 0.19);
   signBoard.rotation.y = Math.PI;
@@ -3069,6 +3133,8 @@ function createBridgesAndFlyovers() {
   // 2. Build all 4 Monumental 3D Bridges & Elevated Highway Flyovers
   const concreteMat = new THREE.MeshStandardMaterial({ color: 0xcfc7b2, roughness: 0.86 });
   const darkConcreteMat = new THREE.MeshStandardMaterial({ color: 0x8d8777, roughness: 0.9 });
+  registerWetSurface(concreteMat, 0.86, 0.02);
+  registerWetSurface(darkConcreteMat, 0.9, 0.02);
   const guardrailMat = new THREE.MeshStandardMaterial({ color: 0x2a4d3e, roughness: 0.48, metalness: 0.34 });
   const goldAccentMat = new THREE.MeshStandardMaterial({ color: 0xe3be6b, roughness: 0.36, metalness: 0.38 });
   const cableMat = new THREE.MeshStandardMaterial({ color: 0xd9d5c8, roughness: 0.35, metalness: 0.62 });
@@ -3378,6 +3444,16 @@ const stadium = createStadium(terrainHeight);
 scene.add(stadium.group);
 worldObstacleColliders.push(...getStadiumWallColliders(STADIUM));
 transitNetwork = createTransportNetwork(scene, terrainHeight);
+
+// Moving local traffic: keke, okada and private cars riding the real road network.
+const streetTraffic = createStreetTraffic({
+  roadCurve: transitNetwork.roadCurve,
+  roadLength: transitNetwork.roadLength,
+  groundHeightAt,
+  random: Math.random,
+});
+scene.add(streetTraffic.group);
+if (transitNetwork.roadMaterial) registerWetSurface(transitNetwork.roadMaterial, 0.94, 0.01);
 createCommunityHall();
 createStrategicBillboards();
 worldObstacleColliders.push({ vehicleGroup: transitNetwork.train.group, radius: 3.25, height: 2.55 });
@@ -4173,6 +4249,24 @@ function syncSprintToggleButton() {
   if (sprintButtonLabel) sprintButtonLabel.textContent = active ? 'RUN ON' : 'RUN';
 }
 
+function handleGreetNeighbour() {
+  if (isDriving || isRidingTransit || isRidingPrivateTaxi) {
+    showToast('You can only greet neighbours on foot.', 2200);
+    return;
+  }
+  ensureAtmosphereAudioStarted();
+  const nearest = findNearestWalker(pedestrianCrowd.walkers, player.position.x, player.position.z, 11);
+  if (nearest && nearest.rig.group.visible) {
+    triggerWalkerWave(nearest);
+    playerGreetTimer = 1.8;
+    atmosphereAudio.playUiBlip('success');
+    showToast(`You waved at ${nearest.name} — they waved back!`, 2600);
+  } else {
+    atmosphereAudio.playUiBlip('alert');
+    showToast('No neighbours nearby — stroll the promenades to find someone.', 2800);
+  }
+}
+
 function handleToggleSprint() {
   if (isDriving || isRidingTransit || isRidingPrivateTaxi) return;
   const enabled = toggleSprintMode(navigationUxState);
@@ -4244,6 +4338,11 @@ window.addEventListener('keydown', (event) => {
   if (key === 'r' && !event.repeat) {
     event.preventDefault();
     handleToggleSprint();
+    return;
+  }
+  if (key === 'g' && !event.repeat) {
+    event.preventDefault();
+    handleGreetNeighbour();
     return;
   }
   if (isWatchingMatch) {
@@ -9036,6 +9135,16 @@ function animate(timestamp) {
     harmattan: weatherState.harmattan,
   });
   atmosphereAudio.update(delta);
+
+  // Storm lightning: sky flashes with thunder while the rain is heavy.
+  const stormFlashIntensity = stormFlash.update(delta, weatherState.rain);
+  if (stormFlash.fired) atmosphereAudio.playThunder();
+  scene.background.copy(blendedSkyColor);
+  if (stormFlashIntensity > 0.002) {
+    scene.background.lerp(stormFlashColor, Math.min(0.62, stormFlashIntensity * 0.55));
+  }
+  scene.fog.color.copy(scene.background);
+  if (playerGreetTimer > 0) playerGreetTimer = Math.max(0, playerGreetTimer - delta);
   const stadiumDistance = Math.hypot(player.position.x - STADIUM.x, player.position.z - STADIUM.z);
   const stadiumInteriorVisible = isWatchingMatch || isWorldView || stadiumDistance < 58;
   if (stadium.interiorActors) {
@@ -9348,7 +9457,14 @@ function animate(timestamp) {
     footPivots[0].rotation.x = walkPose.leftLeg.anklePitch;
     footPivots[1].rotation.x = walkPose.rightLeg.anklePitch;
     armPivots[0].rotation.x = walkPose.leftArmPitch;
+    armPivots[0].rotation.z = 0;
     armPivots[1].rotation.x = walkPose.rightArmPitch;
+    armPivots[1].rotation.z = 0;
+    if (playerGreetTimer > 0) {
+      const waveSwing = Math.sin(elapsedWorldTime * 8.5) * 0.3;
+      armPivots[1].rotation.x = -2.28 + waveSwing * 0.24;
+      armPivots[1].rotation.z = -0.5 + waveSwing;
+    }
     elbowPivots[0].rotation.x = walkPose.leftElbowPitch;
     elbowPivots[1].rotation.x = walkPose.rightElbowPitch;
     pelvis.rotation.set(walkPose.torsoForwardLean * 0.4, walkPose.pelvisYaw, walkPose.pelvisRoll);
@@ -9616,6 +9732,16 @@ function animate(timestamp) {
   birdFlock.update(elapsedWorldTime);
   fireflies.update(elapsedWorldTime, currentNightAmount);
   pedestrianCrowd.update(delta, player.position);
+  streetTraffic.update(delta, player.position);
+  riverCanoes.update(delta, elapsedWorldTime);
+  streetStalls.update(delta, elapsedWorldTime, currentNightAmount, weatherState.rain);
+  harmattanDust.update(elapsedWorldTime, weatherState.harmattan);
+  if (!prefersReducedMotion) {
+    for (const flag of wavingFlagMeshes) {
+      flag.rotation.y = Math.sin(elapsedWorldTime * 2.15 + (flag.userData.wavePhase || 0)) * 0.3;
+      flag.rotation.z = Math.sin(elapsedWorldTime * 3.4 + (flag.userData.wavePhase || 0)) * 0.09;
+    }
+  }
   if (!prefersReducedMotion) {
     for (const cloud of clouds) {
       cloud.position.x += cloud.userData.speed * delta * 0.85;
