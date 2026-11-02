@@ -24,6 +24,49 @@ export function computeWetSurface(rain = 0) {
 }
 
 /**
+ * Storm wind sway: the camera leans and rolls gently in strong weather, as if
+ * the wind is pushing on the resident. Zero under prefersReducedMotion.
+ */
+export function computeWeatherSway({ rain = 0, harmattan = 0, time = 0, prefersReducedMotion = false } = {}) {
+  if (prefersReducedMotion) return { yaw: 0, roll: 0, pitch: 0 };
+  const gust = clamp((Number(rain) || 0) * 0.65 + (Number(harmattan) || 0), 0, 1.15);
+  if (gust < 0.02) return { yaw: 0, roll: 0, pitch: 0 };
+  const t = Number.isFinite(time) ? time : 0;
+  return {
+    yaw: (Math.sin(t * 0.23) * 0.004 + Math.sin(t * 0.71) * 0.0016) * gust,
+    roll: Math.sin(t * 0.31 + 1.2) * 0.0035 * gust,
+    pitch: Math.sin(t * 0.19 + 2.1) * 0.002 * gust,
+  };
+}
+
+/**
+ * Time-of-day jump presets for the HUD clock button: lets the resident move
+ * the world to dawn, day, sunset or night so every hour's beauty is one tap away.
+ */
+export const TIME_OF_DAY_PRESETS = Object.freeze([
+  Object.freeze({ id: 'dawn', label: 'Dawn', icon: '🌅', minutes: 6 * 60 + 15 }),
+  Object.freeze({ id: 'day', label: 'Midday', icon: '☀️', minutes: 11 * 60 }),
+  Object.freeze({ id: 'sunset', label: 'Sunset', icon: '🌇', minutes: 17 * 60 + 40 }),
+  Object.freeze({ id: 'night', label: 'Night', icon: '🌙', minutes: 21 * 60 + 30 }),
+]);
+
+/**
+ * Compute the `worldMinutes` value that places the world clock at the preset,
+ * accounting for the elapsed-time drift (world time = worldMinutes + elapsed/18).
+ */
+export function computeTimeJumpWorldMinutes(presetMinutes, elapsedWorldTime = 0) {
+  const target = Number.isFinite(presetMinutes) ? presetMinutes : 12 * 60;
+  const elapsedDrift = (Number.isFinite(elapsedWorldTime) ? elapsedWorldTime : 0) / 18;
+  return ((target - elapsedDrift) % (24 * 60) + 24 * 60) % (24 * 60);
+}
+
+/** Cycle to the next time-of-day preset after `currentId` (or the first). */
+export function getNextTimePreset(currentId = null) {
+  const index = TIME_OF_DAY_PRESETS.findIndex((preset) => preset.id === currentId);
+  return TIME_OF_DAY_PRESETS[(index + 1) % TIME_OF_DAY_PRESETS.length];
+}
+
+/**
  * Exponential smoothing toward a target that is framerate independent.
  */
 export function smoothTowards(current, target, delta, rate = 5.5) {

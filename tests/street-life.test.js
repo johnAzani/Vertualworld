@@ -3,8 +3,10 @@ import test from 'node:test';
 import * as THREE from 'three';
 
 import {
+  createFootstepDust,
   createHarmattanDust,
   createRiverCanoes,
+  createRiverSparkle,
   createStreetStalls,
   createStreetTraffic,
 } from '../src/street-life.js';
@@ -150,6 +152,44 @@ test('harmattan dust hangs in the haze only when the harmattan blows', () => {
   const before = attribute.getY(0);
   dust.update(3, 0.8);
   assert.ok(Math.abs(attribute.getY(0) - before) > 0.01, 'dust drifts');
+  dust.dispose();
+});
+
+test('river sparkle glints on the waterway at dawn and dusk, and sleeps at night', () => {
+  const sparkle = createRiverSparkle({ count: 24, random: () => 0.5, terrainHeight: () => 1.5 });
+  assert.equal(sparkle.points.visible, false);
+  sparkle.update(1, 0.5, 0);
+  assert.equal(sparkle.points.visible, true, 'glints in daylight');
+  const dayOpacity = sparkle.points.material.opacity;
+  sparkle.update(1, 0.5, 0.9);
+  assert.ok(sparkle.points.material.opacity > dayOpacity, 'glints brightest at sunrise and sunset');
+  sparkle.update(1, 0, 0);
+  assert.equal(sparkle.points.visible, false, 'gone at night');
+  const attribute = sparkle.points.geometry.attributes.position;
+  for (let i = 0; i < attribute.count; i += 1) {
+    assert.ok(attribute.getY(i) > 1.4 && attribute.getY(i) < 1.7, 'glints sit on the water surface');
+  }
+  sparkle.dispose();
+});
+
+test('footstep dust puffs kick up, drift, and settle away', () => {
+  const dust = createFootstepDust({ count: 9, random: () => 0.5 });
+  dust.puff(4, 0.2, -6, 1);
+  const attribute = dust.points.geometry.attributes.position;
+  let active = 0;
+  for (let i = 0; i < attribute.count; i += 1) {
+    if (attribute.getY(i) > -10) active += 1;
+  }
+  assert.equal(active, 3, 'each footstep kicks up three motes');
+  const firstY = attribute.getY(0);
+  dust.update(0.1);
+  assert.ok(attribute.getY(0) > firstY, 'dust drifts upward off the ground');
+  for (let i = 0; i < 40; i += 1) dust.update(0.1);
+  let remaining = 0;
+  for (let i = 0; i < attribute.count; i += 1) {
+    if (attribute.getY(i) > -10) remaining += 1;
+  }
+  assert.equal(remaining, 0, 'dust settles and recycles out of sight');
   dust.dispose();
 });
 

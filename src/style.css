@@ -106,6 +106,22 @@ button { -webkit-tap-highlight-color: transparent; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #67b77d; box-shadow: 0 0 0 4px rgba(103,183,125,.15); }
 .topbar-divider { height: 14px; width: 1px; margin: 0 1px 0 3px; background: rgba(55, 92, 80, .2); }
 .world-time { font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--ink); }
+.world-time-button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 5px 9px;
+  border: 1px solid rgba(55, 92, 80, .14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .38);
+  color: inherit;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.world-time-button:hover { background: rgba(255, 255, 255, .8); transform: translateY(-1px); }
+.world-time-button:focus-visible { outline: 3px solid rgba(79, 156, 123, .42); outline-offset: 2px; }
 .time-label { margin-left: -7px; color: #82958b; font-size: 8px; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .seed-counter {

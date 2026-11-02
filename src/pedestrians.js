@@ -75,8 +75,14 @@ export const PEDESTRIAN_PROMENADE_PATHS = Object.freeze([
 const SHIRT_COLORS = [0x4e7ca1, 0xb5654f, 0x5f8a5a, 0xc4994f, 0x7a6796, 0x3f7d78];
 const TROUSER_COLORS = [0x2e3a44, 0x4a4238, 0x37414c, 0x51483c];
 const SKIN_TONES = [0x8d5a3b, 0xa9714c, 0x6f452c, 0xc08a62];
+const UMBRELLA_CANOPY_MATERIALS = [
+  new THREE.MeshStandardMaterial({ color: 0x35566f, roughness: 0.8 }),
+  new THREE.MeshStandardMaterial({ color: 0x8a4b3a, roughness: 0.8 }),
+  new THREE.MeshStandardMaterial({ color: 0x4f7a52, roughness: 0.8 }),
+];
+const UMBRELLA_STICK_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.9 });
 
-function createPedestrianRig({ shirt, trousers, skin }) {
+function createPedestrianRig({ shirt, trousers, skin, canopyIndex = 0 }) {
   const group = new THREE.Group();
 
   const shirtMaterial = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.92 });
@@ -121,6 +127,16 @@ function createPedestrianRig({ shirt, trousers, skin }) {
     armPivots.push(armPivot);
   }
 
+  // Umbrella: hidden until the rain comes.
+  const umbrella = new THREE.Group();
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.22, 8), UMBRELLA_CANOPY_MATERIALS[canopyIndex % UMBRELLA_CANOPY_MATERIALS.length]);
+  canopy.position.y = 1.8;
+  const stick = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 0.03), UMBRELLA_STICK_MATERIAL);
+  stick.position.y = 1.52;
+  umbrella.add(canopy, stick);
+  umbrella.visible = false;
+  group.add(umbrella);
+
   for (const child of group.children) {
     child.traverse?.((node) => {
       if (node.isMesh) {
@@ -134,7 +150,7 @@ function createPedestrianRig({ shirt, trousers, skin }) {
     }
   }
 
-  return { group, legPivots, kneePivots, armPivots };
+  return { group, legPivots, kneePivots, armPivots, umbrella };
 }
 
 /**
@@ -165,6 +181,7 @@ export function createPedestrianCrowd({
       shirt: SHIRT_COLORS[i % SHIRT_COLORS.length],
       trousers: TROUSER_COLORS[i % TROUSER_COLORS.length],
       skin: SKIN_TONES[i % SKIN_TONES.length],
+      canopyIndex: i,
     });
     rig.group.position.set(startX, groundAt(startX, startZ), startZ);
     group.add(rig.group);
@@ -186,11 +203,13 @@ export function createPedestrianCrowd({
   return {
     group,
     walkers,
-    update(delta, playerPosition = null) {
+    update(delta, playerPosition = null, { rainAmount = 0 } = {}) {
       const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.min(delta, 0.1) : 0;
       if (safeDelta === 0) return;
+      const raining = Math.max(0, Math.min(1, Number(rainAmount) || 0)) > 0.35;
       for (const walker of walkers) {
         const rigGroup = walker.rig.group;
+        if (walker.rig.umbrella.visible !== raining) walker.rig.umbrella.visible = raining;
         const [targetX, targetZ] = walker.path[walker.waypointIndex];
         let dirX = targetX - rigGroup.position.x;
         let dirZ = targetZ - rigGroup.position.z;

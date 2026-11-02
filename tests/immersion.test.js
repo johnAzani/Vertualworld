@@ -2,13 +2,48 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  TIME_OF_DAY_PRESETS,
   computeHeadBob,
+  computeTimeJumpWorldMinutes,
+  computeWeatherSway,
   computeWetSurface,
   computeWeatherMix,
   createFootstepTracker,
   createLandingSpring,
+  getNextTimePreset,
   smoothTowards,
 } from '../src/immersion.js';
+
+test('weather sway is calm in the dry, gusty in storms, and silent for reduced motion', () => {
+  const calm = computeWeatherSway({ rain: 0, harmattan: 0, time: 12.3 });
+  assert.deepEqual(calm, { yaw: 0, roll: 0, pitch: 0 });
+  const stormy = computeWeatherSway({ rain: 1, harmattan: 0.4, time: 12.3 });
+  assert.ok(Math.abs(stormy.roll) > 0, 'the storm leans the camera');
+  assert.ok(Math.abs(stormy.roll) < 0.01 && Math.abs(stormy.yaw) < 0.012, 'sway stays subtle');
+  const reduced = computeWeatherSway({ rain: 1, harmattan: 1, time: 5, prefersReducedMotion: true });
+  assert.deepEqual(reduced, { yaw: 0, roll: 0, pitch: 0 }, 'reduced motion disables sway');
+  const haze = computeWeatherSway({ rain: 0, harmattan: 1, time: 3.2 });
+  assert.ok(Math.abs(haze.yaw) > 0, 'harmattan gusts sway too');
+});
+
+test('time-of-day presets cycle and jump the world clock correctly', () => {
+  assert.equal(TIME_OF_DAY_PRESETS.length, 4);
+  for (const preset of TIME_OF_DAY_PRESETS) {
+    assert.ok(preset.minutes >= 0 && preset.minutes < 24 * 60, `${preset.id} sits inside the day`);
+    assert.ok(preset.label && preset.icon, `${preset.id} is presented with a label and icon`);
+  }
+  assert.equal(getNextTimePreset(null).id, 'dawn', 'the cycle starts at dawn');
+  assert.equal(getNextTimePreset('dawn').id, 'day');
+  assert.equal(getNextTimePreset('night').id, 'dawn', 'the cycle wraps');
+
+  assert.equal(computeTimeJumpWorldMinutes(6 * 60 + 15, 0), 375);
+  // With elapsed drift the stored worldMinutes is offset so the visible clock
+  // lands on the preset, and values wrap back into the day.
+  const withDrift = computeTimeJumpWorldMinutes(375, 18 * 60);
+  assert.ok(Math.abs(withDrift + 60 - 375) < 1e-6, `drift shifts the stored value, got ${withDrift}`);
+  const wrapped = computeTimeJumpWorldMinutes(100, 4000);
+  assert.ok(wrapped >= 0 && wrapped < 1440, 'jumped minutes always wrap into the day');
+});
 
 test('wet surface mix glosses roads up as rain falls and is clamped', () => {
   const dry = computeWetSurface(0);

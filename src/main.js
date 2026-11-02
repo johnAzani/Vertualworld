@@ -4,11 +4,15 @@ import { resolveDiscAgainstOrientedBox } from './collision.js';
 import { getFrameTiming } from './frame-timing.js';
 import { computeSeatedPose, computeWalkCyclePose } from './walk-cycle.js';
 import {
+  TIME_OF_DAY_PRESETS,
   computeHeadBob,
+  computeTimeJumpWorldMinutes,
+  computeWeatherSway,
   computeWetSurface,
   computeWeatherMix,
   createFootstepTracker,
   createLandingSpring,
+  getNextTimePreset,
   smoothTowards,
 } from './immersion.js';
 import { createAtmosphereAudio } from './atmosphere-audio.js';
@@ -21,15 +25,23 @@ import {
   nextWeatherMode,
   resolveWeatherMode,
 } from './weather.js';
-import { createBirdFlock, createFireflies } from './sky-life.js';
+import { createBirdFlock, createButterflies, createFireflies } from './sky-life.js';
+import {
+  createRainbowEvent,
+  createCelestialGlows,
+  createShootingStars,
+  createSkyPlane,
+} from './sky-events.js';
 import {
   createPedestrianCrowd,
   findNearestWalker,
   triggerWalkerWave,
 } from './pedestrians.js';
 import {
+  createFootstepDust,
   createHarmattanDust,
   createRiverCanoes,
+  createRiverSparkle,
   createStreetStalls,
   createStreetTraffic,
 } from './street-life.js';
@@ -842,6 +854,16 @@ function updateDaylight(force = false) {
   sunDiscMaterial.color.copy(daySunColor).lerp(twilightSunColor, twilight * 0.62);
   moonDisc.position.copy(moonDirection).multiplyScalar(145);
   moonDisc.visible = night > 0.72 && moonDirection.y > 0.12;
+  currentTwilightAmount = twilight;
+  celestialGlows.update({
+    sunPosition: sunDisc.position,
+    moonPosition: moonDisc.position,
+    daylight,
+    twilight,
+    night,
+    sunVisible: sunDisc.visible,
+    moonVisible: moonDisc.visible,
+  });
   starMaterial.opacity = clamp((night - 0.12) / 0.88, 0, 1) * 0.84;
   stars.visible = starMaterial.opacity > 0.015;
 
@@ -905,9 +927,28 @@ const harmattanDust = createHarmattanDust({ count: 36 });
 scene.add(harmattanDust.points);
 const stormFlash = createStormFlash();
 const stormFlashColor = new THREE.Color(0xdfe9ff);
+// — Visible sky wonders: rainbow, shooting stars, flights, sun & moon glows —
+const rainbowEvent = createRainbowEvent();
+scene.add(rainbowEvent.mesh);
+const shootingStars = createShootingStars();
+scene.add(shootingStars.lines);
+const skyPlane = createSkyPlane();
+scene.add(skyPlane.group);
+const celestialGlows = createCelestialGlows();
+scene.add(celestialGlows.sunGlow, celestialGlows.moonGlow);
+const butterflies = createButterflies({ count: 12 });
+scene.add(butterflies.points);
+const riverSparkle = createRiverSparkle({ terrainHeight });
+scene.add(riverSparkle.points);
+const footstepDust = createFootstepDust({ count: 36 });
+scene.add(footstepDust.points);
 let currentNightAmount = 0;
+let currentTwilightAmount = 0;
 let manualWeatherMode = null;
+let manualTimePresetId = null;
 let playerGreetTimer = 0;
+let shootingStarToastShown = false;
+let skyPlaneToastShown = false;
 
 // A flat, terrain-following ribbon keeps the path walkable instead of burying the avatar in a raised tube.
 const trailPoints = PATH_POINTS_XZ.map(([x, z]) => new THREE.Vector3(x, terrainHeight(x, z) + TRAIL_SURFACE_OFFSET, z));
@@ -4801,6 +4842,23 @@ if (weatherToggleButton) {
     ensureAtmosphereAudioStarted();
     atmosphereAudio.playUiBlip('tap');
     showToast(`Weather set to ${WEATHER_LABELS[nextMode]} ${WEATHER_ICONS[nextMode]}. Tap again to change.`, 3000);
+  });
+}
+
+// Time-of-day jump: dawn → midday → sunset → night at the tap of the clock.
+const timeJumpButton = document.querySelector('#time-jump-button');
+if (timeJumpButton) {
+  timeJumpButton.addEventListener('contextmenu', (event) => event.preventDefault());
+  timeJumpButton.addEventListener('click', () => {
+    const preset = getNextTimePreset(manualTimePresetId);
+    manualTimePresetId = preset.id;
+    worldMinutes = computeTimeJumpWorldMinutes(preset.minutes, elapsedWorldTime);
+    lastClockMinute = -1;
+    ensureAtmosphereAudioStarted();
+    atmosphereAudio.playUiBlip('tap');
+    updateClock();
+    updateDaylight(true);
+    showToast(`Time set to ${preset.label} ${preset.icon} — watch the world change around you.`, 3400);
   });
 }
 
@@ -9399,12 +9457,19 @@ function animate(timestamp) {
   if (landingImpact > 0) {
     landingSpring.impact(landingImpact);
     if (landingImpact > 3.4 && !prefersReducedMotion) atmosphereAudio.land(Math.min(2.6, landingImpact / 9));
+    if (landingImpact > 2.2 && !prefersReducedMotion) {
+      footstepDust.puff(player.position.x, player.position.y + 0.05, player.position.z, Math.min(1.8, landingImpact / 6));
+    }
     landingImpact = 0;
   }
   const landingDip = prefersReducedMotion ? 0 : landingSpring.update(delta);
   const onFoot = !isDriving && !isRidingTransit && !isRidingPrivateTaxi && !isWatchingMatch;
   if (onFoot && isGrounded && footstepTracker.step(walkCyclePhase, isMoving)) {
-    atmosphereAudio.footstep(surfaceUnderFoot(), isRunning ? 1.12 : 0.85);
+    const footstepSurface = surfaceUnderFoot();
+    atmosphereAudio.footstep(footstepSurface, isRunning ? 1.12 : 0.85);
+    if (footstepSurface !== 'road' && !prefersReducedMotion) {
+      footstepDust.puff(player.position.x, player.position.y + 0.07, player.position.z, isRunning ? 1.1 : 0.65);
+    }
   }
   const headBob = computeHeadBob({
     phase: walkCyclePhase,
@@ -9718,6 +9783,19 @@ function animate(timestamp) {
     if (headBob.roll !== 0) camera.rotateZ(headBob.roll * 0.35);
   }
 
+  // Storm wind sway: gusts lean the camera in rain and harmattan haze.
+  const weatherSway = computeWeatherSway({
+    rain: weatherState.rain,
+    harmattan: weatherState.harmattan,
+    time: elapsedWorldTime,
+    prefersReducedMotion,
+  });
+  if (!isWatchingMatch && (weatherSway.yaw !== 0 || weatherSway.roll !== 0 || weatherSway.pitch !== 0)) {
+    camera.rotateY(weatherSway.yaw);
+    camera.rotateZ(weatherSway.roll);
+    camera.rotateX(weatherSway.pitch);
+  }
+
   // Sprint FOV kick: a gentle zoom-out while running, eased both ways.
   if (!isWorldView && !isWatchingMatch) {
     const targetFov = getGameplayCameraFov(cameraMode, window.innerWidth / Math.max(window.innerHeight, 1)) + cameraFovBoost;
@@ -9731,11 +9809,33 @@ function animate(timestamp) {
   rainField.update(delta, camera.position, weatherState.rain);
   birdFlock.update(elapsedWorldTime);
   fireflies.update(elapsedWorldTime, currentNightAmount);
-  pedestrianCrowd.update(delta, player.position);
-  streetTraffic.update(delta, player.position);
+  butterflies.update(elapsedWorldTime, currentNightAmount);
+  riverSparkle.update(elapsedWorldTime, 1 - currentNightAmount, currentTwilightAmount);
+  footstepDust.update(delta);
+  pedestrianCrowd.update(delta, player.position, { rainAmount: weatherState.rain });
+  streetTraffic.update(delta, player.position, { nightAmount: currentNightAmount });
   riverCanoes.update(delta, elapsedWorldTime);
   streetStalls.update(delta, elapsedWorldTime, currentNightAmount, weatherState.rain);
   harmattanDust.update(elapsedWorldTime, weatherState.harmattan);
+
+  // — Visible sky wonders, announced so they are never missed —
+  if (rainbowEvent.notify(weatherState.rain, elapsedWorldTime)) {
+    showToast('🌈 A rainbow arcs over Abuja as the storm clears!', 4600);
+    atmosphereAudio.playUiBlip('success');
+  }
+  rainbowEvent.update(elapsedWorldTime);
+  shootingStars.update(elapsedWorldTime, currentNightAmount, delta);
+  if (shootingStars.fired && !shootingStarToastShown) {
+    shootingStarToastShown = true;
+    showToast('☄ A shooting star streaks across the night sky!', 3600);
+    atmosphereAudio.playUiBlip('success');
+  }
+  skyPlane.update(delta, elapsedWorldTime);
+  if (skyPlane.fired && !skyPlaneToastShown) {
+    skyPlaneToastShown = true;
+    showToast('✈ A flight is crossing toward Nnamdi Azikiwe Airport — look up!', 3800);
+    atmosphereAudio.playUiBlip('tap');
+  }
   if (!prefersReducedMotion) {
     for (const flag of wavingFlagMeshes) {
       flag.rotation.y = Math.sin(elapsedWorldTime * 2.15 + (flag.userData.wavePhase || 0)) * 0.3;
@@ -9768,6 +9868,14 @@ function animate(timestamp) {
       window.vertualworldBoot.ready();
     } else {
       requestAnimationFrame(() => loadingScreen.classList.add('is-ready'));
+    }
+    try {
+      if (!localStorage.getItem('vertualworld-ambient-hint')) {
+        localStorage.setItem('vertualworld-ambient-hint', '1');
+        showToast('✨ Ambient wonders await: tap the clock for dawn/sunset/night, tap the weather icon for rain — then watch for rainbows, shooting stars, flights overhead, butterflies, glowing headlights and river glints.', 8200);
+      }
+    } catch {
+      // Storage unavailable; skip the welcome hint.
     }
   }
   if (performanceHud) updatePerformanceHud(timestamp, performance.now() - performanceFrameStart);

@@ -91,6 +91,86 @@ export function createBirdFlock({ count = 9, random = Math.random, center = { x:
 }
 
 /**
+ * Butterflies flutter around the gardens by day: one vertex-coloured Points
+ * cloud that swirls near the flower beds and disappears after dark.
+ */
+export function createButterflies({ count = 12, random = Math.random } = {}) {
+  const safeRandom = typeof random === 'function' ? random : Math.random;
+  const safeCount = Math.max(1, Math.floor(count));
+  // Garden beds: estate shrubbery, community hall forecourt, mall promenade planters.
+  const gardens = [
+    { x: 52, z: -22, radius: 14 },
+    { x: -38, z: 66, radius: 9 },
+    { x: 68, z: 56, radius: 10 },
+  ];
+  const palette = [0xffd45e, 0xff9d5c, 0xfff3d8, 0xffb7d9];
+  const positions = new Float32Array(safeCount * 3);
+  const colors = new Float32Array(safeCount * 3);
+  const drifters = [];
+  const colorScratch = new THREE.Color();
+  for (let i = 0; i < safeCount; i += 1) {
+    const garden = gardens[i % gardens.length];
+    const angle = safeRandom() * Math.PI * 2;
+    const distance = safeRandom() * garden.radius;
+    const drifter = {
+      homeX: garden.x + Math.cos(angle) * distance,
+      homeY: 0.55 + safeRandom() * 1.35,
+      homeZ: garden.z + Math.sin(angle) * distance,
+      swirlR: 0.6 + safeRandom() * 1.15,
+      speed: 0.65 + safeRandom() * 0.75,
+      phase: safeRandom() * Math.PI * 2,
+    };
+    drifters.push(drifter);
+    positions[i * 3] = drifter.homeX;
+    positions[i * 3 + 1] = drifter.homeY;
+    positions[i * 3 + 2] = drifter.homeZ;
+    colorScratch.setHex(palette[i % palette.length]);
+    colors[i * 3] = colorScratch.r;
+    colors[i * 3 + 1] = colorScratch.g;
+    colors[i * 3 + 2] = colorScratch.b;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.PointsMaterial({
+    size: 0.22,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.visible = false;
+  points.name = 'Butterflies';
+
+  return {
+    points,
+    update(time, nightAmount = 0) {
+      const night = Math.max(0, Math.min(1, Number(nightAmount) || 0));
+      points.visible = night < 0.62;
+      if (!points.visible) return;
+      const t = Number.isFinite(time) ? time : 0;
+      for (let i = 0; i < drifters.length; i += 1) {
+        const drifter = drifters[i];
+        const swirl = t * drifter.speed + drifter.phase;
+        positions[i * 3] = drifter.homeX + Math.sin(swirl) * drifter.swirlR;
+        positions[i * 3 + 1] = drifter.homeY + Math.sin(swirl * 1.7 + drifter.phase) * 0.34;
+        positions[i * 3 + 2] = drifter.homeZ + Math.cos(swirl * 0.82) * drifter.swirlR;
+      }
+      geometry.attributes.position.needsUpdate = true;
+      material.opacity = (1 - night) * 0.85;
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
+
+/**
  * Fireflies drift around the neighbourhood after dark: one additive Points
  * cloud whose opacity follows the night amount.
  */

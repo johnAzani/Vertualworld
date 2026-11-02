@@ -13,7 +13,7 @@ import {
   resolveWeatherMode,
   updateRainDrops,
 } from '../src/weather.js';
-import { createBirdFlock, createFireflies } from '../src/sky-life.js';
+import { createBirdFlock, createButterflies, createFireflies } from '../src/sky-life.js';
 import { PEDESTRIAN_PROMENADE_PATHS, createPedestrianCrowd } from '../src/pedestrians.js';
 
 // ——— Stub Web Audio context that records every node the engine builds ———
@@ -259,6 +259,24 @@ test('bird flock circles the city with animated wing flaps', () => {
   flock.dispose();
 });
 
+test('butterflies flutter through the gardens by day and vanish at night', () => {
+  const butterflies = createButterflies({ count: 9, random: () => 0.5 });
+  assert.equal(butterflies.points.visible, false);
+  butterflies.update(1, 0);
+  assert.equal(butterflies.points.visible, true, 'out in the daytime');
+  assert.ok(butterflies.points.material.opacity > 0.5, 'bright by day');
+  const attribute = butterflies.points.geometry.attributes.position;
+  const before = attribute.getX(0);
+  butterflies.update(4, 0);
+  assert.ok(Math.abs(attribute.getX(0) - before) > 0.05, 'butterflies flutter along the beds');
+  for (let i = 0; i < attribute.count; i += 1) {
+    assert.ok(attribute.getY(i) < 4, 'butterflies stay low over the gardens');
+  }
+  butterflies.update(1, 1);
+  assert.equal(butterflies.points.visible, false, 'gone after dark');
+  butterflies.dispose();
+});
+
 test('fireflies only glow after dark and drift near the ground', () => {
   const fireflies = createFireflies({ count: 20, random: () => 0.5 });
   fireflies.update(1.5, 0);
@@ -293,7 +311,7 @@ test('pedestrian crowd walks its loop, articulates limbs, culls by distance, and
       assert.equal(obj.castShadow, false, 'pedestrians stay out of the shadow pass');
     }
   });
-  assert.equal(meshCount, 4 * 8, 'each walker is 8 articulated meshes');
+  assert.equal(meshCount, 4 * 10, 'each walker is 8 articulated meshes plus a 2-piece umbrella');
 
   const [walker] = crowd.walkers;
   const rig = walker.rig.group;
@@ -310,4 +328,14 @@ test('pedestrian crowd walks its loop, articulates limbs, culls by distance, and
   assert.equal(rig.visible, false, 'distant walkers are culled');
   crowd.update(0.05, { x: rig.position.x, z: rig.position.z });
   assert.equal(rig.visible, true, 'nearby walkers reappear');
+});
+
+test('pedestrians open umbrellas in the rain and close them when it clears', () => {
+  const crowd = createPedestrianCrowd({ groundHeightAt: () => 0, count: 2, random: () => 0.5 });
+  const [walker] = crowd.walkers;
+  assert.equal(walker.rig.umbrella.visible, false, 'umbrellas stay closed in the dry');
+  crowd.update(0.1, null, { rainAmount: 0.8 });
+  assert.equal(walker.rig.umbrella.visible, true, 'umbrellas open in the rain');
+  crowd.update(0.1, null, { rainAmount: 0.1 });
+  assert.equal(walker.rig.umbrella.visible, false, 'umbrellas close again when the rain stops');
 });

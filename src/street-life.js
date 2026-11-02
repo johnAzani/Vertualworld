@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { ABUJA_RIVER_WATERWAY_POINTS } from './world-layout.js';
+import { makeGlowTexture } from './sky-events.js';
 
 const _position = new THREE.Vector3();
 const _tangent = new THREE.Vector3();
@@ -104,8 +105,37 @@ export function createStreetTraffic({
   group.name = 'StreetTraffic';
 
   const rigs = [createKeke(), createOkada(), createAmbientCar(0x7a8794), createAmbientCar(0x9a5b4c)];
+
+  // Headlight and taillight glows: shared additive sprites that wake at night.
+  const glowTexture = makeGlowTexture();
+  const headlightMaterial = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0xfff2cf,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+  });
+  const taillightMaterial = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0xff5a3c,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+  });
+
   const vehicles = rigs.map((rig, index) => {
     group.add(rig.group);
+    const headlight = new THREE.Sprite(headlightMaterial);
+    headlight.position.set(0, 0.66, -1.16);
+    headlight.scale.setScalar(1.35);
+    const taillight = new THREE.Sprite(taillightMaterial);
+    taillight.position.set(0, 0.62, 1.14);
+    taillight.scale.setScalar(0.95);
+    rig.group.add(headlight, taillight);
     return {
       rig,
       distance: (length / rigs.length) * index + safeRandom() * (length * 0.08),
@@ -121,9 +151,12 @@ export function createStreetTraffic({
   return {
     group,
     vehicles,
-    update(delta, playerPosition = null) {
+    update(delta, playerPosition = null, { nightAmount = 0 } = {}) {
       const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.min(delta, 0.1) : 0;
       if (!safeDelta || !roadCurve) return;
+      const night = Math.max(0, Math.min(1, Number(nightAmount) || 0));
+      headlightMaterial.opacity = 0.16 + night * 0.55;
+      taillightMaterial.opacity = 0.1 + night * 0.42;
       for (const vehicle of vehicles) {
         const rigGroup = vehicle.rig.group;
         vehicle.distance += vehicle.speed * vehicle.direction * safeDelta;
@@ -369,6 +402,138 @@ export function createHarmattanDust({ count = 36, random = Math.random, radius =
       }
       geometry.attributes.position.needsUpdate = true;
       material.opacity = haze * 0.34;
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
+
+/**
+ * River sparkle: sun glints dancing on the Jabi–Usuma waterway. Brightest at
+ * sunrise and sunset, gentler at noon, gone at night. One additive Points.
+ */
+export function createRiverSparkle({ count = 70, random = Math.random, terrainHeight, waterLevelOffset = 0.09 } = {}) {
+  const safeRandom = typeof random === 'function' ? random : Math.random;
+  const heightAt = typeof terrainHeight === 'function' ? terrainHeight : () => 0;
+  const riverPoints = ABUJA_RIVER_WATERWAY_POINTS.map(
+    ([x, z]) => new THREE.Vector3(x, heightAt(x, z) + waterLevelOffset, z),
+  );
+  const riverCurve = new THREE.CatmullRomCurve3(riverPoints, false, 'centripetal');
+
+  const safeCount = Math.max(1, Math.floor(count));
+  const positions = new Float32Array(safeCount * 3);
+  for (let i = 0; i < safeCount; i += 1) {
+    const t = (i + safeRandom() * 0.7) / safeCount;
+    const point = riverCurve.getPointAt(Math.min(0.999, t), new THREE.Vector3());
+    const tangent = riverCurve.getTangentAt(Math.min(0.999, t), new THREE.Vector3());
+    const side = (safeRandom() - 0.5) * 6.4;
+    positions[i * 3] = point.x - tangent.z * side;
+    positions[i * 3 + 1] = heightAt(point.x, point.z) + waterLevelOffset;
+    positions[i * 3 + 2] = point.z + tangent.x * side;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0xd8eeff,
+    size: 0.24,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+    fog: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.visible = false;
+  points.name = 'RiverSparkle';
+
+  return {
+    points,
+    update(time, daylightAmount = 0, twilightAmount = 0) {
+      const day = Math.max(0, Math.min(1, Number(daylightAmount) || 0));
+      const dusk = Math.max(0, Math.min(1, Number(twilightAmount) || 0));
+      points.visible = day > 0.12;
+      if (!points.visible) return;
+      const t = Number.isFinite(time) ? time : 0;
+      const shimmer = 0.78 + Math.sin(t * 2.15) * 0.12 + Math.sin(t * 5.7) * 0.1;
+      material.opacity = (0.16 * day + 0.42 * dusk) * shimmer;
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
+
+/**
+ * Footstep dust: small puffs kicked up around the resident's feet when
+ * walking on grass, dirt or trail. A recycled particle pool — no allocation.
+ */
+export function createFootstepDust({ count = 36, random = Math.random } = {}) {
+  const safeRandom = typeof random === 'function' ? random : Math.random;
+  const safeCount = Math.max(3, Math.floor(count));
+  const positions = new Float32Array(safeCount * 3);
+  const velocities = new Float32Array(safeCount * 3);
+  const life = new Float32Array(safeCount);
+  for (let i = 0; i < safeCount; i += 1) {
+    positions[i * 3 + 1] = -50;
+    life[i] = 0;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0xd8c9a4,
+    size: 0.3,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.name = 'FootstepDust';
+
+  let cursor = 0;
+
+  return {
+    points,
+    puff(x, y, z, strength = 1) {
+      const force = Math.max(0.2, Math.min(2, Number(strength) || 1));
+      for (let n = 0; n < 3; n += 1) {
+        const i = cursor;
+        cursor = (cursor + 1) % safeCount;
+        positions[i * 3] = x + (safeRandom() - 0.5) * 0.26;
+        positions[i * 3 + 1] = y + 0.05 + safeRandom() * 0.12;
+        positions[i * 3 + 2] = z + (safeRandom() - 0.5) * 0.26;
+        velocities[i * 3] = (safeRandom() - 0.5) * 0.75 * force;
+        velocities[i * 3 + 1] = (0.5 + safeRandom() * 0.55) * force;
+        velocities[i * 3 + 2] = (safeRandom() - 0.5) * 0.75 * force;
+        life[i] = 1;
+      }
+    },
+    update(delta) {
+      const safeDelta = Number.isFinite(delta) && delta > 0 ? Math.min(delta, 0.1) : 0;
+      if (!safeDelta) return;
+      for (let i = 0; i < safeCount; i += 1) {
+        if (life[i] <= 0) continue;
+        life[i] -= safeDelta * 1.35;
+        if (life[i] <= 0) {
+          positions[i * 3 + 1] = -50;
+          continue;
+        }
+        positions[i * 3] += velocities[i * 3] * safeDelta;
+        positions[i * 3 + 1] += velocities[i * 3 + 1] * safeDelta;
+        positions[i * 3 + 2] += velocities[i * 3 + 2] * safeDelta;
+        velocities[i * 3] *= 0.97;
+        velocities[i * 3 + 1] = velocities[i * 3 + 1] * 0.97 + 0.12 * safeDelta;
+        velocities[i * 3 + 2] *= 0.97;
+      }
+      geometry.attributes.position.needsUpdate = true;
     },
     dispose() {
       geometry.dispose();
