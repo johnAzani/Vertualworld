@@ -1,0 +1,117 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import {
+  CAMERA_MODE_ORDER,
+  createThirdPersonMovementState,
+  getGameplayCameraFov,
+  getNextCameraMode,
+  getThirdPersonMovementYaw,
+  setBehindPlayerOffset,
+  stepJoystickNavigation,
+} from '../src/follow-camera.js';
+
+const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+
+test('camera mode control cycles through follow, the previous orbit, overhead and first-person views', () => {
+  assert.deepEqual(CAMERA_MODE_ORDER, ['follow', 'orbit', 'overhead', 'first-person']);
+  let mode = 'follow';
+  for (const expected of ['orbit', 'overhead', 'first-person', 'follow']) {
+    mode = getNextCameraMode(mode);
+    assert.equal(mode, expected);
+  }
+  assert.equal(getNextCameraMode('unknown'), 'follow');
+});
+
+function vector() {
+  return {
+    set(x, y, z) {
+      Object.assign(this, { x, y, z });
+      return this;
+    },
+  };
+}
+
+test('third-person follow offsets stay behind the avatar at different headings', () => {
+  const offset = vector();
+  setBehindPlayerOffset(offset, 0, 10);
+  assert.ok(Math.abs(offset.x) < 1e-10);
+  assert.equal(offset.y, 0);
+  assert.equal(offset.z, 10);
+
+  setBehindPlayerOffset(offset, Math.PI / 2, 6);
+  assert.equal(offset.x, 6);
+  assert.ok(Math.abs(offset.z) < 1e-10);
+
+  setBehindPlayerOffset(offset, Math.PI, 4);
+  assert.ok(Math.abs(offset.x) < 1e-10);
+  assert.equal(offset.z, -4);
+});
+
+test('third-person movement keeps a stable heading while the camera follows, then recentres', () => {
+  const state = createThirdPersonMovementState();
+  const initialYaw = Math.PI / 3;
+
+  assert.equal(getThirdPersonMovementYaw(state, initialYaw, true), -initialYaw);
+  assert.equal(getThirdPersonMovementYaw(state, -0.2, true), -initialYaw);
+  assert.equal(getThirdPersonMovementYaw(state, -0.2, false), 0.2);
+  assert.equal(getThirdPersonMovementYaw(state, 0.5, true), -0.5);
+});
+
+test('gameplay cameras support follow behind, orbit, overhead, and first-person modes', () => {
+  assert.match(mainSource, /else if \(cameraMode === 'overhead'\)/);
+  assert.match(mainSource, /setBehindPlayerOffset\(\s*animationScratch\.behindCameraOffset,\s*player\.rotation\.y,\s*cameraDistance/);
+  assert.match(mainSource, /const cameraYawForPosition = cameraMode === 'orbit' \? cameraYaw : player\.rotation\.y;/);
+  assert.match(mainSource, /player\.rotation\.y\s*-\s*residence\.facing/);
+  assert.match(mainSource, /\(!isFirstPerson && !isWorldView && cameraMode !== 'orbit'\)/);
+  assert.match(mainSource, /followsResident && hasMovementInput/);
+});
+
+test('touch controls use the button next to jump to walk while the joystick only navigates direction', () => {
+  const state = createThirdPersonMovementState();
+  const thirdPersonTurn = stepJoystickNavigation({
+    joystickX: 0.8,
+    joystickY: -0.9,
+    delta: 0.1,
+    playerYaw: 0,
+    cameraYaw: 0,
+    cameraPitch: 0,
+    isFirstPerson: false,
+    thirdPersonMovementState: state,
+  });
+  assert.ok(thirdPersonTurn.playerYaw < 0, 'dragging joystick right turns the resident right');
+  assert.equal(thirdPersonTurn.cameraYaw, thirdPersonTurn.playerYaw);
+  assert.equal(state.yaw, -thirdPersonTurn.playerYaw);
+  assert.equal(thirdPersonTurn.cameraPitch, 0);
+
+  const firstPersonLook = stepJoystickNavigation({
+    joystickX: -0.5,
+    joystickY: 0.6,
+    delta: 0.1,
+    playerYaw: 0,
+    cameraYaw: 0,
+    cameraPitch: 0,
+    isFirstPerson: true,
+    thirdPersonMovementState: state,
+  });
+  assert.ok(firstPersonLook.playerYaw > 0);
+  assert.equal(firstPersonLook.cameraYaw, -firstPersonLook.playerYaw);
+  assert.ok(firstPersonLook.cameraPitch < 0);
+
+  assert.match(mainSource, /accelerateButtonLabel\.textContent = isDriving \? 'ACCEL' : 'WALK'/);
+  assert.match(mainSource, /touchLabel\.textContent = isDriving \? 'STEER' : isRidingTransit \? 'TRANSIT' : 'NAVIGATE'/);
+  assert.match(mainSource, /\['contextmenu', 'selectstart', 'dragstart'\]/);
+  assert.match(mainSource, /accelerateButton\.addEventListener\('touchstart'/);
+  assert.match(mainSource, /jumpButton\.addEventListener\('touchstart'/);
+});
+
+test('first-person eye view uses a wider aspect-aware FOV and steps back so objects are not too close', () => {
+  const landscapeFov = getGameplayCameraFov('first-person', 16 / 9);
+  const portraitFov = getGameplayCameraFov('first-person', 9 / 16);
+  assert.ok(landscapeFov >= 82, 'landscape first-person FOV is wide enough for comfortable eye view');
+  assert.ok(portraitFov > landscapeFov, 'portrait screens widen vertical FOV so horizontal view is not zoomed in');
+  assert.equal(getGameplayCameraFov('follow', 16 / 9), 49);
+  assert.match(mainSource, /const eyeBackOffset = isDriving \|\| isRidingTransit \? 0 : isInsideHome \? 0\.55 : 1\.35;/);
+});
+
+
